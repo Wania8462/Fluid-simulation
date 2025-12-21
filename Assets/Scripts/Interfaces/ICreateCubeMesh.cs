@@ -1,3 +1,4 @@
+using Unity.Mathematics;
 using UnityEngine;
 
 enum Verticies
@@ -15,4 +16,5 @@ enum Verticies
 public interface ICreateCubeMesh
 {
     public Mesh DrawMesh();
+    public void DrawPoints(float4[] points);
 }

@@ -388,6 +388,7 @@ GameObject:
   - component: {fileID: 832575519}
   - component: {fileID: 832575518}
   - component: {fileID: 832575520}
+  - component: {fileID: 832575521}
   m_Layer: 0
   m_Name: Global Volume
   m_TagString: Untagged
@@ -440,8 +441,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   scale: {x: 1, y: 1, z: 1}
-  amount: 30
   mat: {fileID: 2100000, guid: 4f613fd1b90fc0d47b473594d1b521e6, type: 2}
+--- !u!114 &832575521
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 832575517}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ab5c289cff5b54ebce94cf2897a3d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  axisLength: 30
+  startingPosition: {x: 0, y: 0, z: 0}
+  spacing: 2
+  jitterStrength: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -1,14 +1,18 @@
+using System;
 using System.Collections.Generic;
+using Unity.Burst;
+using Unity.Mathematics;
 using UnityEngine;
 
+[RequireComponent(typeof(FluidSimulation))]
 public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
     [Header("Settings")]
     [SerializeField] private Vector3 scale;
-    [SerializeField] private int amount;
 
     [Header("References")]
     [SerializeField] private Material mat;
+    private FluidSimulation fluidSim;
 
     private const int batchSize = 1000;
     private List<Matrix4x4> matrices = new();
@@ -17,22 +21,34 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 
     private void Start()
     {
+        fluidSim = gameObject.GetComponent<FluidSimulation>();
         mesh = DrawMesh();
 
-        for (int i = 0; i < amount; i++)
-            for (int j = 0; j < amount; j++)
-                for (int k = 0; k < amount; k++)
+        for (int i = 0; i < fluidSim.axisLength; i++)
+            for (int j = 0; j < fluidSim.axisLength; j++)
+                for (int k = 0; k < fluidSim.axisLength; k++)
                 {
                     matrices.Add(Matrix4x4.TRS(
-                        new Vector3(i * 2, j * 2, k * 2),
+                        Vector3.one,
                         Quaternion.identity,
                         scale
                     ));
                 }
+
     }
 
-    private void Update()
+    [BurstCompile]
+    public void DrawPoints(float4[] points)
     {
+        for (int i = 0; i < points.Length; i++)
+        {
+            matrices[i] = Matrix4x4.TRS(
+                new Vector3(points[i].x, points[i].y, points[i].z),
+                Quaternion.identity,
+                scale
+            );
+        }
+
         for (int i = 0; i < matrices.Count; i += batchSize)
         {
             Graphics.DrawMeshInstanced(
