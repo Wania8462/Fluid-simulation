@@ -455,13 +455,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   axisLength: 30
   particleSize:
+    x: 1
+    y: 1
+    z: 1
+  centre:
     x: 0
     y: 0
     z: 0
-  startingPosition:
-    x: 2
-    y: 2
-    z: 2
   spacing: 2
   boundSize:
     x: 70

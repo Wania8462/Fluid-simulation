@@ -3,6 +3,7 @@ using NUnit.Framework;
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Timeline;
 
 [RequireComponent(typeof(CreateCubeMesh))]
 public class FluidSimulation : MonoBehaviour
@@ -10,7 +11,7 @@ public class FluidSimulation : MonoBehaviour
     [Header("Spawn settings")]
     public int axisLength;
     public float3 particleSize;
-    [SerializeField] private int3 startingPosition;
+    [SerializeField] private int3 centre;
     [SerializeField] private float spacing;
     [SerializeField] private float3 boundSize;
     [SerializeField] private float collisionDamp;
@@ -23,6 +24,7 @@ public class FluidSimulation : MonoBehaviour
     private float3[] points;
     private float3[] velocities;
     private float3 halfParticleSize;
+    private float3 realHalfBoundSize;
 
     void Start()
     {
@@ -30,21 +32,22 @@ public class FluidSimulation : MonoBehaviour
         points = new float3[(int)Mathf.Pow(axisLength, 3)];
         velocities = new float3[(int)Mathf.Pow(axisLength, 3)];
         halfParticleSize = particleSize / 2;
+        realHalfBoundSize = boundSize / 2 - halfParticleSize;
         CreateList();
     }
 
     [BurstCompile]
     private void CreateList()
     {
-        for (int i = startingPosition.x; i < axisLength; i++)
-            for (int j = startingPosition.y; j < axisLength; j++)
-                for (int k = startingPosition.z; k < axisLength; k++)
+        for (int i = centre.x; i < axisLength; i++)
+            for (int j = centre.y; j < axisLength; j++)
+                for (int k = centre.z; k < axisLength; k++)
                 {
                     int index = i * axisLength * axisLength + j * axisLength + k;
 
-                    points[index].x = i * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
-                    points[index].y = j * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
-                    points[index].z = k * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
+                    points[index].x = (i - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
+                    points[index].y = (j - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
+                    points[index].z = (k - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
                 }
     }
 
@@ -70,41 +73,24 @@ public class FluidSimulation : MonoBehaviour
     {
         for (int i = 0; i < points.Length; i++)
         {
-            if (points[i].x <= halfParticleSize.x)
+            if(Mathf.Abs(points[i].x) >= realHalfBoundSize.x)
             {
-                points[i].x = halfParticleSize.x;
+                points[i].x = realHalfBoundSize.x * Mathf.Sign(points[i].x);
                 velocities[i].x *= -1 * collisionDamp;
             }
-
-            else if (points[i].x >= boundSize.x - halfParticleSize.x)
+            
+            if(Mathf.Abs(points[i].y) >= realHalfBoundSize.y)
             {
-                points[i].x = boundSize.x - halfParticleSize.x;
-                velocities[i].x *= -1 * collisionDamp;
-            }
-
-            if (points[i].y <= halfParticleSize.y)
-            {
-                points[i].y = halfParticleSize.y;
+                points[i].y = realHalfBoundSize.y * Mathf.Sign(points[i].y);
                 velocities[i].y *= -1 * collisionDamp;
             }
-
-            else if (points[i].y >= boundSize.y - halfParticleSize.y)
+            
+            if(Mathf.Abs(points[i].z) >= realHalfBoundSize.z)
             {
-                points[i].y = boundSize.y - halfParticleSize.y;
-                velocities[i].y *= -1 * collisionDamp;
-            }
-
-            if (points[i].z <= halfParticleSize.z)
-            {
-                points[i].z = halfParticleSize.z;
+                points[i].z = realHalfBoundSize.z * Mathf.Sign(points[i].z);
                 velocities[i].z *= -1 * collisionDamp;
             }
-
-            else if (points[i].z >= boundSize.z - halfParticleSize.z)
-            {
-                points[i].z = boundSize.z - halfParticleSize.z;
-                velocities[i].z *= -1 * collisionDamp;
-            }
+            
         }
     }
 }
