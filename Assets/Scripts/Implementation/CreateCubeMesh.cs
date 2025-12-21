@@ -4,14 +4,14 @@ using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 
-[RequireComponent(typeof(FluidSimulation))]
+[RequireComponent(typeof(SpawnParticles))]
 public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
     // [Header("Settings")]
 
     [Header("References")]
     [SerializeField] private Material mat;
-    private FluidSimulation fluidSim;
+    private SpawnParticles fluidSim;
 
     private const int batchSize = 1000;
     private List<Matrix4x4> matrices = new();
@@ -20,8 +20,8 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 
     private void Start()
     {
-        fluidSim = gameObject.GetComponent<FluidSimulation>();
-        float3 scale = fluidSim.particleSize;
+        fluidSim = gameObject.GetComponent<SpawnParticles>();
+        float3 scale = new(1, 1, 1);
         mesh = DrawMesh();
 
         for (int i = 0; i < fluidSim.axisLength; i++)
