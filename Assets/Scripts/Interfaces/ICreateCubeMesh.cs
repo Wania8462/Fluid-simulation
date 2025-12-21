@@ -16,5 +16,5 @@ enum Verticies
 public interface ICreateCubeMesh
 {
     public Mesh DrawMesh();
-    public void DrawPoints(float4[] points);
+    public void DrawPoints(float3[] points, float3 scale);
 }

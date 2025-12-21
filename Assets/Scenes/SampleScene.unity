@@ -440,7 +440,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13f025eb06e2b1d4a897b79acff6383d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scale: {x: 1, y: 1, z: 1}
   mat: {fileID: 2100000, guid: 4f613fd1b90fc0d47b473594d1b521e6, type: 2}
 --- !u!114 &832575521
 MonoBehaviour:
@@ -455,9 +454,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   axisLength: 30
-  startingPosition: {x: 0, y: 0, z: 0}
+  particleSize:
+    x: 0
+    y: 0
+    z: 0
+  startingPosition:
+    x: 2
+    y: 2
+    z: 2
   spacing: 2
+  boundSize:
+    x: 70
+    y: 70
+    z: 70
+  collisionDamp: 0.7
   jitterStrength: 1
+  gravity: -10
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

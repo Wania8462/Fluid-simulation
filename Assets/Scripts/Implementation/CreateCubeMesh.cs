@@ -7,8 +7,7 @@ using UnityEngine;
 [RequireComponent(typeof(FluidSimulation))]
 public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
-    [Header("Settings")]
-    [SerializeField] private Vector3 scale;
+    // [Header("Settings")]
 
     [Header("References")]
     [SerializeField] private Material mat;
@@ -22,6 +21,7 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
     private void Start()
     {
         fluidSim = gameObject.GetComponent<FluidSimulation>();
+        float3 scale = fluidSim.particleSize;
         mesh = DrawMesh();
 
         for (int i = 0; i < fluidSim.axisLength; i++)
@@ -38,7 +38,7 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
     }
 
     [BurstCompile]
-    public void DrawPoints(float4[] points)
+    public void DrawPoints(float3[] points, float3 scale)
     {
         for (int i = 0; i < points.Length; i++)
         {
