@@ -2,6 +2,7 @@ using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 
+[BurstCompile]
 [RequireComponent(typeof(SpawnParticles), typeof(CreateCubeMesh))]
 public class Simulation : MonoBehaviour
 {
@@ -20,12 +21,18 @@ public class Simulation : MonoBehaviour
 
     private float3 realHalfBoundSize;
 
+    // Precompiled values
+    private float smoothRad2;
+    private float poly6KernDenom;
+
     void Start()
     {
         render = gameObject.GetComponent<CreateCubeMesh>();
         spawn = gameObject.GetComponent<SpawnParticles>();
 
         realHalfBoundSize = spawn.boundSize / 2 - particleSize / 2;
+        smoothRad2 = smoothingRadius * smoothingRadius;
+        poly6KernDenom = 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
     }
 
     void Update()
@@ -33,9 +40,9 @@ public class Simulation : MonoBehaviour
         SimulationFrame();
         ResolveCollisions();
         render.DrawPoints(points, particleSize);
+        Density(float3.zero);
     }
 
-    [BurstCompile]
     private void SimulationFrame()
     {
         for (int i = 0; i < velocities.Length; i++)
@@ -45,18 +52,17 @@ public class Simulation : MonoBehaviour
         }
     }
 
-    [BurstCompile]
+    
     private float Density(float3 pos)
     {
         float density = 0;
 
         for (int i = 0; i < points.Length; i++)
-            density += mass * SmoothingKernelPoly6(Distance(pos, points[i]));
+            density += mass * SmoothingKernelPoly6(Distance2(pos, points[i]));
         
         return density;
     }
 
-    [BurstCompile]
     private void ResolveCollisions()
     {
         for (int i = 0; i < points.Length; i++)
@@ -82,22 +88,27 @@ public class Simulation : MonoBehaviour
         }
     }
 
-    [BurstCompile]
-    private float SmoothingKernelPoly6(float dist)
+    private float SmoothingKernelPoly6(float dist2)
     {
-        if (dist > smoothingRadius)
+        if (dist2 > smoothingRadius)
             return 0;
 
-        float numerator = 315 * Mathf.Pow(smoothingRadius * smoothingRadius - dist * dist, 3);
-        return numerator / 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
+        return 315 * Mathf.Pow(smoothRad2 - dist2, 3) / poly6KernDenom;
     }
 
-    [BurstCompile]
     private float Distance(float3 pos1, float3 pos2)
     {
         float distX = Mathf.Pow(Mathf.Abs(pos1.x - pos2.x), 2);
         float distY = Mathf.Pow(Mathf.Abs(pos1.y - pos2.y), 2);
         float distZ = Mathf.Pow(Mathf.Abs(pos1.z - pos2.z), 2);
         return Mathf.Sqrt(distX + distY + distZ);
+    }
+
+    private float Distance2(float3 pos1, float3 pos2)
+    {
+        float distX = Mathf.Pow(Mathf.Abs(pos1.x - pos2.x), 2);
+        float distY = Mathf.Pow(Mathf.Abs(pos1.y - pos2.y), 2);
+        float distZ = Mathf.Pow(Mathf.Abs(pos1.z - pos2.z), 2);
+        return distX + distY + distZ;
     }
 }

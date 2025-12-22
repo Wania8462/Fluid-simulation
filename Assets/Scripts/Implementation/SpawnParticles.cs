@@ -2,6 +2,7 @@ using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 
+[BurstCompile]
 public class SpawnParticles : MonoBehaviour
 {
     [Header("Spawn settings")]
@@ -26,7 +27,6 @@ public class SpawnParticles : MonoBehaviour
         CreateList();
     }
 
-    [BurstCompile]
     private void CreateList()
     {
         for (int i = centre.x; i < axisLength; i++)

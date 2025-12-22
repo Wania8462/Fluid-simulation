@@ -1,14 +1,12 @@
-using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 
+[BurstCompile]
 [RequireComponent(typeof(SpawnParticles))]
 public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
-    // [Header("Settings")]
-
     [Header("References")]
     [SerializeField] private Material mat;
     private SpawnParticles fluidSim;
@@ -37,7 +35,6 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 
     }
 
-    [BurstCompile]
     public void DrawPoints(float3[] points, float3 scale)
     {
         for (int i = 0; i < points.Length; i++)
