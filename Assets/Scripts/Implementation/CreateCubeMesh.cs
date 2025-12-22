@@ -11,7 +11,7 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
     [SerializeField] private Material mat;
     private SpawnParticles fluidSim;
 
-    private const int batchSize = 1000;
+    private const int batchSize = 1024;
     private List<Matrix4x4> matrices = new();
 
     private Mesh mesh;

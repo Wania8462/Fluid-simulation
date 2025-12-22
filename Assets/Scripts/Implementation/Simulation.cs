@@ -13,26 +13,52 @@ public class Simulation : MonoBehaviour
     [SerializeField] private float mass;
     [SerializeField] private float smoothingRadius;
 
+    [Header("References")]
+    [SerializeField] private ComputeShader compute;
     private CreateCubeMesh render;
     private SpawnParticles spawn;
+
+    // Buffers
+    private ComputeBuffer pointsBuffer;
+    private ComputeBuffer velocitiesBuffer;
 
     [HideInInspector] public float3[] points;
     [HideInInspector] public float3[] velocities;
 
-    private float3 realHalfBoundSize;
+    //Kernel IDs
+    private const int externalForcesID = 0;
+
+    private const int float3Size = 24;
 
     // Precompiled values
+    private float3 realHalfBoundSize;
     private float smoothRad2;
     private float poly6KernDenom;
+    private int threadGroups;
 
     void Start()
     {
+        // Get references
         render = gameObject.GetComponent<CreateCubeMesh>();
         spawn = gameObject.GetComponent<SpawnParticles>();
 
-        realHalfBoundSize = spawn.boundSize / 2 - particleSize / 2;
-        smoothRad2 = smoothingRadius * smoothingRadius;
-        poly6KernDenom = 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
+        // Set buffers
+        pointsBuffer = new (points.Length, float3Size);
+        velocitiesBuffer = new(velocities.Length, float3Size);
+
+        // Set data in the buffers
+        pointsBuffer.SetData(points);
+        velocitiesBuffer.SetData(velocities);
+
+        // Set buffers into shader
+        // TODO: make method for prettier setting
+        compute.SetBuffer(externalForcesID, "Points", pointsBuffer);
+        compute.SetBuffer(externalForcesID, "Velocities", velocitiesBuffer);
+
+        compute.SetInt("numParticles", points.Length);
+        compute.SetFloat("gravity", gravity);
+
+        Precompute();
     }
 
     void Update()
@@ -45,11 +71,7 @@ public class Simulation : MonoBehaviour
 
     private void SimulationFrame()
     {
-        for (int i = 0; i < velocities.Length; i++)
-        {
-            velocities[i].y += gravity * Time.deltaTime;
-            points[i].y += velocities[i].y * Time.deltaTime;
-        }
+        compute.Dispatch(externalForcesID, threadGroups, 1, 1);
     }
 
     
@@ -86,6 +108,14 @@ public class Simulation : MonoBehaviour
             }
 
         }
+    }
+
+    private void Precompute()
+    {
+        realHalfBoundSize = spawn.boundSize / 2 - particleSize / 2;
+        smoothRad2 = smoothingRadius * smoothingRadius;
+        poly6KernDenom = 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
+        threadGroups = Mathf.CeilToInt(points.Length / 256f);
     }
 
     private float SmoothingKernelPoly6(float dist2)

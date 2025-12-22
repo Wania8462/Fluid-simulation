@@ -454,7 +454,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3ab5c289cff5b54ebce94cf2897a3d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  axisLength: 30
+  axisLength: 100
   centre:
     x: 0
     y: 0
@@ -482,8 +482,9 @@ MonoBehaviour:
     y: 1
     z: 1
   gravity: -10
-  collisionDamp: 0.2
+  collisionDamp: 1
   mass: 1
+  smoothingRadius: 2
   points: []
   velocities: []
 --- !u!1660057539 &9223372036854775807
