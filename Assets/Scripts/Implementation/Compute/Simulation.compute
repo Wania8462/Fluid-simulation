@@ -1,0 +1,39 @@
+#pragma kernel ExternalForces
+#pragma kernel CalcDensities
+
+#include "./FluidMath.hlsl"
+
+static const int ThreadGroupSize = 256;
+
+RWStructuredBuffer<float3> Points;
+RWStructuredBuffer<float3> Velocities;
+RWStructuredBuffer<float> Densities;
+
+const uint numParticles;
+const float mass;
+const float gravity;
+const float deltaTime;
+const float smoothingRadius;
+const float smoothingRadius2;
+
+[numthreads(ThreadGroupSize,1,1)]
+void ExternalForces (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    Velocities[id.x] += gravity * deltaTime;
+    Points[id.x].y += Velocities[id.x] * deltaTime; // Turnication
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void CalcDensities (uint id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    float density = 0;
+    // for (int i = 0; i < Points.Length; i++)
+    //     density += mass * SmoothingKernelPoly6(Distance2(pos, Points[i]), smoothingRadius, smoothingRadius2);
+    // TODO: Calculate densities for every point and use grid search
+}

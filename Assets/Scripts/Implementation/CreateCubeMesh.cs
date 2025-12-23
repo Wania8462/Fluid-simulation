@@ -9,6 +9,7 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
     [Header("References")]
     [SerializeField] private Material mat;
+    public SharedGPUBuffers buffers;
     private SpawnParticles fluidSim;
 
     private const int batchSize = 1024;
