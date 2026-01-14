@@ -3,11 +3,9 @@ using Unity.Mathematics;
 using UnityEngine;
 
 [BurstCompile]
-[RequireComponent(typeof(SpawnParticles), typeof(CreateCubeMesh))]
 public class Simulation : MonoBehaviour
 {
     [Header("Simulation settings")]
-    public float3 particleSize;
     [SerializeField] private float gravity;
     [SerializeField] private float collisionDamp;
     [SerializeField] private float mass;
@@ -15,22 +13,16 @@ public class Simulation : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private ComputeShader compute;
-    private CreateCubeMesh render;
-    private SpawnParticles spawn;
+    [SerializeField] private SpawnParticles spawn;
+    [SerializeField] private ParticleDisplay display;
 
     // Buffers
-    private ComputeBuffer pointsBuffer;
+    public ComputeBuffer pointsBuffer;
     private ComputeBuffer velocitiesBuffer;
     private ComputeBuffer densitiesBuffer;
 
-    [Header("Temporary")]
-    public ComputeBuffer argsBuffer;        // MOVE IT
-    public Material mat;                    // MOVE IT
-    private Bounds bounds;                  // MOVE IT
-    private Mesh mesh;                      // MOVE IT
-
-    [HideInInspector] public float3[] points;
-    [HideInInspector] public float3[] velocities;
+    [HideInInspector] public float3[] points { get; private set; }
+    [HideInInspector] public float3[] velocities { get; private set; }
 
     //Kernel IDs
     private const int ExternalForcesKernelID = 0;
@@ -48,12 +40,11 @@ public class Simulation : MonoBehaviour
     void Start()
     {
         // Get references
-        render = gameObject.GetComponent<CreateCubeMesh>();
         spawn = gameObject.GetComponent<SpawnParticles>();
 
         points = spawn.GetSpawnPositions();
         velocities = spawn.GetSpawnVelocities();
-        
+
         Precompute();
 
         // Set buffers
@@ -66,7 +57,7 @@ public class Simulation : MonoBehaviour
         velocitiesBuffer.SetData(velocities);
 
         // Set buffers into shader
-        // TODO: make method for prettier setting
+        // todo: make method for prettier setting
         compute.SetBuffer(ExternalForcesKernelID, "Points", pointsBuffer);
         compute.SetBuffer(ExternalForcesKernelID, "Velocities", velocitiesBuffer);
         compute.SetBuffer(CalcDensitiesKernelID, "Densities", densitiesBuffer);
@@ -77,40 +68,15 @@ public class Simulation : MonoBehaviour
         compute.SetFloat("smoothingRadius", smoothingRadius);
         compute.SetFloat("smoothingRadius2", smoothRad2);
 
-        // TODO: MOVE IT SOMEWHERE ELSE
-        mat.SetBuffer("Points", pointsBuffer);
-        mesh = render.GetMeshCube();
-        bounds = new(Vector3.zero, Vector3.one * 10000);
-
-        uint[] args = new uint[]
-        {
-            mesh.GetIndexCount(0),
-            (uint)points.Length,
-            mesh.GetIndexStart(0),
-            mesh.GetBaseVertex(0),
-            0 // TODO: make this a variable/constatnt
-        };
-
-        argsBuffer = new (1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
-        argsBuffer.SetData(args);
+        display.Setup();
     }
 
     void Update()
     {
         SimulationFrame();
         ResolveCollisions();
-        // render.DrawPoints(points, particleSize);
-
-        // MOVE IT
-        Graphics.DrawMeshInstancedIndirect(
-            mesh,
-            0,
-            mat,
-            bounds,
-            argsBuffer
-        );
     }
-
+    
     private void SimulationFrame()
     {
         compute.Dispatch(ExternalForcesKernelID, threadGroups, 1, 1);
@@ -143,17 +109,16 @@ public class Simulation : MonoBehaviour
 
     private void Precompute()
     {
-        realHalfBoundSize = spawn.boundSize / 2 - particleSize / 2;
+        realHalfBoundSize = spawn.boundSize / 2 - display.particleSize / 2;
         smoothRad2 = smoothingRadius * smoothingRadius;
         poly6KernDenom = 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
         threadGroups = Mathf.CeilToInt(points.Length / 256f);
     }
 
-    private void OnDestroy()
+    void OnDestroy()
     {
         pointsBuffer.Release();
         velocitiesBuffer.Release();
         densitiesBuffer.Release();
-        argsBuffer.Release(); // MOVE IT
     }
 }

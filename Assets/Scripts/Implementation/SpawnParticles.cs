@@ -1,7 +1,6 @@
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 [BurstCompile]
 public class SpawnParticles : MonoBehaviour
@@ -12,16 +11,18 @@ public class SpawnParticles : MonoBehaviour
     [SerializeField] private float spacing;
     [SerializeField] private float jitterStrength;
 
-    [HideInInspector] public float3 boundSize;
+    [HideInInspector] public int pointsAmount;
+    [HideInInspector] public float3 boundSize { get; private set; }
 
     void Awake()
     {
         boundSize = new(axisLength * 2 + 20, axisLength * 2 + 20, axisLength * 2 + 20);
+        pointsAmount = (int)Mathf.Pow(axisLength, 3);
     }
 
     public float3[] GetSpawnPositions()
     {
-        float3[] points = new float3[(int)Mathf.Pow(axisLength, 3)];
+        float3[] points = new float3[pointsAmount];
 
         for (int i = centre.x; i < axisLength; i++)
             for (int j = centre.y; j < axisLength; j++)
@@ -37,5 +38,5 @@ public class SpawnParticles : MonoBehaviour
         return points;
     }
 
-    public float3[] GetSpawnVelocities() => new float3[(int)Mathf.Pow(axisLength, 3)];
+    public float3[] GetSpawnVelocities() => new float3[pointsAmount];
 }
