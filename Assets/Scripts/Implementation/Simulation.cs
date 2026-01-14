@@ -74,11 +74,13 @@ public class Simulation : MonoBehaviour
     void Update()
     {
         SimulationFrame();
-        ResolveCollisions();
+        // ResolveCollisions();
     }
-    
+
     private void SimulationFrame()
     {
+        compute.SetFloat("deltaTime", Time.deltaTime);
+        
         compute.Dispatch(ExternalForcesKernelID, threadGroups, 1, 1);
     }
 
