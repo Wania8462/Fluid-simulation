@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 [BurstCompile]
 public class SpawnParticles : MonoBehaviour
@@ -13,31 +14,28 @@ public class SpawnParticles : MonoBehaviour
 
     [HideInInspector] public float3 boundSize;
 
-    private Simulation sim;
-
-    void Start()
+    void Awake()
     {
-        sim = gameObject.GetComponent<Simulation>();
-
         boundSize = new(axisLength * 2 + 20, axisLength * 2 + 20, axisLength * 2 + 20);
-
-        sim.points = new float3[(int)Mathf.Pow(axisLength, 3)];
-        sim.velocities = new float3[(int)Mathf.Pow(axisLength, 3)];
-
-        CreateList();
     }
 
-    private void CreateList()
+    public float3[] GetSpawnPositions()
     {
+        float3[] points = new float3[(int)Mathf.Pow(axisLength, 3)];
+
         for (int i = centre.x; i < axisLength; i++)
             for (int j = centre.y; j < axisLength; j++)
                 for (int k = centre.z; k < axisLength; k++)
                 {
                     int index = i * axisLength * axisLength + j * axisLength + k;
 
-                    sim.points[index].x = (i - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
-                    sim.points[index].y = (j - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
-                    sim.points[index].z = (k - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
+                    points[index].x = (i - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
+                    points[index].y = (j - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
+                    points[index].z = (k - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
                 }
+
+        return points;
     }
+
+    public float3[] GetSpawnVelocities() => new float3[(int)Mathf.Pow(axisLength, 3)];
 }

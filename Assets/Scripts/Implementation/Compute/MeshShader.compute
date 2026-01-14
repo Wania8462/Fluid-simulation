@@ -1,11 +1,15 @@
-#pragma kernel LoadPositions
+#pragma kernel DrawPoints
 
-StructuredBuffer<float3> _Positions;
+static const int ThreadGroupSize = 256;
 
-[numthreads(8,8,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+StructuredBuffer<float3> Points;
+RWStructuredBuffer<float4x4> Matrices;
+
+[numthreads(ThreadGroupSize,1,1)]
+void DrawPoints (uint3 id : SV_DispatchThreadID)
 {
-    // TODO: insert actual code here!
+    if (id.x >= numParticles)
+        return;
 
-    Result[id.xy] = float4(id.x & id.y, (id.x & 15)/15.0, (id.y & 15)/15.0, 0.0);
+    
 }

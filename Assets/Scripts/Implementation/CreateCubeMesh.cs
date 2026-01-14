@@ -9,7 +9,6 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
 {
     [Header("References")]
     [SerializeField] private Material mat;
-    public SharedGPUBuffers buffers;
     private SpawnParticles fluidSim;
 
     private const int batchSize = 1024;
@@ -21,7 +20,7 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
     {
         fluidSim = gameObject.GetComponent<SpawnParticles>();
         float3 scale = new(1, 1, 1);
-        mesh = DrawMesh();
+        mesh = GetMeshCube();
 
         for (int i = 0; i < fluidSim.axisLength; i++)
             for (int j = 0; j < fluidSim.axisLength; j++)
@@ -47,18 +46,19 @@ public class CreateCubeMesh : MonoBehaviour, ICreateCubeMesh
             );
         }
 
-        for (int i = 0; i < matrices.Count; i += batchSize)
-        {
-            Graphics.DrawMeshInstanced(
-                mesh,
-                0,
-                mat,
-                matrices.GetRange(i, Mathf.Min(batchSize, matrices.Count - i))
-            );
-        }
+        // for (int i = 0; i < matrices.Count; i += batchSize)
+        // {
+        //     Graphics.DrawMeshInstancedProcedural(
+        //         mesh,
+        //         0,
+        //         mat,
+        //         matrices.GetRange(i, Mathf.Min(batchSize, matrices.Count - i)),
+        //         batchSize
+        //     );
+        // }
     }
 
-    public Mesh DrawMesh()
+    public Mesh GetMeshCube()
     {
         Vector3[] verticies = new Vector3[8];
         Vector2[] uv = new Vector2[8];

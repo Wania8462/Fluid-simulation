@@ -23,6 +23,12 @@ public class Simulation : MonoBehaviour
     private ComputeBuffer velocitiesBuffer;
     private ComputeBuffer densitiesBuffer;
 
+    [Header("Temporary")]
+    public ComputeBuffer argsBuffer;        // MOVE IT
+    public Material mat;                    // MOVE IT
+    private Bounds bounds;                  // MOVE IT
+    private Mesh mesh;                      // MOVE IT
+
     [HideInInspector] public float3[] points;
     [HideInInspector] public float3[] velocities;
 
@@ -45,6 +51,9 @@ public class Simulation : MonoBehaviour
         render = gameObject.GetComponent<CreateCubeMesh>();
         spawn = gameObject.GetComponent<SpawnParticles>();
 
+        points = spawn.GetSpawnPositions();
+        velocities = spawn.GetSpawnVelocities();
+        
         Precompute();
 
         // Set buffers
@@ -67,13 +76,39 @@ public class Simulation : MonoBehaviour
         compute.SetFloat("gravity", gravity);
         compute.SetFloat("smoothingRadius", smoothingRadius);
         compute.SetFloat("smoothingRadius2", smoothRad2);
+
+        // TODO: MOVE IT SOMEWHERE ELSE
+        mat.SetBuffer("Points", pointsBuffer);
+        mesh = render.GetMeshCube();
+        bounds = new(Vector3.zero, Vector3.one * 10000);
+
+        uint[] args = new uint[]
+        {
+            mesh.GetIndexCount(0),
+            (uint)points.Length,
+            mesh.GetIndexStart(0),
+            mesh.GetBaseVertex(0),
+            0 // TODO: make this a variable/constatnt
+        };
+
+        argsBuffer = new (1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+        argsBuffer.SetData(args);
     }
 
     void Update()
     {
         SimulationFrame();
         ResolveCollisions();
-        render.DrawPoints(points, particleSize);
+        // render.DrawPoints(points, particleSize);
+
+        // MOVE IT
+        Graphics.DrawMeshInstancedIndirect(
+            mesh,
+            0,
+            mat,
+            bounds,
+            argsBuffer
+        );
     }
 
     private void SimulationFrame()
@@ -119,5 +154,6 @@ public class Simulation : MonoBehaviour
         pointsBuffer.Release();
         velocitiesBuffer.Release();
         densitiesBuffer.Release();
+        argsBuffer.Release(); // MOVE IT
     }
 }
