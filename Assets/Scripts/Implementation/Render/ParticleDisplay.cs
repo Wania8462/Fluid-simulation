@@ -8,7 +8,8 @@ public class ParticleDisplay : MonoBehaviour
 {
     [Header("Render settings")]
     public float3 particleSize;
-    // todo: add the ability to change color
+    public uint offset;
+    [SerializeField] private Color color;
 
     [Header("References")]
     [SerializeField] private Material mat;
@@ -18,23 +19,33 @@ public class ParticleDisplay : MonoBehaviour
     private ComputeBuffer argsBuffer;
     private Bounds bounds;
     private Mesh mesh;
+    private const int subMeshIndex = 0;
+    private const int drawingBoundary = 10000;
+    private const int numberOfElements = 1;
 
     public void Setup()
     {
         mat.SetBuffer("Points", sim.pointsBuffer);
+        mat.SetColor("_Color", color);
+
         mesh = MeshGenerator.Cube();
-        bounds = new(Vector3.zero, Vector3.one * 10000);
+        bounds = new(Vector3.zero, Vector3.one * drawingBoundary);
 
         uint[] args = new uint[]
         {
-            mesh.GetIndexCount(0),
+            mesh.GetIndexCount(subMeshIndex),
             (uint)spawn.pointsAmount,
-            mesh.GetIndexStart(0),
-            mesh.GetBaseVertex(0),
-            0 // todo: make this a variable/constatnt
+            mesh.GetIndexStart(subMeshIndex),
+            mesh.GetBaseVertex(subMeshIndex),
+            offset
         };
 
-        argsBuffer = new (1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+        argsBuffer = new (
+            numberOfElements, 
+            args.Length * sizeof(uint), 
+            ComputeBufferType.IndirectArguments
+        );
+
         argsBuffer.SetData(args);
     }
 
@@ -44,7 +55,7 @@ public class ParticleDisplay : MonoBehaviour
         {
             Graphics.DrawMeshInstancedIndirect(
                 mesh,
-                0,
+                subMeshIndex,
                 mat,
                 bounds,
                 argsBuffer

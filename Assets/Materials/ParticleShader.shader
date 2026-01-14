@@ -1,5 +1,10 @@
 Shader "Unlit/Instanced/CubePoints"
 {
+    Properties
+    {
+        _Color ("Color", Color) = (1,1,1,1)
+    }
+    
     SubShader
     {
         Pass
@@ -12,6 +17,7 @@ Shader "Unlit/Instanced/CubePoints"
             #include "UnityCG.cginc"
 
             StructuredBuffer<float3> Points;
+            float4 _Color;
 
             struct appdata
             {
@@ -37,7 +43,7 @@ Shader "Unlit/Instanced/CubePoints"
 
             float4 frag () : SV_Target
             {
-                return float4(0.05,0.53,0.8,1);
+                return _Color;
             }
             ENDHLSL
         }

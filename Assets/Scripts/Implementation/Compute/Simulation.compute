@@ -1,5 +1,7 @@
 #pragma kernel ExternalForces
 #pragma kernel CalcDensities
+#pragma kernel UpdatePositions
+#pragma kernel ResolveCollisions
 
 #include "./FluidMath.hlsl"
 
@@ -9,12 +11,16 @@ RWStructuredBuffer<float3> Points;
 RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float> Densities;
 
+RWStructuredBuffer<float> Debug;
+
 const uint numParticles;
 const float mass;
 const float gravity;
 const float deltaTime;
 const float smoothingRadius;
 const float smoothingRadius2;
+const float3 realHalfBoundSize;
+const float collisionDamp;
 
 [numthreads(ThreadGroupSize,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
@@ -22,18 +28,51 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles)
         return;
 
-    Velocities[id.x] += gravity * deltaTime;
-    Points[id.x].y += Velocities[id.x] * deltaTime; // Turnication
+    Velocities[id.x].y += gravity * deltaTime;
 }
 
+// [numthreads(ThreadGroupSize,1,1)]
+// void CalcDensities (uint id : SV_DispatchThreadID)
+// {
+//     if (id.x >= numParticles)
+//         return;
+
+//     float density = 0;
+//     // for (int i = 0; i < Points.Length; i++)
+//     //     density += mass * SmoothingKernelPoly6(Distance2(pos, Points[i]), smoothingRadius, smoothingRadius2);
+//     // TODO: Calculate densities for every point and use grid search
+// }
+
 [numthreads(ThreadGroupSize,1,1)]
-void CalcDensities (uint id : SV_DispatchThreadID)
+void UpdatePositions (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
 
-    float density = 0;
-    // for (int i = 0; i < Points.Length; i++)
-    //     density += mass * SmoothingKernelPoly6(Distance2(pos, Points[i]), smoothingRadius, smoothingRadius2);
-    // TODO: Calculate densities for every point and use grid search
+    Points[id.x] += Velocities[id.x] * deltaTime;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ResolveCollisions (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    if (abs(Points[id.x].x) >= realHalfBoundSize.x)
+    {
+        Points[id.x].x = realHalfBoundSize.x * sign(Points[id.x].x);
+        Velocities[id.x].x *= -1 * collisionDamp;
+    }
+
+    else if (abs(Points[id.x].y) >= realHalfBoundSize.y)
+    {
+        Points[id.x].y = realHalfBoundSize.y * sign(Points[id.x].y);
+        Velocities[id.x].y *= -1 * collisionDamp;
+    }
+
+    else if (abs(Points[id.x].z) >= realHalfBoundSize.z)
+    {
+        Points[id.x].z = realHalfBoundSize.z * sign(Points[id.x].z);
+        Velocities[id.x].z *= -1 * collisionDamp;
+    }
 }
