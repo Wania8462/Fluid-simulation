@@ -11,33 +11,32 @@ public class SpawnParticles : MonoBehaviour
     [SerializeField] private float spacing;
     [SerializeField] private float jitterStrength;
 
-    [HideInInspector] public float3 boundSize;
+    [HideInInspector] public int pointsAmount;
+    [HideInInspector] public float3 boundSize { get; private set; }
 
-    private Simulation sim;
-
-    void Start()
+    void Awake()
     {
-        sim = gameObject.GetComponent<Simulation>();
-
         boundSize = new(axisLength * 2 + 20, axisLength * 2 + 20, axisLength * 2 + 20);
-
-        sim.points = new float3[(int)Mathf.Pow(axisLength, 3)];
-        sim.velocities = new float3[(int)Mathf.Pow(axisLength, 3)];
-
-        CreateList();
+        pointsAmount = (int)Mathf.Pow(axisLength, 3);
     }
 
-    private void CreateList()
+    public float3[] GetSpawnPositions()
     {
+        float3[] points = new float3[pointsAmount];
+
         for (int i = centre.x; i < axisLength; i++)
             for (int j = centre.y; j < axisLength; j++)
                 for (int k = centre.z; k < axisLength; k++)
                 {
                     int index = i * axisLength * axisLength + j * axisLength + k;
 
-                    sim.points[index].x = (i - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
-                    sim.points[index].y = (j - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
-                    sim.points[index].z = (k - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
+                    points[index].x = (i - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.x * jitterStrength;
+                    points[index].y = (j - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.y * jitterStrength;
+                    points[index].z = (k - axisLength / 2) * spacing + UnityEngine.Random.insideUnitSphere.z * jitterStrength;
                 }
+
+        return points;
     }
+
+    public float3[] GetSpawnVelocities() => new float3[pointsAmount];
 }

@@ -1,13 +1,12 @@
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [BurstCompile]
-[RequireComponent(typeof(SpawnParticles), typeof(CreateCubeMesh))]
 public class Simulation : MonoBehaviour
 {
     [Header("Simulation settings")]
-    public float3 particleSize;
     [SerializeField] private float gravity;
     [SerializeField] private float collisionDamp;
     [SerializeField] private float mass;
@@ -15,19 +14,25 @@ public class Simulation : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private ComputeShader compute;
-    private CreateCubeMesh render;
-    private SpawnParticles spawn;
+    [SerializeField] private SpawnParticles spawn;
+    [SerializeField] private ParticleDisplay display;
 
     // Buffers
-    private ComputeBuffer pointsBuffer;
+    public ComputeBuffer pointsBuffer;
     private ComputeBuffer velocitiesBuffer;
+    private ComputeBuffer densitiesBuffer;
+    private ComputeBuffer debugBuffer;
 
-    [HideInInspector] public float3[] points;
-    [HideInInspector] public float3[] velocities;
+    [HideInInspector] public float3[] points { get; private set; }
+    [HideInInspector] public float3[] velocities { get; private set; }
 
     //Kernel IDs
-    private const int externalForcesID = 0;
+    private const int ExternalForcesKernelID = 0;
+    private const int CalcDensitiesKernelID = 1;
+    private const int UpdatePositionsKernelID = 2;
+    private const int ResolveCollisionsKernelID = 3;
 
+    private const int floatSize = 8;
     private const int float3Size = 24;
 
     // Precompiled values
@@ -39,106 +44,95 @@ public class Simulation : MonoBehaviour
     void Start()
     {
         // Get references
-        render = gameObject.GetComponent<CreateCubeMesh>();
         spawn = gameObject.GetComponent<SpawnParticles>();
 
-        // Set buffers
-        pointsBuffer = new (points.Length, float3Size);
-        velocitiesBuffer = new(velocities.Length, float3Size);
+        points = spawn.GetSpawnPositions();
+        velocities = spawn.GetSpawnVelocities();
 
-        // Set data in the buffers
+        Precompute();
+
+        // Set buffers
+        pointsBuffer = new(spawn.pointsAmount, float3Size);
+        velocitiesBuffer = new(spawn.pointsAmount, float3Size);
+        densitiesBuffer = new(spawn.pointsAmount, floatSize);
+        debugBuffer = new(4, floatSize);
+
+        // Set initial data in the buffers
         pointsBuffer.SetData(points);
         velocitiesBuffer.SetData(velocities);
 
-        // Set buffers into shader
-        // TODO: make method for prettier setting
-        compute.SetBuffer(externalForcesID, "Points", pointsBuffer);
-        compute.SetBuffer(externalForcesID, "Velocities", velocitiesBuffer);
+        // Assign the buffers to methods
+        // todo: make method for prettier setting
+        compute.SetBuffer(ExternalForcesKernelID, "Points", pointsBuffer);
+        compute.SetBuffer(ExternalForcesKernelID, "Velocities", velocitiesBuffer);
+
+        compute.SetBuffer(CalcDensitiesKernelID, "Densities", densitiesBuffer);
+
+        compute.SetBuffer(UpdatePositionsKernelID, "Points", pointsBuffer);
+        compute.SetBuffer(UpdatePositionsKernelID, "Velocities", velocitiesBuffer);
+        compute.SetBuffer(UpdatePositionsKernelID, "Debug", debugBuffer);
+
+        compute.SetBuffer(ResolveCollisionsKernelID, "Points", pointsBuffer);
+        compute.SetBuffer(ResolveCollisionsKernelID, "Velocities", velocitiesBuffer);
+        compute.SetBuffer(ResolveCollisionsKernelID, "Debug", debugBuffer);
 
         compute.SetInt("numParticles", points.Length);
+        compute.SetFloat("mass", mass);
         compute.SetFloat("gravity", gravity);
+        compute.SetFloat("smoothingRadius", smoothingRadius);
+        compute.SetFloat("smoothingRadius2", smoothRad2);
+        compute.SetVector("realHalfBoundSize", new Vector4(realHalfBoundSize.x, realHalfBoundSize.y, realHalfBoundSize.z, 0));
+        compute.SetFloat("collisionDamp", collisionDamp);
 
-        Precompute();
+        display.Setup();
     }
 
     void Update()
     {
         SimulationFrame();
-        ResolveCollisions();
-        render.DrawPoints(points, particleSize);
-        Density(float3.zero);
+        Debug();
     }
 
     private void SimulationFrame()
     {
-        compute.Dispatch(externalForcesID, threadGroups, 1, 1);
-    }
+        compute.SetFloat("deltaTime", Time.deltaTime);
 
-    
-    private float Density(float3 pos)
-    {
-        float density = 0;
-
-        for (int i = 0; i < points.Length; i++)
-            density += mass * SmoothingKernelPoly6(Distance2(pos, points[i]));
-        
-        return density;
-    }
-
-    private void ResolveCollisions()
-    {
-        for (int i = 0; i < points.Length; i++)
-        {
-            if (Mathf.Abs(points[i].x) >= realHalfBoundSize.x)
-            {
-                points[i].x = realHalfBoundSize.x * Mathf.Sign(points[i].x);
-                velocities[i].x *= -1 * collisionDamp;
-            }
-
-            else if (Mathf.Abs(points[i].y) >= realHalfBoundSize.y)
-            {
-                points[i].y = realHalfBoundSize.y * Mathf.Sign(points[i].y);
-                velocities[i].y *= -1 * collisionDamp;
-            }
-
-            else if (Mathf.Abs(points[i].z) >= realHalfBoundSize.z)
-            {
-                points[i].z = realHalfBoundSize.z * Mathf.Sign(points[i].z);
-                velocities[i].z *= -1 * collisionDamp;
-            }
-
-        }
+        compute.Dispatch(ExternalForcesKernelID, threadGroups, 1, 1);
+        compute.Dispatch(ResolveCollisionsKernelID, threadGroups, 1, 1);
+        compute.Dispatch(UpdatePositionsKernelID, threadGroups, 1, 1);
     }
 
     private void Precompute()
     {
-        realHalfBoundSize = spawn.boundSize / 2 - particleSize / 2;
+        realHalfBoundSize = spawn.boundSize / 2 - display.particleSize / 2;
         smoothRad2 = smoothingRadius * smoothingRadius;
         poly6KernDenom = 64 * Mathf.PI * Mathf.Pow(smoothingRadius, 9);
         threadGroups = Mathf.CeilToInt(points.Length / 256f);
     }
 
-    private float SmoothingKernelPoly6(float dist2)
+    private void Debug()
     {
-        if (dist2 > smoothingRadius)
-            return 0;
-
-        return 315 * Mathf.Pow(smoothRad2 - dist2, 3) / poly6KernDenom;
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            AsyncGPUReadback.Request(
+                debugBuffer,
+                request =>
+                {
+                    if (!request.hasError)
+                    {
+                        var data = request.GetData<float>();
+                        // Debug.Log(data[i])
+                    }
+                }
+            );
+        }
     }
 
-    private float Distance(float3 pos1, float3 pos2)
+    void OnDestroy()
     {
-        float distX = Mathf.Pow(Mathf.Abs(pos1.x - pos2.x), 2);
-        float distY = Mathf.Pow(Mathf.Abs(pos1.y - pos2.y), 2);
-        float distZ = Mathf.Pow(Mathf.Abs(pos1.z - pos2.z), 2);
-        return Mathf.Sqrt(distX + distY + distZ);
-    }
-
-    private float Distance2(float3 pos1, float3 pos2)
-    {
-        float distX = Mathf.Pow(Mathf.Abs(pos1.x - pos2.x), 2);
-        float distY = Mathf.Pow(Mathf.Abs(pos1.y - pos2.y), 2);
-        float distZ = Mathf.Pow(Mathf.Abs(pos1.z - pos2.z), 2);
-        return distX + distY + distZ;
+        pointsBuffer.Release();
+        velocitiesBuffer.Release();
+        densitiesBuffer.Release();
+        debugBuffer.Release();
     }
 }

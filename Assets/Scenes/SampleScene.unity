@@ -387,9 +387,9 @@ GameObject:
   m_Component:
   - component: {fileID: 832575519}
   - component: {fileID: 832575518}
-  - component: {fileID: 832575520}
   - component: {fileID: 832575521}
   - component: {fileID: 832575522}
+  - component: {fileID: 832575523}
   m_Layer: 0
   m_Name: Global Volume
   m_TagString: Untagged
@@ -429,19 +429,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &832575520
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 832575517}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 13f025eb06e2b1d4a897b79acff6383d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mat: {fileID: 2100000, guid: 4f613fd1b90fc0d47b473594d1b521e6, type: 2}
 --- !u!114 &832575521
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -454,17 +441,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3ab5c289cff5b54ebce94cf2897a3d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  axisLength: 100
+  axisLength: 30
   centre:
     x: 0
     y: 0
     z: 0
   spacing: 2
   jitterStrength: 1
-  boundSize:
-    x: 0
-    y: 0
-    z: 0
+  pointsAmount: 0
 --- !u!114 &832575522
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -477,16 +461,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1fed6b4c4664aa44ca29af8fff06564b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gravity: -10
+  collisionDamp: 1
+  mass: 10
+  smoothingRadius: 2
+  compute: {fileID: 7200000, guid: 66b3fad879940ff43a4ec7fc63a40ae9, type: 3}
+  spawn: {fileID: 832575521}
+  display: {fileID: 832575523}
+--- !u!114 &832575523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 832575517}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5750da70cccfe1d41bf72c7b00ce57a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
   particleSize:
     x: 1
     y: 1
     z: 1
-  gravity: -10
-  collisionDamp: 1
-  mass: 1
-  smoothingRadius: 2
-  points: []
-  velocities: []
+  mat: {fileID: 2100000, guid: 4f613fd1b90fc0d47b473594d1b521e6, type: 2}
+  sim: {fileID: 832575522}
+  spawn: {fileID: 832575521}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
