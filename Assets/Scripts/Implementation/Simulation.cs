@@ -66,6 +66,7 @@ public class Simulation : MonoBehaviour
         compute.SetBuffer(ExternalForcesKernelID, "Points", pointsBuffer);
         compute.SetBuffer(ExternalForcesKernelID, "Velocities", velocitiesBuffer);
 
+        compute.SetBuffer(CalcDensitiesKernelID, "Points", pointsBuffer);
         compute.SetBuffer(CalcDensitiesKernelID, "Densities", densitiesBuffer);
 
         compute.SetBuffer(UpdatePositionsKernelID, "Points", pointsBuffer);
@@ -97,6 +98,7 @@ public class Simulation : MonoBehaviour
     {
         compute.SetFloat("deltaTime", Time.deltaTime);
 
+        compute.Dispatch(CalcDensitiesKernelID, threadGroups, 1, 1);
         compute.Dispatch(ExternalForcesKernelID, threadGroups, 1, 1);
         compute.Dispatch(ResolveCollisionsKernelID, threadGroups, 1, 1);
         compute.Dispatch(UpdatePositionsKernelID, threadGroups, 1, 1);
