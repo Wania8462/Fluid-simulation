@@ -5,7 +5,7 @@ float SmoothingKernelPoly6(float dist2, float smoothRad, float smoothRad2)
     if (dist2 > smoothRad)
         return 0;
 
-    return 315 * pow(smoothRad2 - dist2, 3) / (64 * PI * pow(smoothRad, 9));
+    return 315 * pow(abs(smoothRad2 - dist2), 3) / (64 * PI * pow(smoothRad, 9));
 }
 
 float Distance(float3 pos1, float3 pos2)

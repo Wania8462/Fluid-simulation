@@ -31,17 +31,27 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
     Velocities[id.x].y += gravity * deltaTime;
 }
 
-// [numthreads(ThreadGroupSize,1,1)]
-// void CalcDensities (uint id : SV_DispatchThreadID)
-// {
-//     if (id.x >= numParticles)
-//         return;
+[numthreads(ThreadGroupSize,1,1)]
+void CalcDensities (uint id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
 
-//     float density = 0;
-//     // for (int i = 0; i < Points.Length; i++)
-//     //     density += mass * SmoothingKernelPoly6(Distance2(pos, Points[i]), smoothingRadius, smoothingRadius2);
-//     // TODO: Calculate densities for every point and use grid search
-// }
+    Densities[id.x] = 0;
+
+    for (uint i = 0; i < Points.Length; i++)
+    {
+        if (i != id.x)
+        {
+            float dist = Distance2(Points[i], Points[id.x]);
+            if (dist <= smoothingRadius)
+                Densities[id.x] += mass * SmoothingKernelPoly6(dist, smoothingRadius, smoothingRadius2);
+        }
+    }
+    // Concise version:
+    // Densities[id.x] += mass * SmoothingKernelPoly6(Distance2(Points[i], Points[id.x]), smoothingRadius, smoothingRadius2);
+    // TODO: Calculate densities for every point and use grid search
+}
 
 [numthreads(ThreadGroupSize,1,1)]
 void UpdatePositions (uint3 id : SV_DispatchThreadID)
