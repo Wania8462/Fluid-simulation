@@ -1,15 +1,30 @@
-using NUnit.Framework.Constraints;
 using Unity.Burst;
-using Unity.Mathematics;
 using UnityEngine;
+
+enum RenderType
+{
+    Cube,
+    Sphere
+}
+
+enum SphereQuality
+{
+    Low = 4,
+    Medium = 8,
+    High = 16
+}
 
 [BurstCompile]
 public class ParticleDisplay : MonoBehaviour
 {
     [Header("Render settings")]
-    public float3 particleSize;
+    [SerializeField] private RenderType renderType;
+    public float particleSize;
     public uint offset;
     [SerializeField] private Color color;
+
+    [Header("Sphere settings")]
+    [SerializeField] private SphereQuality quality;
 
     [Header("References")]
     [SerializeField] private Material mat;
@@ -28,7 +43,12 @@ public class ParticleDisplay : MonoBehaviour
         mat.SetBuffer("Points", sim.pointsBuffer);
         mat.SetColor("_Color", color);
 
-        mesh = MeshGenerator.Cube();
+        if (renderType == RenderType.Cube)
+            mesh = MeshGenerator.Cube(particleSize);
+
+        else if (renderType == RenderType.Sphere)
+            mesh = MeshGenerator.Sphere(particleSize, (int)quality, (int)quality);
+
         bounds = new(Vector3.zero, Vector3.one * drawingBoundary);
 
         uint[] args = new uint[]
@@ -40,9 +60,9 @@ public class ParticleDisplay : MonoBehaviour
             offset
         };
 
-        argsBuffer = new (
-            numberOfElements, 
-            args.Length * sizeof(uint), 
+        argsBuffer = new(
+            numberOfElements,
+            args.Length * sizeof(uint),
             ComputeBufferType.IndirectArguments
         );
 
@@ -51,7 +71,7 @@ public class ParticleDisplay : MonoBehaviour
 
     void LateUpdate()
     {
-        if(mat != null && mesh != null)
+        if (mat != null && mesh != null)
         {
             Graphics.DrawMeshInstancedIndirect(
                 mesh,

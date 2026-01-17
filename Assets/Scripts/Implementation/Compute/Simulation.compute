@@ -1,14 +1,14 @@
 #pragma kernel ExternalForces
 #pragma kernel CalcDensities
 #pragma kernel UpdatePositions
-#pragma kernel ResolveCollisions
+#pragma kernel ResolveBoundaries
 
 #include "./FluidMath.hlsl"
 
 static const int ThreadGroupSize = 256;
 
-RWStructuredBuffer<float3> Points;
-RWStructuredBuffer<float3> Velocities;
+RWStructuredBuffer<float4> Points;
+RWStructuredBuffer<float4> Velocities;
 RWStructuredBuffer<float> Densities;
 
 RWStructuredBuffer<float> Debug;
@@ -21,6 +21,7 @@ const float smoothingRadius;
 const float smoothingRadius2;
 const float3 realHalfBoundSize;
 const float collisionDamp;
+const float poly6Denom;
 
 [numthreads(ThreadGroupSize,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
@@ -31,17 +32,22 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
     Velocities[id.x].y += gravity * deltaTime;
 }
 
-// [numthreads(ThreadGroupSize,1,1)]
-// void CalcDensities (uint id : SV_DispatchThreadID)
-// {
-//     if (id.x >= numParticles)
-//         return;
+[numthreads(ThreadGroupSize,1,1)]
+void CalcDensities (uint id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
 
-//     float density = 0;
-//     // for (int i = 0; i < Points.Length; i++)
-//     //     density += mass * SmoothingKernelPoly6(Distance2(pos, Points[i]), smoothingRadius, smoothingRadius2);
-//     // TODO: Calculate densities for every point and use grid search
-// }
+    Densities[id.x] = 0;
+
+    for (uint i = 0; i < Points.Length; i++) 
+    {
+        float dist = Distance2(Points[i], Points[id.x]);
+
+        if (dist <= smoothingRadius)
+            Densities[id.x] += mass * SmoothingKernelPoly6(dist, smoothingRadius, smoothingRadius2, poly6Denom);
+    }
+}
 
 [numthreads(ThreadGroupSize,1,1)]
 void UpdatePositions (uint3 id : SV_DispatchThreadID)
@@ -53,7 +59,7 @@ void UpdatePositions (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(ThreadGroupSize,1,1)]
-void ResolveCollisions (uint3 id : SV_DispatchThreadID)
+void ResolveBoundaries (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;

@@ -20,9 +20,9 @@ public class SpawnParticles : MonoBehaviour
         pointsAmount = (int)Mathf.Pow(axisLength, 3);
     }
 
-    public float3[] GetSpawnPositions()
+    public float4[] GetSpawnPositions()
     {
-        float3[] points = new float3[pointsAmount];
+        float4[] points = new float4[pointsAmount];
 
         for (int i = centre.x; i < axisLength; i++)
             for (int j = centre.y; j < axisLength; j++)
@@ -38,5 +38,5 @@ public class SpawnParticles : MonoBehaviour
         return points;
     }
 
-    public float3[] GetSpawnVelocities() => new float3[pointsAmount];
+    public float4[] GetSpawnVelocities() => new float4[pointsAmount];
 }

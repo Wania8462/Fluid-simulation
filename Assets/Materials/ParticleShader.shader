@@ -16,7 +16,7 @@ Shader "Unlit/Instanced/CubePoints"
 
             #include "UnityCG.cginc"
 
-            StructuredBuffer<float3> Points;
+            StructuredBuffer<float4> Points;
             float4 _Color;
 
             struct appdata
@@ -34,7 +34,7 @@ Shader "Unlit/Instanced/CubePoints"
             {
                 UNITY_SETUP_INSTANCE_ID(v);
 
-                float3 worldPos = v.vertex + Points[instanceID];
+                float3 worldPos = v.vertex + Points[instanceID].xyz;
 
                 v2f o;
                 o.pos = UnityObjectToClipPos(float4(worldPos, 1));
