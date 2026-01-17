@@ -205,8 +205,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
+<<<<<<< HEAD
   m_LocalRotation: {x: 0.0714628, y: -0, z: -0, w: 0.9974433}
   m_LocalPosition: {x: 0.221, y: 0.364, z: -40.61}
+=======
+  m_LocalRotation: {x: 0.12921098, y: 0, z: 0, w: 0.9916172}
+  m_LocalPosition: {x: 0, y: 7.82, z: -46.54}
+>>>>>>> a2e8bb736177c0b77fcab4c2daf551b3065fbc09
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -441,7 +446,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3ab5c289cff5b54ebce94cf2897a3d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+<<<<<<< HEAD
   axisLength: 50
+=======
+  axisLength: 10
+>>>>>>> a2e8bb736177c0b77fcab4c2daf551b3065fbc09
   centre:
     x: 0
     y: 0
@@ -464,7 +473,7 @@ MonoBehaviour:
   gravity: -10
   collisionDamp: 0.7
   mass: 10
-  smoothingRadius: 2
+  smoothingRadius: 5
   compute: {fileID: 7200000, guid: 66b3fad879940ff43a4ec7fc63a40ae9, type: 3}
   spawn: {fileID: 832575521}
   display: {fileID: 832575523}
@@ -480,11 +489,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5750da70cccfe1d41bf72c7b00ce57a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+<<<<<<< HEAD
   renderType: 1
   particleSize: 1
   offset: 0
   color: {r: 0.2028302, g: 0.64602643, b: 0.8113208, a: 0}
   quality: 16
+=======
+  particleSize:
+    x: 1
+    y: 1
+    z: 1
+  offset: 0
+  color: {r: 0.13725491, g: 0.8235294, b: 0.87058824, a: 0}
+>>>>>>> a2e8bb736177c0b77fcab4c2daf551b3065fbc09
   mat: {fileID: 2100000, guid: 4f613fd1b90fc0d47b473594d1b521e6, type: 2}
   sim: {fileID: 832575522}
   spawn: {fileID: 832575521}
