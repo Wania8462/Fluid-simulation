@@ -131,10 +131,14 @@ Material:
     m_Colors:
     - _BaseColor: {r: 0.4669811, g: 0.4669811, b: 1, a: 1}
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _Color: {r: 0.2028302, g: 0.64602643, b: 0.8113208, a: 0}
 =======
     - _Color: {r: 0.13725491, g: 0.8235294, b: 0.87058824, a: 0}
 >>>>>>> a2e8bb736177c0b77fcab4c2daf551b3065fbc09
+=======
+    - _Color: {r: 0.46698105, g: 0.46698105, b: 1, a: 1}
+>>>>>>> parent of 74a7045 (Spheres)
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []
