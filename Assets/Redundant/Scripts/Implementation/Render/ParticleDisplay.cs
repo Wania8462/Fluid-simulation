@@ -28,7 +28,7 @@ public class ParticleDisplay : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private Material mat;
-    [SerializeField] private Simulation sim;
+    [SerializeField] private GpuFluidSimulation sim;
     [SerializeField] private SpawnParticles spawn;
 
     private ComputeBuffer argsBuffer;
@@ -54,7 +54,7 @@ public class ParticleDisplay : MonoBehaviour
         uint[] args = new uint[]
         {
             mesh.GetIndexCount(subMeshIndex),
-            (uint)spawn.pointsAmount,
+            (uint)spawn.numParticles,
             mesh.GetIndexStart(subMeshIndex),
             mesh.GetBaseVertex(subMeshIndex),
             offset
@@ -85,6 +85,7 @@ public class ParticleDisplay : MonoBehaviour
 
     void OnDestroy()
     {
-        argsBuffer.Release();
+        if (argsBuffer != null)
+            argsBuffer.Release();
     }
 }

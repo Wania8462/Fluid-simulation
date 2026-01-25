@@ -1,4 +1,4 @@
-Shader "Unlit/Instanced/CubePoints"
+Shader "Instanced/Particles"
 {
     Properties
     {

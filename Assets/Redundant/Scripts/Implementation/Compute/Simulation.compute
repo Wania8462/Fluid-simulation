@@ -1,27 +1,63 @@
 #pragma kernel ExternalForces
 #pragma kernel CalcDensities
+// #pragma kernel UpdateGrid
 #pragma kernel UpdatePositions
 #pragma kernel ResolveBoundaries
+// #pragma kernel CreateGrid
 
 #include "./FluidMath.hlsl"
 
+struct HashLookup
+{
+    int hash;
+    uint particleIndex;
+};
+
 static const int ThreadGroupSize = 256;
 
+// All length = points amount
 RWStructuredBuffer<float4> Points;
 RWStructuredBuffer<float4> Velocities;
 RWStructuredBuffer<float> Densities;
+RWStructuredBuffer<HashLookup> Grid;
 
-RWStructuredBuffer<float> Debug;
+RWStructuredBuffer<float4> Debug;
 
 const uint numParticles;
 const float mass;
 const float gravity;
 const float deltaTime;
+const float restDensity;
+const float stiffness;
+
+const float cellSize;
+const float3 gridSize;
+
 const float smoothingRadius;
 const float smoothingRadius2;
 const float3 realHalfBoundSize;
 const float collisionDamp;
 const float poly6Denom;
+
+
+// int4 GetCellHash(float4 pos)
+// {
+//     int4 cell = (int4)floor(pos / cellSize);
+
+//     return (cell.x +
+//            cell.y * gridSize.x +
+//            cell.z * gridSize.x * gridSize.y);
+// }
+
+// [numthreads(ThreadGroupSize,1,1)]
+// void CreateGrid(uint3 id : SV_DispatchThreadID)
+// {
+//     if (id.x >= numParticles)
+//         return;
+
+//     Grid[id.x].hash = GetCellHash(Points[id.x]);
+//     Grid[id.x].particleIndex = id.x;
+// }
 
 [numthreads(ThreadGroupSize,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
@@ -49,11 +85,37 @@ void CalcDensities (uint id : SV_DispatchThreadID)
     }
 }
 
+// [numthreads(ThreadGroupSize,1,1)]
+// void UpdateGrid (uint id : SV_DispatchThreadID)
+// {
+//     if (id.x >= numParticles)
+//         return;
+
+    
+// }
+
 [numthreads(ThreadGroupSize,1,1)]
 void UpdatePositions (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
+
+    // Debug[0] = Velocities[id.x];
+
+    // for (uint i = 0; i < Points.Length; i++)
+    // {
+    //     float4 unitVector = (Points[i] - Points[id.x]) / Distance(Points[id.x], Points[i]);
+
+    //     // Debug[0].x = Points[i];
+    //     // Debug[0].y= Points[id.x];
+    //     // Debug[0].z = Distance(Points[id.x], Points[i]);
+    //     // Debug[0].x = unitVector.x;
+    //     // Debug[0].y = unitVector.y;
+    //     // Debug[0].z = unitVector.z;
+
+    //     float pseudoPressure = stiffness * (Densities[id.x] - restDensity);
+    //     Velocities[id.x].xyz += deltaTime * pseudoPressure * unitVector;
+    // }
 
     Points[id.x] += Velocities[id.x] * deltaTime;
 }

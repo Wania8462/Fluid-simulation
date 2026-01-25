@@ -1,3 +1,6 @@
+using System;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
@@ -11,18 +14,22 @@ public class SpawnParticles : MonoBehaviour
     [SerializeField] private float spacing;
     [SerializeField] private float jitterStrength;
 
-    [HideInInspector] public int pointsAmount;
+    [HideInInspector] public int numParticles;
     [HideInInspector] public float3 boundSize { get; private set; }
+
+    private const uint primeOne = 46771;
+    private const uint primeTwo = 35863;
+    private const uint primeThree = 45887;
 
     void Awake()
     {
         boundSize = new(axisLength * 2 + 20, axisLength * 2 + 20, axisLength * 2 + 20);
-        pointsAmount = (int)Mathf.Pow(axisLength, 3);
+        numParticles = (int)Mathf.Pow(axisLength, 3);
     }
 
     public float4[] GetSpawnPositions()
     {
-        float4[] points = new float4[pointsAmount];
+        float4[] points = new float4[numParticles];
 
         for (int i = centre.x; i < axisLength; i++)
             for (int j = centre.y; j < axisLength; j++)
@@ -38,5 +45,18 @@ public class SpawnParticles : MonoBehaviour
         return points;
     }
 
-    public float4[] GetSpawnVelocities() => new float4[pointsAmount];
+    public float4[] GetSpawnVelocities() => new float4[numParticles];
+
+    public HashLookup[] GetGrid()
+    {
+        HashLookup[] grid = new HashLookup[numParticles];   
+
+        for (int i = 0; i < numParticles; i++)
+        {
+            grid[i].hash = 0; // calc hashes?
+            grid[i].particleIndex = (uint)i;
+        }
+
+        return grid;
+    }
 }
