@@ -384,6 +384,12 @@ MonoBehaviour:
   interactionRadius: 6
   gravity: -20
   mouseAttractiveness: 2
+  body:
+    position: {x: 20, y: 0}
+    radius: 5
+    prevPosition: {x: 0, y: 0}
+    velocity: {x: 0, y: 0}
+  friction: 0
   stiffness: 150
   nearStiffness: 2
   restDensity: 5

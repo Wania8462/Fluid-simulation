@@ -4,6 +4,16 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using UnityEngine;
+using System.Xml;
+
+[Serializable]
+struct Body
+{
+    public Vector2 position;
+    public float radius;
+    public Vector2 prevPosition;
+    public Vector2 velocity;
+}
 
 public class Simulation : MonoBehaviour
 {
@@ -13,6 +23,10 @@ public class Simulation : MonoBehaviour
     [SerializeField] private float gravity;
     [SerializeField] private float mouseAttractiveness;
 
+    [Header("Body settings")]
+    [SerializeField] private Body body;
+    [SerializeField] private float friction;
+
     [Header("Density")]
     [SerializeField] private float stiffness;
     [SerializeField] private float nearStiffness;
@@ -20,7 +34,7 @@ public class Simulation : MonoBehaviour
 
     [Header("Springs")]
     [SerializeField] private float springStiffness;
-    [SerializeField] private float springDeformation;
+    [SerializeField] private float springDeformationLimit;
     [SerializeField] private float plasticity;
     [SerializeField] private float highViscosity;
     [SerializeField] private float lowViscosity;
@@ -37,7 +51,7 @@ public class Simulation : MonoBehaviour
     private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
 
     private Vector2 realHalfBoundSize;
-    private float deltaTime;
+    private float dt;
 
     void Start()
     {
@@ -55,7 +69,7 @@ public class Simulation : MonoBehaviour
 
     private void SimulationStep()
     {
-        deltaTime = Time.deltaTime;
+        dt = Time.deltaTime;
         ExternalForces();
         ApplyViscosity();
 
@@ -63,7 +77,7 @@ public class Simulation : MonoBehaviour
         Parallel.For(0, _positions.Length, i =>
         {
             _prevPositions[i] = _positions[i];
-            _positions[i] += deltaTime * _velocities[i];
+            _positions[i] += dt * _velocities[i];
         });
 
         if (useSprings)
@@ -73,13 +87,15 @@ public class Simulation : MonoBehaviour
         }
 
         DoubleDensityRelaxation();
-        AttractToMouse();
         ResolveCollisions();
+
+        AttractToMouse();
+        ResolveBoundaries();
 
         // Change in position to calculate velocity 
         Parallel.For(0, _positions.Length, i =>
         {
-            _velocities[i] = (_positions[i] - _prevPositions[i]) / deltaTime;
+            _velocities[i] = (_positions[i] - _prevPositions[i]) / dt;
         });
 
         // Render
@@ -91,7 +107,7 @@ public class Simulation : MonoBehaviour
     {
         Parallel.For(0, _velocities.Length, i =>
         {
-            _velocities[i].y += gravity * deltaTime;
+            _velocities[i].y += gravity * dt;
         });
     }
 
@@ -104,31 +120,30 @@ public class Simulation : MonoBehaviour
 
             for (int j = 0; j < _densities.Length; j++)
             {
-                float relativeDist = FluidMath.Distance(_positions[i], _positions[j]) / interactionRadius;
+                float mag = FluidMath.Distance(_positions[i], _positions[j]);
+                float q = mag / interactionRadius;
 
-                if (relativeDist <= 1 && relativeDist != 0)
+                if (q <= 1 && q != 0)
                 {
-                    _densities[i] += Mathf.Pow(1 - relativeDist, 2);
-                    _nearDensities[i] += Mathf.Pow(1 - relativeDist, 3);
+                    _densities[i] += FluidMath.QuadraticSpikyKernel(q);
+                    _nearDensities[i] += FluidMath.CubicSpikyKernel(q);
                 }
             }
 
-            float pseudoPressure = stiffness * (_densities[i] - restDensity);
-            float nearPseudoPressure = nearStiffness * _nearDensities[i];
+            float pressure = stiffness * (_densities[i] - restDensity);
+            float nearPressure = nearStiffness * _nearDensities[i];
             Vector2 deltaX = new(0, 0);
 
             for (int j = 0; j < _densities.Length; j++)
             {
-                float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
-                float relativeDist = magnitude / interactionRadius;
+                float mag = FluidMath.Distance(_positions[i], _positions[j]);
+                float q = mag / interactionRadius;
 
-                if (relativeDist <= 1 && relativeDist != 0)
+                if (q <= 1 && q != 0)
                 {
-                    Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
-                    Vector2 displacement = deltaTime * deltaTime * 
-                                           (pseudoPressure * (1 - relativeDist) + nearPseudoPressure * Mathf.Pow(1 - relativeDist, 2)) * 
-                                           unitVector;
-
+                    Vector2 r = (_positions[j] - _positions[i]) / mag;
+                    Vector2 displacement = FluidMath.PressureDisplacement(dt, q, pressure, nearPressure, r);
+                    
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
                 }
@@ -146,20 +161,17 @@ public class Simulation : MonoBehaviour
             {
                 if (i < j)
                 {
-                    float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
-                    float relativeDist = magnitude / interactionRadius;
+                    float mag = FluidMath.Distance(_positions[i], _positions[j]);
+                    float q = mag / interactionRadius;
 
-                    if (relativeDist <= 1 && relativeDist != 0)
+                    if (q <= 1 && q != 0)
                     {
-                        Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
-                        float invardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], unitVector);
+                        Vector2 r = (_positions[j] - _positions[i]) / mag;
+                        float inwardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], r);
 
-                        if (invardVelocity > 0)
+                        if (inwardVelocity > 0)
                         {
-                            Vector2 impulse = deltaTime *
-                                              (1 - relativeDist) *
-                                              (highViscosity * invardVelocity + (lowViscosity * invardVelocity * invardVelocity)) *
-                                              unitVector;
+                            Vector2 impulse = FluidMath.ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r);
 
                             _velocities[i] -= impulse / 2;
                             _velocities[j] += impulse / 2;
@@ -178,27 +190,27 @@ public class Simulation : MonoBehaviour
             {
                 if (i < j)
                 {
-                    float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
-                    float relativeDist = magnitude / interactionRadius;
+                    float mag = FluidMath.Distance(_positions[i], _positions[j]);
+                    float q = mag / interactionRadius;
 
-                    if (relativeDist <= 1 && relativeDist != 0)
+                    if (q <= 1 && q != 0)
                     {
                         if (!_springs.ContainsKey((i, j)))
                             _springs.TryAdd((i, j), interactionRadius);
 
                         if (_springs.TryGetValue((i, j), out float restLength))
                         {
-                            float deformation = springDeformation * restLength;
+                            float deformation = springDeformationLimit * restLength;
 
-                            if (magnitude > restLength + deformation)
-                                _springs[(i, j)] += deltaTime * plasticity * (magnitude - restLength - deformation);
+                            if (mag > restLength + deformation)
+                                _springs[(i, j)] += FluidMath.StretchSpring(dt, plasticity, mag, restLength, deformation);
 
-                            else if (magnitude < restLength + deformation)
-                                _springs[(i, j)] -= deltaTime * plasticity * (restLength - deformation - magnitude);
+                            else if (mag < restLength + deformation)
+                                _springs[(i, j)] -= FluidMath.CompressSpring(dt, plasticity, mag, restLength, deformation);
                         }
 
                         else
-                            Debug.LogError("Couldn't get the spring with key: " + i + ", " + j);
+                            Debug.LogError("Simulation: Couldn't get the spring with key: " + i + ", " + j);
                     }
                 }
             }
@@ -223,13 +235,9 @@ public class Simulation : MonoBehaviour
             int i = springArray[k].Key.Item1;
             int j = springArray[k].Key.Item2;
 
-            float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
-            Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
-            Vector2 displacement = deltaTime * deltaTime * 
-                                   springStiffness * 
-                                   (1 - (springArray[k].Value / interactionRadius)) * 
-                                   (springArray[k].Value - magnitude) * 
-                                   unitVector;
+            float mag = FluidMath.Distance(_positions[i], _positions[j]);
+            Vector2 r = (_positions[j] - _positions[i]) / mag;
+            Vector2 displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value, interactionRadius, mag, r);
 
             if (displacement.x > 0 || displacement.x < 0 && displacement.y > 0 || displacement.y < 0)
             {
@@ -240,6 +248,38 @@ public class Simulation : MonoBehaviour
     }
 
     private void ResolveCollisions()
+    {
+        body.prevPosition = body.position;
+        body.position += body.velocity;
+
+        // Idk about buffers
+        Vector2 force = Vector2.zero;
+
+        Parallel.For(0, _velocities.Length, i =>
+        {
+            float dist = FluidMath.Distance(body.position, _positions[i]);
+
+            if (dist - body.radius - 0.5f > 0) // 0.5 - radius of the paricle
+            {
+                Vector2 relativeVelocity = _velocities[i] - body.velocity;
+                Vector2 unitVector = FluidMath.UnitVector(body.position, _positions[i]);
+
+                Vector2 normalVelocity = Vector2.Dot(relativeVelocity, unitVector) * unitVector;
+                Vector2 tangentVelocity = relativeVelocity - normalVelocity;
+                Vector2 impulse = normalVelocity - (friction * tangentVelocity);
+
+                _positions[i] -= impulse * dt;
+                force += impulse * dt;
+            }
+        });
+
+        // Not add?
+        body.position += force;
+        body.velocity += (body.position - body.prevPosition) / dt;
+
+    }
+
+    private void ResolveBoundaries()
     {
         // Todo: add collision damping
         Parallel.For(0, _positions.Length, i =>
@@ -259,8 +299,8 @@ public class Simulation : MonoBehaviour
             for (int i = 0; i < _positions.Length; i++)
             {
                 Vector2 mousePos = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                Vector2 unitVector = (mousePos - _positions[i]) / FluidMath.Distance(_positions[i], mousePos);
-                _positions[i] += deltaTime * mouseAttractiveness * unitVector;
+                Vector2 r = (mousePos - _positions[i]) / FluidMath.Distance(_positions[i], mousePos);
+                _positions[i] += dt * mouseAttractiveness * r;
             }
         }
     }
@@ -279,6 +319,8 @@ public class Simulation : MonoBehaviour
 
         render.DeleteParticles();
         render.CreateParticles(_positions, _velocities);
+        render.DeleteAllBodies();
+        render.DrawCircle(body.position, body.radius);
     }
 
     private void DrawDebugSquare(Vector3 center, Vector2 halfSize, Color color)
