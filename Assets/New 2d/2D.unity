@@ -380,7 +380,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 030f77721f467214eade4a811de094b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useSprings: 0
+  useSprings: 1
   interactionRadius: 6
   gravity: -20
   mouseAttractiveness: 2
@@ -414,5 +414,5 @@ SceneRoots:
   m_Roots:
   - {fileID: 741110330}
   - {fileID: 1165800422}
-  - {fileID: 452458856}
   - {fileID: 890908188}
+  - {fileID: 452458856}

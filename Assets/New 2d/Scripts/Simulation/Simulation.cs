@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -19,7 +20,6 @@ public class Simulation : MonoBehaviour
 
     [Header("Springs")]
     [SerializeField] private float springStiffness;
-    [SerializeField] private float springRestLength;
     [SerializeField] private float springDeformation;
     [SerializeField] private float plasticity;
 
@@ -32,7 +32,7 @@ public class Simulation : MonoBehaviour
     private Vector2[] _velocities;
     private float[] _densities;
     private float[] _nearDensities;
-    private Dictionary<(int, int), float> springs = new(); // (i, j), rest length
+    private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
 
     private Vector2 realHalfBoundSize;
     private float deltaTime;
@@ -64,8 +64,11 @@ public class Simulation : MonoBehaviour
             _positions[i] += deltaTime * _velocities[i];
         });
 
-        // AdjustSprings();
-        // SpringDisplacements();
+        if (useSprings)
+        {
+            AdjustSprings();
+            SpringDisplacements();
+        }
 
         DoubleDensityRelaxation();
         AttractToMouse();
@@ -120,7 +123,10 @@ public class Simulation : MonoBehaviour
                 if (relativeDist <= 1 && relativeDist != 0)
                 {
                     Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
-                    Vector2 displacement = deltaTime * deltaTime * (pseudoPressure * (1 - relativeDist) + nearPseudoPressure * Mathf.Pow(1 - relativeDist, 2)) * unitVector;
+                    Vector2 displacement = deltaTime * deltaTime * 
+                                           (pseudoPressure * (1 - relativeDist) + nearPseudoPressure * Mathf.Pow(1 - relativeDist, 2)) * 
+                                           unitVector;
+
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
                 }
@@ -145,46 +151,66 @@ public class Simulation : MonoBehaviour
 
                 if (relativeDist <= 1 && relativeDist != 0)
                 {
-                    if (!springs.ContainsKey((i, j)))
-                        springs.Add((i, j), interactionRadius);
+                    (int, int) key = (i < j) ? (i, j) : (j, i);
 
-                    float deformation = springDeformation * springs[(i, j)];
-                    float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+                    if (!_springs.ContainsKey(key))
+                        _springs.TryAdd(key, interactionRadius);
 
-                    if (magnitude > springs[(i, j)] + deformation)
-                        springs[(i, j)] += deltaTime * plasticity * (magnitude - springs[(i, j)] - deformation);
+                    if (_springs.TryGetValue(key, out float restLength))
+                    {
+                        float deformation = springDeformation * restLength;
+                        float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
 
-                    else if (magnitude < springs[(i, j)] + deformation)
-                        springs[(i, j)] -= deltaTime * plasticity * (springs[(i, j)] - deformation - magnitude);
+                        if (magnitude > restLength + deformation)
+                            _springs[key] += deltaTime * plasticity * (magnitude - restLength - deformation);
+
+                        else if (magnitude < restLength + deformation)
+                            _springs[key] -= deltaTime * plasticity * (restLength - deformation - magnitude);
+                    }
+
+                    else
+                        Debug.LogError("Couldn't get the spring with key: " + i + ", " + j);
                 }
             }
         });
 
-        Parallel.For(0, _positions.Length, i =>
+        (int, int)[] keysToRemove = _springs.Where(kvp => kvp.Value > interactionRadius)
+                                            .Select(kvp => kvp.Key)
+                                            .ToArray();
+
+        Parallel.For(0, keysToRemove.Length, i =>
         {
-            if (i < springs.Count())
-            {
-                if (springs.ElementAt(i).Value > interactionRadius)
-                    springs.Remove(springs.ElementAt(i).Key);
-            }
+            _springs.TryRemove(keysToRemove[i], out _);
         });
+
+        foreach (KeyValuePair<(int, int), float> spring in _springs)
+        {
+            if (spring.Value > interactionRadius)
+                Debug.Log("Spring is longer than suppoused to: " + spring.Value);
+        }
     }
 
     private void SpringDisplacements()
     {
-        Parallel.For(0, _positions.Length, i =>
-        {
-            for (int j = 0; j < _positions.Length; j++)
-            {
-                float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+        KeyValuePair<(int, int), float>[] springArray = _springs.ToArray();
 
-                if (magnitude != 0)
-                {
-                    Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
-                    Vector2 displacement = deltaTime * deltaTime * springStiffness * (1 - (springRestLength / interactionRadius)) * (springRestLength - magnitude) * unitVector;
-                    _positions[i] -= displacement / 2;
-                    _positions[j] += displacement / 2;
-                }
+        Parallel.For(0, springArray.Length, k =>
+        {
+            int i = springArray[k].Key.Item1;
+            int j = springArray[k].Key.Item2;
+
+            float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+            Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
+            Vector2 displacement = deltaTime * deltaTime * 
+                                   springStiffness * 
+                                   (1 - (springArray[k].Value / interactionRadius)) * 
+                                   (springArray[k].Value - magnitude) * 
+                                   unitVector;
+
+            if (displacement.x > 0 || displacement.x < 0 && displacement.y > 0 || displacement.y < 0)
+            {
+                _positions[i] -= displacement / 2;
+                _positions[j] += displacement / 2;
             }
         });
     }
@@ -223,6 +249,7 @@ public class Simulation : MonoBehaviour
 
         _densities = spawn.InitializeDensities();
         _nearDensities = spawn.InitializeNearDensities();
+        _springs.Clear();
 
         realHalfBoundSize = spawn.GetRealHalfBoundSize();
 
