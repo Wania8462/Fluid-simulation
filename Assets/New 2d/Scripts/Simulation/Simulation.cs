@@ -22,6 +22,8 @@ public class Simulation : MonoBehaviour
     [SerializeField] private float springStiffness;
     [SerializeField] private float springDeformation;
     [SerializeField] private float plasticity;
+    [SerializeField] private float highViscosity;
+    [SerializeField] private float lowViscosity;
 
     [Header("References")]
     [SerializeField] private SpawnParticles spawn;
@@ -55,7 +57,7 @@ public class Simulation : MonoBehaviour
     {
         deltaTime = Time.deltaTime;
         ExternalForces();
-        // Todo: Apply viscocity
+        ApplyViscosity();
 
         // Advance to predicted position
         Parallel.For(0, _positions.Length, i =>
@@ -138,7 +140,34 @@ public class Simulation : MonoBehaviour
 
     private void ApplyViscosity()
     {
+        Parallel.For(0, _positions.Length, i =>
+        {
+            for (int j = 0; j < _positions.Length; j++)
+            {
+                if (i < j)
+                {
+                    float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+                    float relativeDist = magnitude / interactionRadius;
 
+                    if (relativeDist <= 1 && relativeDist != 0)
+                    {
+                        Vector2 unitVector = (_positions[j] - _positions[i]) / magnitude;
+                        float invardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], unitVector);
+
+                        if (invardVelocity > 0)
+                        {
+                            Vector2 impulse = deltaTime *
+                                              (1 - relativeDist) *
+                                              (highViscosity * invardVelocity + (lowViscosity * invardVelocity * invardVelocity)) *
+                                              unitVector;
+
+                            _velocities[i] -= impulse / 2;
+                            _velocities[j] += impulse / 2;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     private void AdjustSprings()
@@ -147,29 +176,30 @@ public class Simulation : MonoBehaviour
         {
             for (int j = 0; j < _positions.Length; j++)
             {
-                float relativeDist = FluidMath.Distance(_positions[i], _positions[j]) / interactionRadius;
-
-                if (relativeDist <= 1 && relativeDist != 0)
+                if (i < j)
                 {
-                    (int, int) key = (i < j) ? (i, j) : (j, i);
+                    float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+                    float relativeDist = magnitude / interactionRadius;
 
-                    if (!_springs.ContainsKey(key))
-                        _springs.TryAdd(key, interactionRadius);
-
-                    if (_springs.TryGetValue(key, out float restLength))
+                    if (relativeDist <= 1 && relativeDist != 0)
                     {
-                        float deformation = springDeformation * restLength;
-                        float magnitude = FluidMath.Distance(_positions[i], _positions[j]);
+                        if (!_springs.ContainsKey((i, j)))
+                            _springs.TryAdd((i, j), interactionRadius);
 
-                        if (magnitude > restLength + deformation)
-                            _springs[key] += deltaTime * plasticity * (magnitude - restLength - deformation);
+                        if (_springs.TryGetValue((i, j), out float restLength))
+                        {
+                            float deformation = springDeformation * restLength;
 
-                        else if (magnitude < restLength + deformation)
-                            _springs[key] -= deltaTime * plasticity * (restLength - deformation - magnitude);
+                            if (magnitude > restLength + deformation)
+                                _springs[(i, j)] += deltaTime * plasticity * (magnitude - restLength - deformation);
+
+                            else if (magnitude < restLength + deformation)
+                                _springs[(i, j)] -= deltaTime * plasticity * (restLength - deformation - magnitude);
+                        }
+
+                        else
+                            Debug.LogError("Couldn't get the spring with key: " + i + ", " + j);
                     }
-
-                    else
-                        Debug.LogError("Couldn't get the spring with key: " + i + ", " + j);
                 }
             }
         });
@@ -182,12 +212,6 @@ public class Simulation : MonoBehaviour
         {
             _springs.TryRemove(keysToRemove[i], out _);
         });
-
-        foreach (KeyValuePair<(int, int), float> spring in _springs)
-        {
-            if (spring.Value > interactionRadius)
-                Debug.Log("Spring is longer than suppoused to: " + spring.Value);
-        }
     }
 
     private void SpringDisplacements()

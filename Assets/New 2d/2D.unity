@@ -387,10 +387,11 @@ MonoBehaviour:
   stiffness: 150
   nearStiffness: 2
   restDensity: 5
-  springStiffness: 0.1
-  springRestLength: 1
-  springDeformation: 0
+  springStiffness: 0.01
+  springDeformation: 0.1
   plasticity: 1
+  highViscosity: 0
+  lowViscosity: 0.1
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
 --- !u!4 &1165800422
