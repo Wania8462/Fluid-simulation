@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public static class FluidMath
 {
@@ -52,6 +52,7 @@ public static class FluidMath
     public static float QuadraticSpikyKernel(float relativeDistance) => Mathf.Pow(1 - relativeDistance, 2);
 
     public static float CubicSpikyKernel(float relativeDistance) => Mathf.Pow(1 - relativeDistance, 3);
-
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Distance(Vector2 p1, Vector2 p2) => Mathf.Sqrt(Mathf.Pow(p2.x - p1.x, 2) + Mathf.Pow(p2.y - p1.y, 2));
 }

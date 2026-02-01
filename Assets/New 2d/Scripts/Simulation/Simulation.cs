@@ -38,10 +38,12 @@ public class Simulation : MonoBehaviour
     [SerializeField] private float plasticity;
     [SerializeField] private float highViscosity;
     [SerializeField] private float lowViscosity;
+    [SerializeField] private float springRadius;
 
     [Header("References")]
     [SerializeField] private SpawnParticles spawn;
     [SerializeField] private Render render;
+    private SpatialPartitioning SP;
 
     private Vector2[] _prevPositions;
     private Vector2[] _positions;
@@ -55,7 +57,7 @@ public class Simulation : MonoBehaviour
 
     void Start()
     {
-        Application.targetFrameRate = 60;
+        Application.targetFrameRate = 120;
         SetScene();
     }
 
@@ -70,6 +72,7 @@ public class Simulation : MonoBehaviour
     private void SimulationStep()
     {
         dt = Time.deltaTime;
+        SP.Init(_positions);
         ExternalForces();
         ApplyViscosity();
 
@@ -80,14 +83,16 @@ public class Simulation : MonoBehaviour
             _positions[i] += dt * _velocities[i];
         });
 
+       // spatialPartitioning.Init(_positions);
         if (useSprings)
         {
             AdjustSprings();
             SpringDisplacements();
         }
 
+        //spatialPartitioning.Init(_positions);
         DoubleDensityRelaxation();
-        ResolveCollisions();
+        // ResolveCollisions();
 
         AttractToMouse();
         ResolveBoundaries();
@@ -99,6 +104,7 @@ public class Simulation : MonoBehaviour
         });
 
         // Render
+        DrawDebugGrid(Color.green);
         DrawDebugSquare(Vector3.zero, realHalfBoundSize, Color.red);
         render.UpdatePositions(_positions, _velocities);
     }
@@ -118,8 +124,10 @@ public class Simulation : MonoBehaviour
             _densities[i] = 0;
             _nearDensities[i] = 0;
 
-            for (int j = 0; j < _densities.Length; j++)
+            List<int> neighbours = SP.GetNeighbours(_positions[i]);
+            for (int n = 0; n < neighbours.Count; n++)
             {
+                int j = neighbours[n];
                 float mag = FluidMath.Distance(_positions[i], _positions[j]);
                 float q = mag / interactionRadius;
 
@@ -134,8 +142,9 @@ public class Simulation : MonoBehaviour
             float nearPressure = nearStiffness * _nearDensities[i];
             Vector2 deltaX = new(0, 0);
 
-            for (int j = 0; j < _densities.Length; j++)
+            for (int n = 0; n < neighbours.Count; n++)
             {
+                int j = neighbours[n];
                 float mag = FluidMath.Distance(_positions[i], _positions[j]);
                 float q = mag / interactionRadius;
 
@@ -156,15 +165,21 @@ public class Simulation : MonoBehaviour
     private void ApplyViscosity()
     {
         Parallel.For(0, _positions.Length, i =>
+        //for(int i = 0; i < _positions.Length; i++)
         {
-            for (int j = 0; j < _positions.Length; j++)
+            List<int> neighbours = SP.GetNeighbours(_positions[i]);
+            int c = 0;
+            for (int n = 0; n < neighbours.Count; n++)
             {
+                int j = neighbours[n];
                 if (i < j)
                 {
                     float mag = FluidMath.Distance(_positions[i], _positions[j]);
+                    if (mag > interactionRadius) continue;
+
                     float q = mag / interactionRadius;
 
-                    if (q <= 1 && q != 0)
+                    if (q != 0)
                     {
                         Vector2 r = (_positions[j] - _positions[i]) / mag;
                         float inwardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], r);
@@ -176,9 +191,12 @@ public class Simulation : MonoBehaviour
                             _velocities[i] -= impulse / 2;
                             _velocities[j] += impulse / 2;
                         }
+                        c++;
                     }
                 }
             }
+            //Debug.Log($"i = {i}, neighbors = {neighbours.Count}, actual neighbours = {c}");
+        //}
         });
     }
 
@@ -186,17 +204,19 @@ public class Simulation : MonoBehaviour
     {
         Parallel.For(0, _positions.Length, i =>
         {
-            for (int j = 0; j < _positions.Length; j++)
+            List<int> neighbours = SP.GetNeighbours(_positions[i]);
+            for (int n = 0; n < neighbours.Count; n++)
             {
+                int j = neighbours[n];
                 if (i < j)
                 {
                     float mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    float q = mag / interactionRadius;
+                    float q = mag / springRadius;
 
                     if (q <= 1 && q != 0)
                     {
                         if (!_springs.ContainsKey((i, j)))
-                            _springs.TryAdd((i, j), interactionRadius);
+                            _springs.TryAdd((i, j), springRadius);
 
                         if (_springs.TryGetValue((i, j), out float restLength))
                         {
@@ -216,7 +236,7 @@ public class Simulation : MonoBehaviour
             }
         });
 
-        (int, int)[] keysToRemove = _springs.Where(kvp => kvp.Value > interactionRadius)
+        (int, int)[] keysToRemove = _springs.Where(kvp => kvp.Value > springRadius)
                                             .Select(kvp => kvp.Key)
                                             .ToArray();
 
@@ -237,7 +257,7 @@ public class Simulation : MonoBehaviour
 
             float mag = FluidMath.Distance(_positions[i], _positions[j]);
             Vector2 r = (_positions[j] - _positions[i]) / mag;
-            Vector2 displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value, interactionRadius, mag, r);
+            Vector2 displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value, springRadius, mag, r);
 
             if (displacement.x > 0 || displacement.x < 0 && displacement.y > 0 || displacement.y < 0)
             {
@@ -252,7 +272,6 @@ public class Simulation : MonoBehaviour
         body.prevPosition = body.position;
         body.position += body.velocity;
 
-        // Idk about buffers
         Vector2 force = Vector2.zero;
 
         Parallel.For(0, _velocities.Length, i =>
@@ -317,10 +336,12 @@ public class Simulation : MonoBehaviour
 
         realHalfBoundSize = spawn.GetRealHalfBoundSize();
 
+        SP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
+
         render.DeleteParticles();
         render.CreateParticles(_positions, _velocities);
-        render.DeleteAllBodies();
-        render.DrawCircle(body.position, body.radius);
+        // render.DeleteAllBodies();
+        // render.DrawCircle(body.position, body.radius);
     }
 
     private void DrawDebugSquare(Vector3 center, Vector2 halfSize, Color color)
@@ -334,5 +355,22 @@ public class Simulation : MonoBehaviour
         Debug.DrawLine(p1, p2, color);
         Debug.DrawLine(p2, p3, color);
         Debug.DrawLine(p3, p0, color);
+    }
+
+    private void DrawDebugGrid(Color color)
+    {
+        for(int i = 0; i <= SP.columns; i++)
+        {
+            Vector3 start = new(SP.offset.x + (SP.length * i), -SP.offset.y, 0);
+            Vector3 end = new(SP.offset.x + (SP.length * i), SP.offset.y, 0);
+            Debug.DrawLine(start, end, color);
+        }
+
+        for(int i = 0; i <= SP.rows; i++)
+        {
+            Vector3 start = new(-SP.offset.x, SP.offset.y + (SP.length * i), 0);
+            Vector3 end = new(SP.offset.x, SP.offset.y + (SP.length * i), 0);
+            Debug.DrawLine(start, end, color);
+        }
     }
 }
