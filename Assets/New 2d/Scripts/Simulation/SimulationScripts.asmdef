@@ -1,0 +1,16 @@
+{
+    "name": "SimulationScripts",
+    "rootNamespace": "",
+    "references": [
+        "GUID:06738dcaa4956e94cbd24308e2358884"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

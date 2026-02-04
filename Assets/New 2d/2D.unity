@@ -383,21 +383,21 @@ MonoBehaviour:
   useSprings: 1
   interactionRadius: 6
   gravity: -20
-  mouseAttractiveness: 2
+  mouseAttractiveness: 1
   body:
     position: {x: 40, y: 0}
     radius: 5
     prevPosition: {x: 0, y: 0}
     velocity: {x: 0, y: 0}
   friction: 0
-  stiffness: 150
+  stiffness: 200
   nearStiffness: 2
   restDensity: 5
   springStiffness: 0.01
   springDeformationLimit: 0
   plasticity: 1
   highViscosity: 0
-  lowViscosity: 0.1
+  lowViscosity: 0
   springRadius: 0
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}

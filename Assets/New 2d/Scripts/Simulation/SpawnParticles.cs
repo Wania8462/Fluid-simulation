@@ -1,44 +1,48 @@
 using System;
 using UnityEngine;
 
-public class SpawnParticles : MonoBehaviour
+namespace SimulationLogic
 {
-    [Header("Spawn settings")]
-    [SerializeField] private int particleSquareLength;
-    [SerializeField] private float spacing;
-    [SerializeField] private float jitterStrength;
-    [SerializeField] private Vector2 boundingBoxSizeOffset;
-
-    [Header("References")]
-    [SerializeField] private Transform cam;
-
-    private Vector2 boundingBoxSize;
-
-    public Vector2[] InitializePositions()
+    public class SpawnParticles : MonoBehaviour
     {
-        int len = particleSquareLength;
-        Vector2[] pos = new Vector2[(int)Math.Pow(len, 2)];
+        [Header("Spawn settings")]
+        [SerializeField] private int particleSquareLength;
+        [SerializeField] private float spacing;
+        [SerializeField] private float jitterStrength;
+        [SerializeField] private Vector2 boundingBoxSizeOffset;
 
-        for (int i = 0; i < len; i++)
+        [Header("References")]
+        [SerializeField] private Transform cam;
+
+        public Vector2 boundingBoxSize;
+        private const float particleRadius = 0.5f;
+
+        public Vector2[] InitializePositions()
         {
-            for (int j = 0; j < len; j++)
+            int len = particleSquareLength;
+            Vector2[] pos = new Vector2[(int)Math.Pow(len, 2)];
+
+            for (int i = 0; i < len; i++)
             {
-                pos[i * len + j] = new(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1,
-                                      j * spacing + (UnityEngine.Random.insideUnitSphere.y * jitterStrength) - len + 1);
+                for (int j = 0; j < len; j++)
+                {
+                    pos[i * len + j] = new(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1,
+                                          j * spacing + (UnityEngine.Random.insideUnitSphere.y * jitterStrength) - len + 1);
+                }
             }
+
+            boundingBoxSize = new(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y);
+            Camera.main.orthographicSize = 0.5f * particleSquareLength + 32;
+            return pos;
         }
 
-        boundingBoxSize = new(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y);
-        Camera.main.orthographicSize = 0.5f * particleSquareLength + 32;
-        return pos;
+        public Vector2[] InitializePreviousPositions() => new Vector2[(int)Math.Pow(particleSquareLength, 2)];
+
+        public Vector2[] InitializeVelocities() => new Vector2[(int)Math.Pow(particleSquareLength, 2)];
+
+        public float[] InitializeDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+        public float[] InitializeNearDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+
+        public Vector2 GetRealHalfBoundSize() => new(boundingBoxSize.x / 2 - particleRadius, boundingBoxSize.y / 2 - particleRadius);
     }
-    
-    public Vector2[] InitializePreviousPositions() => new Vector2[(int)Math.Pow(particleSquareLength, 2)];
-
-    public Vector2[] InitializeVelocities() => new Vector2[(int)Math.Pow(particleSquareLength, 2)];
-
-    public float[] InitializeDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
-    public float[] InitializeNearDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
-
-    public Vector2 GetRealHalfBoundSize() => new(boundingBoxSize.x / 2 - 0.5f, boundingBoxSize.y / 2 - 0.5f); // 0.5 = particle size
 }
