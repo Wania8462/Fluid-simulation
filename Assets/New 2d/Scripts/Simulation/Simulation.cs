@@ -20,7 +20,7 @@ namespace SimulationLogic
     public class Simulation : MonoBehaviour
     {
         [Header("Simulation settings")]
-        [SerializeField] private bool useSprings;
+        [SerializeField] private float particleSize;
         [SerializeField] private float interactionRadius;
         [SerializeField] private float gravity;
         [SerializeField] private float mouseAttractiveness;
@@ -55,20 +55,32 @@ namespace SimulationLogic
         private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
 
         private Vector2 realHalfBoundSize;
+        private Vector2 realHalfBoundSizeBody;
         private float dt;
+
+        private bool initialFramePassed;
 
         void Start()
         {
             Application.targetFrameRate = 120;
+            Invoke(nameof(StartSimulation), 0.5f);
+        }
+
+        void StartSimulation()
+        {
             SetScene();
+            initialFramePassed = true;
         }
 
         void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Space))
-                SetScene();
+            if (initialFramePassed)
+            {
+                if (Input.GetKeyDown(KeyCode.Space))
+                    SetScene();
 
-            SimulationStep();
+                SimulationStep();
+            }
         }
 
         public void SimulationStep()
@@ -86,15 +98,11 @@ namespace SimulationLogic
                 _positions[i] += dt * _velocities[i];
             });
 
-            // spatialPartitioning.Init(_positions);
-            if (useSprings)
-            {
-                AdjustSprings();
-                SpringDisplacements();
-            }
+            AdjustSprings();
+            SpringDisplacements();
 
             DoubleDensityRelaxation();
-            // ResolveCollisions();
+            ResolveCollisions();
 
             AttractToMouse();
             ResolveBoundaries();
@@ -114,15 +122,15 @@ namespace SimulationLogic
 
         public void ExternalForces()
         {
-            Parallel.For(0, _velocities.Length, i =>
+            Parallel.For(0, _positions.Length, i =>
             {
-                _velocities[i].y += gravity * dt;
+                _velocities[i].y += dt * gravity;
             });
         }
 
         public void DoubleDensityRelaxation()
         {
-            Parallel.For(0, _densities.Length, i =>
+            Parallel.For(0, _positions.Length, i =>
             {
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
@@ -170,7 +178,7 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 List<int> neighbours = SP.GetNeighbours(_positions[i]);
-                int c = 0;
+                
                 for (int n = 0; n < neighbours.Count; n++)
                 {
                     int j = neighbours[n];
@@ -193,7 +201,6 @@ namespace SimulationLogic
                                 _velocities[i] -= impulse / 2;
                                 _velocities[j] += impulse / 2;
                             }
-                            c++;
                         }
                     }
                 }
@@ -269,35 +276,61 @@ namespace SimulationLogic
 
         public void ResolveCollisions()
         {
-            body.velocity.y += gravity * dt;
+            body.velocity.y += dt * gravity;
 
-            body.prevPosition = body.position; // save
-            body.position += body.velocity * dt; // advance
+            body.prevPosition = body.position;
+            body.position += dt * body.velocity;
 
             Vector2 force = Vector2.zero; // buffer
+            float collisionRadiusSq = (body.radius + particleSize) * (body.radius + particleSize); // write unit tests for it
+            float minDistance = body.radius + particleSize;
 
-            Parallel.For(0, _velocities.Length, i =>
+            Parallel.For(0, _positions.Length, i =>
             {
-                float dist = FluidMath.Distance(body.position, _positions[i]);
-
-                if (dist - body.radius - 0.5f < 0) // 0.5 - radius of the paricle
+                float distSq = FluidMath.DistanceSq(body.position, _positions[i]);
+                
+                if (distSq < collisionRadiusSq)
                 {
                     Vector2 relativeVelocity = _velocities[i] - body.velocity;
-                    Vector2 unitVector = FluidMath.UnitVector(body.position, _positions[i]);
+                    Vector2 normalVector = (_positions[i] - body.position) / Mathf.Sqrt(distSq);
 
-                    Vector2 normalVelocity = Vector2.Dot(relativeVelocity, unitVector) * unitVector;
+                    Vector2 normalVelocity = Vector2.Dot(relativeVelocity, normalVector) * normalVector;
                     Vector2 tangentVelocity = relativeVelocity - normalVelocity;
                     Vector2 impulse = normalVelocity - (friction * tangentVelocity);
 
-                    _positions[i] -= impulse * dt;
-                    force += impulse * dt;
+                    force += dt * impulse;
                 }
             });
 
-            // Not add?
             body.position += force;
-            body.velocity += (body.position - body.prevPosition) / dt;
+            body.velocity = (body.position - body.prevPosition) / dt;
+            // Maybe keep the particles instead of searching again
 
+            Parallel.For(0, _positions.Length, i =>
+            {
+                float distSq = FluidMath.DistanceSq(body.position, _positions[i]);
+                
+                if (distSq < collisionRadiusSq)
+                {
+                    Vector2 relativeVelocity = _velocities[i] - body.velocity;
+                    Vector2 normalVector = (_positions[i] - body.position) / Mathf.Sqrt(distSq);
+
+                    Vector2 normalVelocity = Vector2.Dot(relativeVelocity, normalVector) * normalVector;
+                    Vector2 tangentVelocity = relativeVelocity - normalVelocity;
+                    Vector2 impulse = normalVelocity - (friction * tangentVelocity);
+
+                    _positions[i] -= dt * impulse;
+
+                    // need to recompute distance as position changed
+                    distSq = FluidMath.DistanceSq(body.position, _positions[i]);
+
+                    if (distSq < collisionRadiusSq)
+                    {
+                        Vector2 unitVector = FluidMath.UnitVector(body.position, _positions[i], MathF.Sqrt(distSq));
+                        _positions[i] = unitVector * minDistance;
+                    }
+                }
+            });
         }
 
         public void ResolveBoundaries()
@@ -313,11 +346,11 @@ namespace SimulationLogic
             });
 
             // Bodies
-            if (Math.Abs(body.position.x) >= realHalfBoundSize.x)
-                body.position.x = (spawn.boundingBoxSize.x - body.radius) * Math.Sign(body.position.x);
+            if (Math.Abs(body.position.x) >= realHalfBoundSizeBody.x)
+                body.position.x = realHalfBoundSizeBody.x * Math.Sign(body.position.x);
 
-            if (Math.Abs(body.position.y) >= realHalfBoundSize.y)
-                body.position.y = (spawn.boundingBoxSize.y - body.radius) * Math.Sign(body.position.y);
+            if (Math.Abs(body.position.y) >= realHalfBoundSizeBody.y)
+                body.position.y = realHalfBoundSizeBody.y * Math.Sign(body.position.y);
         }
 
         public void AttractToMouse()
@@ -343,12 +376,13 @@ namespace SimulationLogic
             _nearDensities = spawn.InitializeNearDensities();
             _springs.Clear();
 
-            realHalfBoundSize = spawn.GetRealHalfBoundSize();
+            realHalfBoundSize = spawn.GetRealHalfBoundSize(particleSize);
+            realHalfBoundSizeBody = spawn.GetRealHalfBoundSize(body.radius);
 
             SP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
 
             render.DeleteParticles();
-            render.CreateParticles(_positions, _velocities);
+            render.CreateParticles(_positions, _velocities, particleSize);
             render.DeleteAllBodies();
             render.DrawCircle(body.position, body.radius);
         }

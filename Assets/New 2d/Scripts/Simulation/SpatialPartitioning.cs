@@ -66,7 +66,7 @@ namespace SimulationLogic
             List<int> result = new();
             Vector2 scaled = (position - offset) / length;
             var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
-
+    
             foreach (var (offsetX, offsetY) in neighbours)
             {
                 int nX = gridX + offsetX;

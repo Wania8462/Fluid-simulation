@@ -336,6 +336,7 @@ MonoBehaviour:
   jitterStrength: 0.2
   boundingBoxSizeOffset: {x: 90, y: 60}
   cam: {fileID: 741110330}
+  boundingBoxSize: {x: 0, y: 0}
 --- !u!4 &890908188
 Transform:
   m_ObjectHideFlags: 0
@@ -380,7 +381,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 030f77721f467214eade4a811de094b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useSprings: 1
+  particleSize: 0.5
   interactionRadius: 6
   gravity: -20
   mouseAttractiveness: 1

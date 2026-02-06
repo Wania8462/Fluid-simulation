@@ -15,7 +15,6 @@ namespace SimulationLogic
         [SerializeField] private Transform cam;
 
         public Vector2 boundingBoxSize;
-        private const float particleRadius = 0.5f;
 
         public Vector2[] InitializePositions()
         {
@@ -43,6 +42,6 @@ namespace SimulationLogic
         public float[] InitializeDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
         public float[] InitializeNearDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
 
-        public Vector2 GetRealHalfBoundSize() => new(boundingBoxSize.x / 2 - particleRadius, boundingBoxSize.y / 2 - particleRadius);
+        public Vector2 GetRealHalfBoundSize(float radius) => new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
     }
 }

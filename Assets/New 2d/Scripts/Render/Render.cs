@@ -14,9 +14,9 @@ namespace Rendering
 
         #region Particles
 
-        public void CreateParticles(Vector2[] positions, Vector2[] velocities)
+        public void CreateParticles(Vector2[] positions, Vector2[] velocities, float radius)
         {
-            Mesh mesh = MeshGenerator.Sphere(0.5f, resolution);
+            Mesh mesh = MeshGenerator.Sphere(radius, resolution);
 
             for (int i = 0; i < positions.Length; i++)
             {
