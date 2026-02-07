@@ -394,9 +394,9 @@ MonoBehaviour:
   stiffness: 200
   nearStiffness: 2
   restDensity: 5
-  springStiffness: 0.01
+  springStiffness: 0.1
   springDeformationLimit: 0
-  plasticity: 1
+  plasticity: 0.1
   highViscosity: 0
   lowViscosity: 0
   springRadius: 0

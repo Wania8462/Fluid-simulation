@@ -20,6 +20,7 @@ namespace SimulationLogic
     public class Simulation : MonoBehaviour
     {
         [Header("Simulation settings")]
+        [SerializeField] private bool pause;
         [SerializeField] private float particleSize;
         [SerializeField] private float interactionRadius;
         [SerializeField] private float gravity;
@@ -35,12 +36,12 @@ namespace SimulationLogic
         [SerializeField] private float restDensity;
 
         [Header("Springs")]
+        [SerializeField] private float springRadius;
         [SerializeField] private float springStiffness;
         [SerializeField] private float springDeformationLimit;
         [SerializeField] private float plasticity;
         [SerializeField] private float highViscosity;
         [SerializeField] private float lowViscosity;
-        [SerializeField] private float springRadius;
 
         [Header("References")]
         [SerializeField] private SpawnParticles spawn;
@@ -76,10 +77,14 @@ namespace SimulationLogic
         {
             if (initialFramePassed)
             {
-                if (Input.GetKeyDown(KeyCode.Space))
+                if (Input.GetKeyDown(KeyCode.R))
                     SetScene();
 
-                SimulationStep();
+                if (Input.GetKeyDown(KeyCode.Space))
+                    pause = !pause;
+
+                if(!pause)
+                    SimulationStep();
             }
         }
 
@@ -102,7 +107,7 @@ namespace SimulationLogic
             SpringDisplacements();
 
             DoubleDensityRelaxation();
-            ResolveCollisions();
+            // ResolveCollisions();
 
             AttractToMouse();
             ResolveBoundaries();
@@ -116,8 +121,9 @@ namespace SimulationLogic
             // Render
             DrawDebugGrid(Color.green);
             DrawDebugSquare(Vector3.zero, realHalfBoundSize, Color.red);
+
             render.DrawParticles(_positions, _velocities);
-            render.UpdateBodyPosition(body.position, 0);
+            // render.UpdateBodyPosition(body.position, 0);
         }
 
         public void ExternalForces()
@@ -141,6 +147,7 @@ namespace SimulationLogic
                     int j = neighbours[n];
                     float mag = FluidMath.Distance(_positions[i], _positions[j]);
                     float q = mag / interactionRadius;
+                    // if (q > 1 || q == 0) continue;
 
                     if (q <= 1 && q != 0)
                     {
@@ -178,18 +185,18 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 List<int> neighbours = SP.GetNeighbours(_positions[i]);
-                
+
                 for (int n = 0; n < neighbours.Count; n++)
                 {
                     int j = neighbours[n];
                     if (i < j)
                     {
                         float mag = FluidMath.Distance(_positions[i], _positions[j]);
-                        if (mag > interactionRadius) continue;
+                        // if (mag > springRadius) continue;
 
-                        float q = mag / interactionRadius;
+                        float q = mag / springRadius;
 
-                        if (q != 0)
+                        if (q <= 1 && q != 0)
                         {
                             Vector2 r = (_positions[j] - _positions[i]) / mag;
                             float inwardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], r);
@@ -263,11 +270,12 @@ namespace SimulationLogic
                 int j = springArray[k].Key.Item2;
 
                 float mag = FluidMath.Distance(_positions[i], _positions[j]);
-                Vector2 r = (_positions[j] - _positions[i]) / mag;
-                Vector2 displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value, springRadius, mag, r);
 
-                if (displacement.x > 0 || displacement.x < 0 && displacement.y > 0 || displacement.y < 0)
+                if (mag != 0)
                 {
+                    Vector2 r = FluidMath.UnitVector(_positions[i], _positions[j], mag);
+                    Vector2 displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value, springRadius, mag, r);
+
                     _positions[i] -= displacement / 2;
                     _positions[j] += displacement / 2;
                 }
@@ -288,7 +296,7 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 float distSq = FluidMath.DistanceSq(body.position, _positions[i]);
-                
+
                 if (distSq < collisionRadiusSq)
                 {
                     Vector2 relativeVelocity = _velocities[i] - body.velocity;
@@ -309,7 +317,7 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 float distSq = FluidMath.DistanceSq(body.position, _positions[i]);
-                
+
                 if (distSq < collisionRadiusSq)
                 {
                     Vector2 relativeVelocity = _velocities[i] - body.velocity;
@@ -357,12 +365,13 @@ namespace SimulationLogic
         {
             if (Input.GetMouseButton(0))
             {
-                for (int i = 0; i < _positions.Length; i++)
+                Vector2 mousePos = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+                Parallel.For(0, _positions.Length, i =>
                 {
-                    Vector2 mousePos = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                    Vector2 r = (mousePos - _positions[i]) / FluidMath.Distance(_positions[i], mousePos);
-                    _positions[i] += dt * mouseAttractiveness * r;
-                }
+                    Vector2 unitVector = FluidMath.UnitVector(_positions[i], mousePos);
+                    _positions[i] += dt * mouseAttractiveness * unitVector;
+                });
             }
         }
 
@@ -383,8 +392,8 @@ namespace SimulationLogic
 
             render.DeleteParticles();
             render.CreateParticles(_positions, _velocities, particleSize);
-            render.DeleteAllBodies();
-            render.DrawCircle(body.position, body.radius);
+            // render.DeleteAllBodies();
+            // render.DrawCircle(body.position, body.radius);
         }
 
         public void DrawDebugSquare(Vector3 center, Vector2 halfSize, Color color)

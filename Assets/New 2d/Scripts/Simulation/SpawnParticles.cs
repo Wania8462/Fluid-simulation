@@ -8,6 +8,7 @@ namespace SimulationLogic
         [Header("Spawn settings")]
         [SerializeField] private int particleSquareLength;
         [SerializeField] private float spacing;
+        [SerializeField] private bool useJitter;
         [SerializeField] private float jitterStrength;
         [SerializeField] private Vector2 boundingBoxSizeOffset;
 
@@ -19,8 +20,9 @@ namespace SimulationLogic
         public Vector2[] InitializePositions()
         {
             int len = particleSquareLength;
-            Vector2[] pos = new Vector2[(int)Math.Pow(len, 2)];
+            Vector2[] pos = new Vector2[len * len];
 
+            jitterStrength = useJitter ? jitterStrength : 0;
             for (int i = 0; i < len; i++)
             {
                 for (int j = 0; j < len; j++)
