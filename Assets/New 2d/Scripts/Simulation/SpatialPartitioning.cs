@@ -12,7 +12,7 @@ namespace SimulationLogic
         public int rows;
         public List<int>[] grid;
 
-        private (int, int)[] neighbours = {
+        private readonly (int, int)[] neighbours = {
         (-1, -1),
         (-1, 0),
         (-1, 1),
@@ -23,58 +23,47 @@ namespace SimulationLogic
         (1, 0),
         (1, 1)};
 
-        public SpatialPartitioning(Vector2 topLeft, Vector2 bottomRight, float length)
+        public SpatialPartitioning(Vector2 bottomLeft, Vector2 topRight, float length)
         {
             this.length = length;
-            offset = topLeft;
-            float width = -topLeft.x + bottomRight.x;
-            float height = -topLeft.y + bottomRight.y; 
+            offset = bottomLeft;
+            var width = topRight.x - bottomLeft.x;
+            var height =  topRight.y - bottomLeft.y; 
             columns = (int)(width / length);
             rows = (int)(height / length);
 
-            if (width % length != 0)
-                columns++;
-
-            if(height % length != 0)
-                rows++;
+            if (width % length != 0) columns++;
+            if (height % length != 0) rows++;
 
             grid = new List<int>[columns * rows];
 
-            for (int i = 0; i < grid.Length; i++)
+            for (var i = 0; i < grid.Length; i++)
                 grid[i] = new List<int>();
         }
 
         public void Init(Vector2[] positions)
         {
-            foreach (List<int> list in grid)
+            foreach (var list in grid)
                 list.Clear();
 
-            for (int i = 0; i < positions.Length; i++)
-            {
-                int index = GetGridIndex(positions[i]);
-
-                if (index >= 0 && index < grid.Length)
-                    grid[index].Add(i);
-
-                else
-                    Debug.LogError($"SP: Index is out of range. Index: {index}. Grid length: {grid.Length}");
-            }
+            for (var i = 0; i < positions.Length; i++)
+                grid[GetGridIndex(positions[i])].Add(i);
         }
 
         public List<int> GetNeighbours(Vector2 position)
         {
             List<int> result = new();
-            Vector2 scaled = (position - offset) / length;
+            var scaled = (position - offset) / length;
             var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
     
             foreach (var (offsetX, offsetY) in neighbours)
             {
-                int nX = gridX + offsetX;
-                int nY = gridY + offsetY;
+                var nX = gridX + offsetX;
+                var nY = gridY + offsetY;
 
                 if (nX >= 0 && nX < columns && nY >= 0 && nY < rows)
                 {
-                    int index = nX + nY * columns;
+                    var index = nX + nY * columns;
                     result.AddRange(grid[index]);
                 }
             }
@@ -84,7 +73,7 @@ namespace SimulationLogic
 
         private int GetGridIndex(Vector2 pos)
         {
-            Vector2 scaled = (pos - offset) / length;
+            var scaled = (pos - offset) / length;
             var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1), (int)Math.Clamp(scaled.y, 0, rows - 1));
             return gridX + gridY * columns;
         }

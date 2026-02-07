@@ -333,6 +333,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   particleSquareLength: 30
   spacing: 2
+  useJitter: 1
   jitterStrength: 0.2
   boundingBoxSizeOffset: {x: 90, y: 60}
   cam: {fileID: 741110330}
@@ -381,25 +382,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 030f77721f467214eade4a811de094b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pause: 0
   particleSize: 0.5
   interactionRadius: 6
   gravity: -20
   mouseAttractiveness: 1
   body:
-    position: {x: 40, y: 0}
     radius: 5
+    position: {x: 40, y: 0}
     prevPosition: {x: 0, y: 0}
+    rotation: {x: 0, y: 0}
+    prevRotation: {x: 0, y: 0}
     velocity: {x: 0, y: 0}
   friction: 0
   stiffness: 200
   nearStiffness: 2
   restDensity: 5
-  springStiffness: 0.1
+  springRadius: 5
+  springStiffness: 0.01
   springDeformationLimit: 0
   plasticity: 0.1
   highViscosity: 0
-  lowViscosity: 0
-  springRadius: 0
+  lowViscosity: 0.2
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
 --- !u!4 &1165800422
