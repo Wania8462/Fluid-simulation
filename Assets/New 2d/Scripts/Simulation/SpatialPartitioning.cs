@@ -68,6 +68,23 @@ namespace SimulationLogic
 
             return result;
         }
+        
+        public void GetNeighbours(Vector2 position, List<int> list)
+        {
+            list.Clear();
+            var scaled = (position - offset) / length;
+            var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
+    
+            foreach (var (offsetX, offsetY) in neighbours)
+            {
+                var nX = gridX + offsetX;
+                var nY = gridY + offsetY;
+                if (nX < 0 || nX >= columns || nY < 0 || nY >= rows) continue;
+
+                var index = nX + nY * columns;
+                list.AddRange(grid[index]);
+            }
+        }
 
         private int GetGridIndex(Vector2 pos)
         {
