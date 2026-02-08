@@ -60,12 +60,10 @@ namespace SimulationLogic
             {
                 var nX = gridX + offsetX;
                 var nY = gridY + offsetY;
+                if (nX < 0 || nX >= columns || nY < 0 || nY >= rows) continue;
 
-                if (nX >= 0 && nX < columns && nY >= 0 && nY < rows)
-                {
-                    var index = nX + nY * columns;
-                    result.AddRange(grid[index]);
-                }
+                var index = nX + nY * columns;
+                result.AddRange(grid[index]);
             }
 
             return result;
@@ -74,7 +72,8 @@ namespace SimulationLogic
         private int GetGridIndex(Vector2 pos)
         {
             var scaled = (pos - offset) / length;
-            var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1), (int)Math.Clamp(scaled.y, 0, rows - 1));
+            var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1), 
+                                        (int)Math.Clamp(scaled.y, 0, rows - 1));
             return gridX + gridY * columns;
         }
     }

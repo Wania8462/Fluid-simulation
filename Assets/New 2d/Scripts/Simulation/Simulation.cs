@@ -1,9 +1,12 @@
 using System;
 using System.Linq;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using Rendering;
+using Unity.UI;
+using UnityEngine.UI;
 
 namespace SimulationLogic
 {
@@ -20,7 +23,7 @@ namespace SimulationLogic
 
     public class Simulation : MonoBehaviour
     {
-        [Header("Simulation settings")] 
+        [Header("Simulation settings")]
         
         [SerializeField] private bool pause;
         [SerializeField] private float particleSize;
@@ -41,6 +44,7 @@ namespace SimulationLogic
 
         [Header("Springs")] 
         
+        [SerializeField] private float springInteractionRadius;
         [SerializeField] private float springRadius;
         [SerializeField] private float springStiffness;
         [SerializeField] private float springDeformationLimit;
@@ -52,7 +56,9 @@ namespace SimulationLogic
         
         [SerializeField] private SpawnParticles spawn;
         [SerializeField] private Render render;
-        private SpatialPartitioning sp;
+        
+        private SpatialPartitioning particleSP;
+        private SpatialPartitioning bodySP;
 
         private Vector2[] _prevPositions;
         private Vector2[] _positions;
@@ -66,6 +72,8 @@ namespace SimulationLogic
         private float dt;
 
         private bool initialFramePassed;
+
+        private List<long> frameTimes = new();
 
         private void Start()
         {
@@ -82,7 +90,7 @@ namespace SimulationLogic
         private void Update()
         {
             if (!initialFramePassed) return;
-
+            
             if (Input.GetKeyDown(KeyCode.R))
                 SetScene();
 
@@ -94,14 +102,15 @@ namespace SimulationLogic
 
             if (!pause)
                 SimulationStep();
+            
         }
 
         public void SimulationStep()
         {
             // dt = Time.deltaTime;
             dt = 1 / 60f;
-            sp.Init(_positions);
-
+            particleSP.Init(_positions);
+            
             ExternalForces();
             ApplyViscosity();
 
@@ -112,24 +121,31 @@ namespace SimulationLogic
                 _positions[i] += dt * _velocities[i];
             });
 
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             AdjustSprings();
+            watch.Stop();
+            if (watch.ElapsedMilliseconds > 10)
+                Debug.Log(watch.ElapsedMilliseconds);
             SpringDisplacements();
 
             DoubleDensityRelaxation();
-            ResolveCollisions();
+            // ResolveCollisions();
 
             AttractToMouse();
             ResolveBoundaries();
 
             // Change in position to calculate velocity 
-            Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
+            Parallel.For(0, _positions.Length, i =>
+            {
+                _velocities[i] = (_positions[i] - _prevPositions[i]) / dt;
+            });
 
             // Render
             DrawDebugGrid(Color.green);
             DrawDebugSquare(Vector3.zero, realHalfBoundSize, Color.red);
 
             render.DrawParticles(_positions, _velocities);
-            render.UpdateBodyPosition(body.position, 0);
+            // render.UpdateBodyPosition(body.position, 0);
         }
 
         public void ExternalForces()
@@ -143,7 +159,7 @@ namespace SimulationLogic
             {
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
-                var neighbours = sp.GetNeighbours(_positions[i]);
+                var neighbours = particleSP.GetNeighbours(_positions[i]);
 
                 foreach (var j in neighbours)
                 {
@@ -166,7 +182,12 @@ namespace SimulationLogic
                     if (!(q <= 1) || q == 0) continue;
 
                     var r = (_positions[j] - _positions[i]) / mag;
-                    var displacement = FluidMath.PressureDisplacement(dt, q, pressure, nearPressure, r);
+                    var displacement = FluidMath.PressureDisplacement(
+                        dt, 
+                        q, 
+                        pressure, 
+                        nearPressure, 
+                        r);
 
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
@@ -182,7 +203,7 @@ namespace SimulationLogic
         {
             Parallel.For(0, _positions.Length, i =>
             {
-                var neighbours = sp.GetNeighbours(_positions[i]);
+                var neighbours = particleSP.GetNeighbours(_positions[i]);
 
                 foreach (var j in neighbours)
                 {
@@ -196,7 +217,12 @@ namespace SimulationLogic
                     var inwardVelocity = Vector2.Dot(_velocities[i] - _velocities[j], r);
                     if (!(inwardVelocity > 0)) continue;
 
-                    var impulse = FluidMath.ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r);
+                    var impulse = FluidMath.ViscosityImpulse(dt, 
+                        highViscosity, 
+                        lowViscosity, 
+                        q, 
+                        inwardVelocity, 
+                        r);
 
                     _velocities[i] -= impulse / 2;
                     _velocities[j] += impulse / 2;
@@ -206,16 +232,24 @@ namespace SimulationLogic
 
         public void AdjustSprings()
         {
+            var keysToRemove = new ConcurrentBag<(int, int)>();
             Parallel.For(0, _positions.Length, i =>
             {
-                var neighbours = sp.GetNeighbours(_positions[i]);
+                var neighbours = particleSP.GetNeighbours(_positions[i]);
                 foreach (var j in neighbours)
                 {
                     if (i >= j) continue;
 
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    var q = mag / springRadius;
-                    if (!(q <= 1) || q == 0) continue;
+                    var q = mag / springInteractionRadius;
+                    switch (q)
+                    {
+                        case 0:
+                            continue;
+                        case > 1:
+                            keysToRemove.Add((i, j));
+                            continue;
+                    }
 
                     if (!_springs.ContainsKey((i, j)))
                         _springs.TryAdd((i, j), springRadius);
@@ -225,24 +259,26 @@ namespace SimulationLogic
                         var deformation = springDeformationLimit * restLength;
 
                         if (mag > restLength + deformation)
-                            _springs[(i, j)] +=
-                                FluidMath.StretchSpring(dt, plasticity, mag, restLength, deformation);
+                            _springs[(i, j)] += FluidMath.StretchSpring(dt, 
+                                plasticity, 
+                                mag, 
+                                restLength, 
+                                deformation);
 
                         else if (mag < restLength + deformation)
-                            _springs[(i, j)] -=
-                                FluidMath.CompressSpring(dt, plasticity, mag, restLength, deformation);
+                            _springs[(i, j)] -= FluidMath.CompressSpring(dt, 
+                                plasticity, 
+                                mag, 
+                                restLength, 
+                                deformation);
                     }
 
                     else
                         Debug.LogError($"Simulation: Couldn't get the spring with key: {i}, {j}");
                 }
             });
-
-            var keysToRemove = _springs.Where(kvp => kvp.Value > springRadius)
-                .Select(kvp => kvp.Key)
-                .ToArray();
-
-            Parallel.For(0, keysToRemove.Length, i => { _springs.TryRemove(keysToRemove[i], out _); });
+            
+            Parallel.ForEach(keysToRemove, i => { _springs.TryRemove(i, out _); });
         }
 
         public void SpringDisplacements()
@@ -258,8 +294,12 @@ namespace SimulationLogic
                 if (mag == 0) return;
 
                 var r = FluidMath.UnitVector(_positions[i], _positions[j], mag);
-                var displacement = FluidMath.DisplacementBySpring(dt, springStiffness, springArray[k].Value,
-                    springRadius, mag, r);
+                var displacement = FluidMath.DisplacementBySpring(dt, 
+                    springStiffness, 
+                    springArray[k].Value,
+                    springRadius, 
+                    mag, 
+                    r);
 
                 _positions[i] -= displacement / 2;
                 _positions[j] += displacement / 2;
@@ -268,6 +308,9 @@ namespace SimulationLogic
 
         #endregion
 
+        // var tangentVelocity = relativeVelocity - normalVelocity;
+        // var impulse = normalVelocity - (friction * tangentVelocity);
+        
         public void ResolveCollisions()
         {
             body.prevPosition = body.position;
@@ -275,9 +318,8 @@ namespace SimulationLogic
 
             body.velocity.y += dt * gravity;
 
-            var force = Vector2.zero; // buffer
-            var collisionRadiusSq =
-                (body.radius + particleSize) * (body.radius + particleSize);
+            var force = Vector2.zero;
+            var collisionRadiusSq = (body.radius + particleSize) * (body.radius + particleSize);
             var minDistance = body.radius + particleSize;
 
             Parallel.For(0, _positions.Length, i =>
@@ -286,20 +328,15 @@ namespace SimulationLogic
                 if (!(distSq < collisionRadiusSq)) return;
 
                 var relativeVelocity = _velocities[i] - body.velocity;
-                var normalVector = (_positions[i] - body.position) / Mathf.Sqrt(distSq);
-
+                var normalVector = FluidMath.UnitVector(body.position, 
+                    _positions[i], 
+                    Mathf.Sqrt(distSq));
                 var normalVelocity = Vector2.Dot(relativeVelocity, normalVector) * normalVector;
-                var tangentVelocity = relativeVelocity - normalVelocity;
-                var impulse = normalVelocity - (friction * tangentVelocity);
 
-                force += dt * impulse;
+                force += dt * normalVelocity;
             });
 
             body.velocity += force;
-
-            if (force.y > 0)
-                Debug.Log(force);
-
             body.position += dt * body.velocity;
 
             Parallel.For(0, _positions.Length, i =>
@@ -308,18 +345,19 @@ namespace SimulationLogic
                 if (!(distSq < collisionRadiusSq)) return;
 
                 var relativeVelocity = _velocities[i] - body.velocity;
-                var normalVector = (_positions[i] - body.position) / Mathf.Sqrt(distSq);
-
+                var normalVector = FluidMath.UnitVector(body.position, 
+                    _positions[i], 
+                    Mathf.Sqrt(distSq));
                 var normalVelocity = Vector2.Dot(relativeVelocity, normalVector) * normalVector;
-                var tangentVelocity = relativeVelocity - normalVelocity;
-                var impulse = normalVelocity - (friction * tangentVelocity);
 
-                _positions[i] -= dt * impulse;
+                _positions[i] -= dt * normalVelocity;
 
                 distSq = FluidMath.DistanceSq(body.position, _positions[i]);
                 if (!(distSq < collisionRadiusSq)) return;
 
-                var unitVector = FluidMath.UnitVector(body.position, _positions[i], MathF.Sqrt(distSq));
+                var unitVector = FluidMath.UnitVector(body.position, 
+                    _positions[i], 
+                    MathF.Sqrt(distSq));
                 _positions[i] = body.position + unitVector * minDistance;
             });
         }
@@ -380,12 +418,13 @@ namespace SimulationLogic
             realHalfBoundSize = spawn.GetRealHalfBoundSize(particleSize);
             realHalfBoundSizeBody = spawn.GetRealHalfBoundSize(body.radius);
 
-            sp = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
+            particleSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
+            bodySP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, body.radius + particleSize);
 
             render.DeleteParticles();
             render.CreateParticles(_positions, _velocities, particleSize);
-            render.DeleteAllBodies();
-            render.DrawCircle(body.position, body.radius);
+            // render.DeleteAllBodies();
+            // render.DrawCircle(body.position, body.radius);
         }
 
         public void DrawDebugSquare(Vector3 center, Vector2 halfSize, Color color)
@@ -403,17 +442,17 @@ namespace SimulationLogic
 
         public void DrawDebugGrid(Color color)
         {
-            for (var i = 0; i <= sp.columns; i++)
+            for (var i = 0; i <= particleSP.columns; i++)
             {
-                Vector3 start = new(sp.offset.x + (sp.length * i), -sp.offset.y, 0);
-                Vector3 end = new(sp.offset.x + (sp.length * i), sp.offset.y, 0);
+                Vector3 start = new(particleSP.offset.x + (particleSP.length * i), -particleSP.offset.y, 0);
+                Vector3 end = new(particleSP.offset.x + (particleSP.length * i), particleSP.offset.y, 0);
                 Debug.DrawLine(start, end, color);
             }
 
-            for (var i = 0; i <= sp.rows; i++)
+            for (var i = 0; i <= particleSP.rows; i++)
             {
-                Vector3 start = new(-sp.offset.x, sp.offset.y + (sp.length * i), 0);
-                Vector3 end = new(sp.offset.x, sp.offset.y + (sp.length * i), 0);
+                Vector3 start = new(-particleSP.offset.x, particleSP.offset.y + (particleSP.length * i), 0);
+                Vector3 end = new(particleSP.offset.x, particleSP.offset.y + (particleSP.length * i), 0);
                 Debug.DrawLine(start, end, color);
             }
         }

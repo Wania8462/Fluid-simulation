@@ -77,16 +77,18 @@ public class SpatialPartitioningTests
         Assert.AreEqual(2, sp.grid[sp.columns + 1][0]);
     }
 
-    // [Test]
-    // public void InitTest_PointOutOfBounds()
-    // {
-    //     var sp = new SpatialPartitioning(Vector2.zero, new Vector2(10, 10), 5);
-    //     Vector2[] positions = { new(1, 1), new(2, 7), new(16, 6) };
+    [Test]
+    public void InitTest_PointOutOfBounds()
+    {
+        var sp = new SpatialPartitioning(Vector2.zero, new Vector2(10, 10), 5);
+        Vector2[] positions = { new(1, 1), new(2, 7), new(16, 6) };
 
-    //     sp.Init(positions);
+        sp.Init(positions);
 
-    //     LogAssert.Expect(LogType.Error, new Regex("^SP: Index is out of range\\..*"));
-    // }
+        Assert.AreEqual(1, sp.grid[3].Count);
+    }
+    
+    // LogAssert.Expect(LogType.Error, new Regex("^SP: Index is out of range\\..*"));
 
     [Test]
     public void InitTest_PointsBetweenCells()
