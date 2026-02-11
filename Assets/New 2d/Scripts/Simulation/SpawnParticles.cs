@@ -27,13 +27,41 @@ namespace SimulationLogic
             {
                 for (int j = 0; j < len; j++)
                 {
-                    pos[i * len + j] = new(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1,
+                    pos[i * len + j] = new Vector2(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1,
                                           j * spacing + (UnityEngine.Random.insideUnitSphere.y * jitterStrength) - len + 1);
                 }
             }
 
             boundingBoxSize = new(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y);
-            Camera.main.orthographicSize = 0.5f * particleSquareLength + 32;
+            Camera.main.orthographicSize = 0.5f * particleSquareLength + 40;
+            return pos;
+        }
+
+        public Vector2[] InitializeBoundaryPositions(float borderDensity)
+        {
+            var lenX = (int)(boundingBoxSize.x * borderDensity);
+            var lenY = (int)(boundingBoxSize.y * borderDensity);
+            var pos = new Vector2[lenX * 2 + lenY * 2];
+            var topLeft = new Vector2(-(boundingBoxSize.x / 2), boundingBoxSize.y / 2);
+
+            var dx = boundingBoxSize.x / lenX;
+            var dy = boundingBoxSize.y / lenY;
+
+            for (var i = 0; i < pos.Length; i++)
+            {
+                if (i < lenX)
+                    pos[i] = new Vector2(topLeft.x + dx * i, topLeft.y);
+                
+                else if (i < lenX * 2)
+                    pos[i] = new Vector2(topLeft.x + dx * (i - lenX), topLeft.y - boundingBoxSize.y);
+                
+                else if (i < lenX * 2 + lenY)
+                    pos[i] = new Vector2(topLeft.x, topLeft.y - dy * (i - lenX * 2));
+                
+                else
+                    pos[i] = new Vector2(topLeft.x + boundingBoxSize.x, topLeft.y - dy * (i - (lenX * 2 + lenY)));
+            }
+            
             return pos;
         }
 

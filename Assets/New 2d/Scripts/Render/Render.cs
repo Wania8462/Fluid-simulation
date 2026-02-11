@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace Rendering
@@ -11,6 +12,8 @@ namespace Rendering
         private List<Transform> particles = new();
         private List<Transform> bodies = new();
         private List<MeshRenderer> meshRenderers = new();
+        
+        private static readonly int ColorProp = Shader.PropertyToID("_Color");
 
         #region Particles
 
@@ -30,12 +33,12 @@ namespace Rendering
 
                 meshRenderers[i].material = mat;
                 MaterialPropertyBlock mpb = new();
-                mpb.SetColor("_Color", GetColor(velocities[i]));
+                mpb.SetColor(ColorProp, GetColor(velocities[i]));
                 meshRenderers[i].SetPropertyBlock(mpb);
             }
         }
 
-        public void DrawParticles(Vector2[] positions, Vector2[] velocities)
+        public void DrawParticles(Vector2[] positions, Vector2[] velocities, List<int> select = null)
         {
             if (positions.Length > particles.Count)
             {
@@ -46,12 +49,26 @@ namespace Rendering
             if (positions.Length < particles.Count)
                 Debug.LogWarning($"Render: There are less positions than particles. Particles: {particles.Count}, positions: {positions.Length}");
 
-            for (int i = 0; i < positions.Length; i++)
+            if (select == null)
             {
-                particles[i].position = (Vector3)positions[i];
-                MaterialPropertyBlock mpb = new();
-                mpb.SetColor("_Color", GetColor(velocities[i]));
-                meshRenderers[i].SetPropertyBlock(mpb);
+                for (var i = 0; i < positions.Length; i++)
+                {
+                    particles[i].position = (Vector3)positions[i];
+                    MaterialPropertyBlock mpb = new();
+                    mpb.SetColor(ColorProp, GetColor(velocities[i]));
+                    meshRenderers[i].SetPropertyBlock(mpb);
+                }
+            }
+
+            else
+            {
+                for (var i = 0; i < positions.Length; i++)
+                {
+                    particles[i].position = (Vector3)positions[i];
+                    MaterialPropertyBlock mpb = new();
+                    mpb.SetColor(ColorProp, select.Contains(i) ? Color.green : GetColor(velocities[i]));
+                    meshRenderers[i].SetPropertyBlock(mpb);
+                }
             }
         }
 
@@ -62,6 +79,26 @@ namespace Rendering
 
             particles.Clear();
             meshRenderers.Clear();
+        }
+
+        public void CreateDebugParticles(Vector2[] positions)
+        {
+            Mesh mesh = MeshGenerator.Sphere(0.5f, resolution);
+
+            for (int i = 0; i < positions.Length; i++)
+            {
+                GameObject gameObject = new("Particle", typeof(MeshFilter), typeof(MeshRenderer));
+                gameObject.transform.localScale = new(1, 1, 1);
+                gameObject.transform.position = (Vector3)positions[i];
+
+                meshRenderers.Add(gameObject.GetComponent<MeshRenderer>());
+                gameObject.GetComponent<MeshFilter>().mesh = mesh;
+
+                meshRenderers[i].material = mat;
+                MaterialPropertyBlock mpb = new();
+                mpb.SetColor(ColorProp, Color.gray);
+                meshRenderers[i].SetPropertyBlock(mpb);
+            }
         }
 
         #endregion
@@ -82,7 +119,7 @@ namespace Rendering
             meshRenderer.material = mat;
 
             MaterialPropertyBlock mpb = new();
-            mpb.SetColor("_Color", Color.blue);
+            mpb.SetColor(ColorProp, Color.blue);
             meshRenderer.SetPropertyBlock(mpb);
         }
 

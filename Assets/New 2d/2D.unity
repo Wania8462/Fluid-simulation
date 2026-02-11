@@ -136,7 +136,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &164153225
 RectTransform:
   m_ObjectHideFlags: 0
@@ -364,7 +364,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &485211997
 RectTransform:
   m_ObjectHideFlags: 0
@@ -671,11 +671,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 30
+  particleSquareLength: 40
   spacing: 2
   useJitter: 1
   jitterStrength: 0.2
-  boundingBoxSizeOffset: {x: 90, y: 60}
+  boundingBoxSizeOffset: {x: 120, y: 80}
   cam: {fileID: 741110330}
   boundingBoxSize: {x: 0, y: 0}
 --- !u!4 &890908188
@@ -727,6 +727,7 @@ MonoBehaviour:
   interactionRadius: 6
   gravity: -20
   mouseAttractiveness: 1
+  mouseRadius: 1000
   body:
     radius: 5
     position: {x: 40, y: 0}
@@ -736,19 +737,17 @@ MonoBehaviour:
     velocity: {x: 0, y: 0}
   friction: 0
   stiffness: 200
-  nearStiffness: 2
+  nearStiffness: 20
   restDensity: 5
-  springInteractionRadius: 5
-  springRadius: 2
+  springInteractionRadius: 2
+  springRadius: 1
   springStiffness: 0.01
   springDeformationLimit: 0
-  plasticity: 0.1
+  plasticity: 0.05
   highViscosity: 0
   lowViscosity: 0.2
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
-  fpsText: {fileID: 485211998}
-  springsText: {fileID: 164153226}
 --- !u!4 &1165800422
 Transform:
   m_ObjectHideFlags: 0
