@@ -32,8 +32,7 @@ namespace SimulationLogic
                 }
             }
 
-            boundingBoxSize = new(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y);
-            Camera.main.orthographicSize = 0.5f * particleSquareLength + 40;
+            boundingBoxSize = new Vector2(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y); ;
             return pos;
         }
 

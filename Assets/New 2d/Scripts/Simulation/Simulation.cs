@@ -7,111 +7,69 @@ using Rendering;
 
 namespace SimulationLogic
 {
-    [Serializable]
-    struct Body
+    public class Simulation
     {
-        public float radius;
-        public Vector2 position;
-        public float density;
-        public int densityResolution;
-        public int densityRadius;
-        [HideInInspector] public Vector2 prevPosition;
-        [HideInInspector] public Vector2 rotation;
-        [HideInInspector] public Vector2 prevRotation;
-        [HideInInspector] public Vector2 velocity;
-        [HideInInspector] public Vector2[] densityPoints;
-    }
+        // General settings
+        private bool pause;
+        private float particleSize;
+        private float interactionRadius;
+        private float gravity;
+        private float mouseAttractiveness;
+        private float mouseRadius;
 
-    public class Simulation : MonoBehaviour
-    {
-        [Header("Simulation settings")] 
-        
-        [SerializeField] private bool pause;
-        [SerializeField] private float particleSize;
-        [SerializeField] private float interactionRadius;
-        [SerializeField] private float gravity;
-        [SerializeField] private float mouseAttractiveness;
-        [SerializeField] private float mouseRadius;
+        // Bodies
+        private Body body;
+        private float friction;
 
-        [Header("Body settings")]
-        
-        [SerializeField] private Body body;
-        [SerializeField] private float friction;
+        // Density
+        private float stiffness;
+        private float nearStiffness;
+        private float restDensity;
 
-        [Header("Density")] 
-        
-        [SerializeField] private float stiffness;
-        [SerializeField] private float nearStiffness;
-        [SerializeField] private float restDensity;
+        // Springs
+        private float springInteractionRadius;
+        private float springRadius;
+        private float springStiffness;
+        private float springDeformationLimit;
+        private float plasticity;
+        private float highViscosity;
+        private float lowViscosity;
 
-        [Header("Springs")] 
-        
-        [SerializeField] private float springInteractionRadius;
-        [SerializeField] private float springRadius;
-        [SerializeField] private float springStiffness;
-        [SerializeField] private float springDeformationLimit;
-        [SerializeField] private float plasticity;
-        [SerializeField] private float highViscosity;
-        [SerializeField] private float lowViscosity;
-
-        [Header("References")] 
-        
-        [SerializeField] private SpawnParticles spawn;
-        [SerializeField] private Render render;
+        // References
+        private SpawnParticles spawn;
         
         private SpatialPartitioning particleSP;
         private SpatialPartitioning bodySP;
 
+        // Buffers
+        public Vector2[] _positions;
+        public Vector2[] _velocities;
         private Vector2[] _prevPositions;
-        private Vector2[] _positions;
-        private Vector2[] _velocities;
         private float[] _densities;
         private float[] _nearDensities;
         private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
-
+        // Spatial partitioning buffers
+        private List<int>[] neighbours;
+        private List<int> bodyNeighbours;
+        
+        // Miscellaneous
         private Vector2 realHalfBoundSize;
         private Vector2 realHalfBoundSizeBody;
         private float dt;
-        private List<int>[] neighbours;
-        private List<int> bodyNeighbours;
 
+        // Debug
         private List<int> debugParticles = new();
-        private bool initialFramePassed;
 
-        private void Start()
+        public Simulation(SimulationSettings settings, SpawnParticles spawn)
         {
-            Application.targetFrameRate = 120;
-            Invoke(nameof(StartSimulation), 0.5f);
+            SettingsParser(settings);
+            this.spawn = spawn;
         }
 
-        private void StartSimulation()
+        public void SimulationStep(Vector2 mousePos)
         {
-            SetScene();
-            initialFramePassed = true;
-        }
-
-        private void Update()
-        {
-            if (!initialFramePassed) return;
-            
-            if (Input.GetKeyDown(KeyCode.R))
-                SetScene();
-
-            if (Input.GetKeyDown(KeyCode.RightArrow))
-                SimulationStep();
-
-            if (Input.GetKeyDown(KeyCode.Space))
-                pause = !pause;
-
-            if (!pause)
-                SimulationStep();
-            
-        }
-
-        public void SimulationStep()
-        {
-            // dt = Time.deltaTime;
-            dt = 1 / 60f;
+            dt = Time.deltaTime;
+            // dt = 1 / 60f;
             particleSP.Init(_positions);
             bodySP.Init(_positions);
 
@@ -136,9 +94,9 @@ namespace SimulationLogic
             SpringDisplacements();
 
             DoubleDensityRelaxation();
-            ResolveCollisions();
+            // ResolveCollisions();
 
-            AttractToMouse();
+            AttractToMouse(mousePos);
             ResolveBoundaries();
 
             // Change in position to calculate velocity 
@@ -148,11 +106,8 @@ namespace SimulationLogic
             });
 
             // Render
-            DrawDebugGrid(Color.green, bodySP);
+            DrawDebugGrid(Color.green, particleSP);
             DrawDebugSquare(Vector3.zero, realHalfBoundSize, Color.red);
-
-            render.DrawParticles(_positions, _velocities, debugParticles);
-            render.UpdateBodyPosition(body.position, 0);
         }
 
         public void ExternalForces()
@@ -402,12 +357,10 @@ namespace SimulationLogic
 
         #region Michelsons
 
-        public void AttractToMouse()
+        public void AttractToMouse(Vector2 mousePos)
         {
             if (Input.GetMouseButton(0))
             {
-                var mousePos = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition);
-
                 Parallel.For(0, _positions.Length, i =>
                 {
                     var dist = FluidMath.Distance(_positions[i], mousePos);
@@ -421,7 +374,6 @@ namespace SimulationLogic
 
             if (Input.GetMouseButton(1))
             {
-                var mousePos = (Vector2)Camera.main.ScreenToWorldPoint(Input.mousePosition);
                 body.position = mousePos;
                 body.velocity = Vector2.zero;
             }
@@ -447,11 +399,26 @@ namespace SimulationLogic
             bodyNeighbours = new List<int>();
 
             body.densityPoints = new Vector2[body.densityResolution];
+        }
 
-            render.DeleteParticles();
-            render.CreateParticles(_positions, _velocities, particleSize);
-            render.DeleteAllBodies();
-            render.DrawCircle(body.position, body.radius);
+        public void SettingsParser(SimulationSettings settings)
+        {
+            particleSize = settings.particleSize;
+            interactionRadius = settings.interactionRadius;
+            gravity = settings.gravity;
+            mouseAttractiveness = settings.mouseAttractiveness;
+            mouseRadius = settings.mouseRadius;
+            body =  settings.body;
+            stiffness = settings.stiffness;
+            nearStiffness =  settings.nearStiffness;
+            restDensity = settings.restDensity;
+            springInteractionRadius = settings.springInteractionRadius;
+            springRadius = settings.springRadius;
+            springStiffness = settings.springStiffness;
+            springDeformationLimit = settings.springDeformationLimit;
+            plasticity = settings.plasticity;
+            highViscosity = settings.highViscosity;
+            lowViscosity = settings.lowViscosity;
         }
 
         public void DrawDebugSquare(Vector3 center, Vector2 halfSize, Color color)

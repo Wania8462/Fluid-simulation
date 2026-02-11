@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Rendering
@@ -8,150 +10,84 @@ namespace Rendering
     {
         [SerializeField] private int resolution;
         [SerializeField] private Material mat;
-
-        private List<Transform> particles = new();
-        private List<Transform> bodies = new();
-        private List<MeshRenderer> meshRenderers = new();
         
-        private static readonly int ColorProp = Shader.PropertyToID("_Color");
-
-        #region Particles
-
-        public void CreateParticles(Vector2[] positions, Vector2[] velocities, float radius)
+        private List<Matrix4x4> matrices = new();
+        private List<Vector4> colorsBuffer;
+        private MaterialPropertyBlock mpb;
+        
+        private Mesh mesh;
+        private const int batchSize = 1024;
+        private readonly int colors = Shader.PropertyToID("_Colors");
+        private readonly Vector3 scale = Vector3.one;
+        
+        public void InitializeParticles(Vector2[] positions, float radius)
         {
-            Mesh mesh = MeshGenerator.Sphere(radius, resolution);
+            mesh ??= MeshGenerator.Sphere(radius, resolution);
+            mpb ??= new MaterialPropertyBlock();
+            colorsBuffer ??= new List<Vector4>();
+            
 
-            for (int i = 0; i < positions.Length; i++)
+            foreach (var pos in positions)
             {
-                GameObject gameObject = new("Particle", typeof(MeshFilter), typeof(MeshRenderer));
-                gameObject.transform.localScale = new(1, 1, 1);
-                gameObject.transform.position = (Vector3)positions[i];
-
-                particles.Add(gameObject.transform);
-                meshRenderers.Add(gameObject.GetComponent<MeshRenderer>());
-                gameObject.GetComponent<MeshFilter>().mesh = mesh;
-
-                meshRenderers[i].material = mat;
-                MaterialPropertyBlock mpb = new();
-                mpb.SetColor(ColorProp, GetColor(velocities[i]));
-                meshRenderers[i].SetPropertyBlock(mpb);
+                matrices.Add(Matrix4x4.TRS(
+                    pos,
+                    Quaternion.identity,
+                    scale
+                ));
+                colorsBuffer.Add(new Vector4());
             }
         }
 
-        public void DrawParticles(Vector2[] positions, Vector2[] velocities, List<int> select = null)
+        public void DrawParticles(Vector2[] positions, Vector2[] velocities)
         {
-            if (positions.Length > particles.Count)
+            Parallel.For(0, positions.Length, i =>
             {
-                Debug.LogError($"Render: Trying to update more positions than there is particles. Particles: {particles.Count}, positions: {positions.Length}");
-                return;
-            }
+                matrices[i] = Matrix4x4.TRS(
+                    positions[i],
+                    Quaternion.identity,
+                    scale
+                );
 
-            if (positions.Length < particles.Count)
-                Debug.LogWarning($"Render: There are less positions than particles. Particles: {particles.Count}, positions: {positions.Length}");
+                colorsBuffer[i] = GetColorVector(velocities[i]);
+            });
+            
+            mpb.SetVectorArray(colors, colorsBuffer);
 
-            if (select == null)
+            for (var i = 0; i < matrices.Count; i += batchSize)
             {
-                for (var i = 0; i < positions.Length; i++)
-                {
-                    particles[i].position = (Vector3)positions[i];
-                    MaterialPropertyBlock mpb = new();
-                    mpb.SetColor(ColorProp, GetColor(velocities[i]));
-                    meshRenderers[i].SetPropertyBlock(mpb);
-                }
-            }
-
-            else
-            {
-                for (var i = 0; i < positions.Length; i++)
-                {
-                    particles[i].position = (Vector3)positions[i];
-                    MaterialPropertyBlock mpb = new();
-                    mpb.SetColor(ColorProp, select.Contains(i) ? Color.green : GetColor(velocities[i]));
-                    meshRenderers[i].SetPropertyBlock(mpb);
-                }
+                Graphics.DrawMeshInstanced(
+                    mesh,
+                    0,
+                    mat,
+                    matrices.GetRange(i, Mathf.Min(batchSize, matrices.Count - i)),
+                    mpb
+                );
             }
         }
 
         public void DeleteParticles()
         {
-            foreach (Transform p in particles)
-                Destroy(p.gameObject);
-
-            particles.Clear();
-            meshRenderers.Clear();
+            mesh = null;
+            mpb = null;
+            matrices.Clear();
         }
-
-        public void CreateDebugParticles(Vector2[] positions)
+        
+        // May be optimized with computing into a variable
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Vector4 GetColorVector(Vector2 velocity)
         {
-            Mesh mesh = MeshGenerator.Sphere(0.5f, resolution);
-
-            for (int i = 0; i < positions.Length; i++)
-            {
-                GameObject gameObject = new("Particle", typeof(MeshFilter), typeof(MeshRenderer));
-                gameObject.transform.localScale = new(1, 1, 1);
-                gameObject.transform.position = (Vector3)positions[i];
-
-                meshRenderers.Add(gameObject.GetComponent<MeshRenderer>());
-                gameObject.GetComponent<MeshFilter>().mesh = mesh;
-
-                meshRenderers[i].material = mat;
-                MaterialPropertyBlock mpb = new();
-                mpb.SetColor(ColorProp, Color.gray);
-                meshRenderers[i].SetPropertyBlock(mpb);
-            }
+            return new Vector4(Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f), 
+                0, 
+                1 - Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f),
+                1);
         }
-
-        #endregion
-
-        #region Bodies
-
-        public void DrawCircle(Vector2 centre, float radius)
-        {
-            GameObject gameObject = new("Circle", typeof(MeshFilter), typeof(MeshRenderer));
-            gameObject.transform.localScale = new(1, 1, 1);
-            gameObject.transform.position = (Vector3)centre;
-            bodies.Add(gameObject.transform);
-
-            Mesh mesh = MeshGenerator.Sphere(radius, resolution);
-
-            gameObject.GetComponent<MeshFilter>().mesh = mesh;
-            MeshRenderer meshRenderer = gameObject.GetComponent<MeshRenderer>();
-            meshRenderer.material = mat;
-
-            MaterialPropertyBlock mpb = new();
-            mpb.SetColor(ColorProp, Color.blue);
-            meshRenderer.SetPropertyBlock(mpb);
-        }
-
-        public void UpdateBodyPosition(Vector2 position, int index)
-        {
-            if (index < bodies.Count)
-                bodies[index].position = (Vector3)position;
-
-            else
-                Debug.LogError($"Render: The body is outside of the range. Bodies count: {bodies.Count}, body index: {index}");
-        }
-
-        public void DeleteBody(int index)
-        {
-            Destroy(bodies[index].gameObject);
-            bodies.Remove(bodies[index]);
-        }
-
-        public void DeleteAllBodies()
-        {
-            foreach (Transform body in bodies)
-                Destroy(body.gameObject);
-
-            bodies.Clear();
-        }
-
-        #endregion
-
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Color GetColor(Vector2 velocity)
         {
-            float brightness = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f);
-            return new Color(brightness, 0, 1 - brightness);
+            return new Color(Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f), 
+                0, 
+                1 - Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f));
         }
     }
 }
