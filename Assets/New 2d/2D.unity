@@ -675,9 +675,8 @@ MonoBehaviour:
   particleSquareLength: 30
   spacing: 2
   useJitter: 1
-  jitterStrength: 0.2
+  jitterStrength: 0
   boundingBoxSizeOffset: {x: 120, y: 80}
-  cam: {fileID: 741110330}
   boundingBoxSize: {x: 0, y: 0}
 --- !u!4 &890908188
 Transform:
@@ -819,15 +818,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   pause: 1
   twoSimulations: 1
-  offset: 75
+  offset: 76
   settings:
-    particleSize: 0.5
+  - particleSize: 0.5
     interactionRadius: 6
     gravity: -20
-    mouseAttractiveness: 0.5
+    mouseAttractiveness: 1
     mouseRadius: 1000
     body:
-      radius: 0
+      radius: 5
       position: {x: 0, y: 0}
       density: 0
       densityResolution: 0
@@ -847,8 +846,35 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
+  - particleSize: 0
+    interactionRadius: 0
+    gravity: 0
+    mouseAttractiveness: 0
+    mouseRadius: 0
+    body:
+      radius: 0
+      position: {x: 0, y: 0}
+      density: 0
+      densityResolution: 0
+      densityRadius: 0
+      prevPosition: {x: 0, y: 0}
+      rotation: {x: 0, y: 0}
+      prevRotation: {x: 0, y: 0}
+      velocity: {x: 0, y: 0}
+      densityPoints: []
+    stiffness: 0
+    nearStiffness: 0
+    restDensity: 0
+    springInteractionRadius: 0
+    springRadius: 0
+    springStiffness: 0
+    springDeformationLimit: 0
+    plasticity: 0
+    highViscosity: 0
+    lowViscosity: 0
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
+  inputField: {fileID: 1902331580}
 --- !u!1 &1769889573
 GameObject:
   m_ObjectHideFlags: 0

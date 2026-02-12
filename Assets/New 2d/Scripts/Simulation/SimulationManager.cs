@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using Rendering;
 using UnityEngine;
 using UnityEngine.UI;
-using System.Reflection;
 
 namespace SimulationLogic
 {
@@ -50,6 +49,29 @@ namespace SimulationLogic
         public float plasticity;
         public float highViscosity;
         public float lowViscosity;
+        
+        public SimulationSettings(SimulationSettings settings)
+        {
+            particleSize = settings.particleSize;
+            interactionRadius = settings.interactionRadius;
+            gravity = settings.gravity;
+            mouseAttractiveness = settings.mouseAttractiveness;
+            mouseRadius = settings.mouseRadius;
+
+            body = settings.body;
+
+            stiffness = settings.stiffness;
+            nearStiffness = settings.nearStiffness;
+            restDensity = settings.restDensity;
+
+            springInteractionRadius = settings.springInteractionRadius;
+            springRadius = settings.springRadius;
+            springStiffness = settings.springStiffness;
+            springDeformationLimit = settings.springDeformationLimit;
+            plasticity = settings.plasticity;
+            highViscosity = settings.highViscosity;
+            lowViscosity = settings.lowViscosity;
+        }
     }
     
     public class SimulationManager : MonoBehaviour
@@ -58,13 +80,15 @@ namespace SimulationLogic
         [SerializeField] private bool pause = true;
         [SerializeField] private bool twoSimulations;
         [SerializeField] private int offset;
-        [SerializeField] private SimulationSettings settings;
-        private SimulationSettings secondSettings;
+        [SerializeField] private SimulationSettings[] settings;
         
         [Header("References")] 
         [SerializeField] private SpawnParticles spawn;
         [SerializeField] private Render render;
         [SerializeField] private InputField inputField;
+        
+        private const int FirstSim = 0;
+        private const int SecondSim = 1;
         
         private Simulation[] simulations;
         private Vector2[] renderPositions;
@@ -75,7 +99,7 @@ namespace SimulationLogic
         private void Start()
         {
             Application.targetFrameRate = 120;
-            SetScene();
+            InitSimulationInstances();
             Invoke(nameof(Unpause), 0.5f);
         }
 
@@ -89,12 +113,12 @@ namespace SimulationLogic
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
-                    SetScene();
+                    InitSimulationInstances();
 
                 if (Input.GetKeyDown(KeyCode.Space))
                     pause = !pause;
             }
-
+            
             if (Input.GetKeyDown(KeyCode.Return))
             {
                 if (!twoSimulations) return;
@@ -106,13 +130,13 @@ namespace SimulationLogic
                     if (!twoSimulations)
                     {
                         field.SetValue(settings, float.Parse(command[1]));
-                        simulations[0].SettingsParser(settings);
+                        simulations[FirstSim].SettingsParser(settings[FirstSim]);
                     }
 
                     else
                     {
-                        field.SetValue(secondSettings, float.Parse(command[1]));
-                        simulations[0].SettingsParser(secondSettings);
+                        field.SetValue(settings[1], float.Parse(command[1]));
+                        simulations[SecondSim].SettingsParser(settings[SecondSim]);
                     }
                 }
 
@@ -122,7 +146,7 @@ namespace SimulationLogic
                 }
             }
 
-            if (!pause && !Input.GetKeyDown(KeyCode.RightArrow))
+            if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 foreach (var simulation in simulations)
                 {
@@ -132,25 +156,33 @@ namespace SimulationLogic
                 }
             }
             
-            RenderParticles();
+            DrawParticles();
+        }
+        
+        private void OnValidate()
+        {
+            if (simulations == null) return;
+            
+            for(var i = 0; i < simulations.Length; i++)
+                simulations[i].SettingsParser(settings[i]);
         }
 
-        private void RenderParticles()
+        private void DrawParticles()
         {
             if (twoSimulations)
             {
-                Parallel.For(0, simulations[0]._positions.Length, i =>
+                Parallel.For(0, simulations[FirstSim]._positions.Length, i =>
                 {
-                    renderPositions[i].x = simulations[0]._positions[i].x - offset;
-                    renderPositions[i].y = simulations[0]._positions[i].y;
-                    renderVelocities[i] = simulations[0]._velocities[i];
+                    renderPositions[i].x = simulations[FirstSim]._positions[i].x - offset;
+                    renderPositions[i].y = simulations[FirstSim]._positions[i].y;
+                    renderVelocities[i] = simulations[FirstSim]._velocities[i];
                 });
                 
-                Parallel.For(0, simulations[1]._positions.Length, i =>
+                Parallel.For(0, simulations[SecondSim]._positions.Length, i =>
                 {
-                    renderPositions[i + simulations[1]._positions.Length].x = simulations[0]._positions[i].x + offset;
-                    renderPositions[i + simulations[1]._positions.Length].y = simulations[0]._positions[i].y;
-                    renderVelocities[i + simulations[1]._positions.Length] = simulations[1]._velocities[i];
+                    renderPositions[i + simulations[SecondSim]._positions.Length].x = simulations[SecondSim]._positions[i].x + offset;
+                    renderPositions[i + simulations[SecondSim]._positions.Length].y = simulations[SecondSim]._positions[i].y;
+                    renderVelocities[i + simulations[SecondSim]._positions.Length] = simulations[SecondSim]._velocities[i];
                 });
                 
                 render.DrawParticles(renderPositions, renderVelocities);
@@ -160,35 +192,34 @@ namespace SimulationLogic
                 render.DrawParticles(simulations[0]._positions, simulations[0]._velocities);
         }
 
-        private void SetScene()
+        private void InitSimulationInstances()
         {
-            Camera.main.orthographicSize = offset;
             render.DeleteParticles();
             
             if (!twoSimulations)
             {
                 simulations = new Simulation[1];
-                simulations[0] = new Simulation(settings, spawn);
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
             }
             
             else
             {
-                secondSettings = settings;
+                settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
                 simulations = new Simulation[2];
-                simulations[0] = new Simulation(settings, spawn);
-                simulations[1] = new Simulation(secondSettings, spawn);
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
             }
             
-            foreach (var simulation in simulations)
+            for(var i = 0; i < simulations.Length; i++)
             {
-                simulation.SettingsParser(settings);
-                simulation.SetScene();
+                simulations[i].SettingsParser(settings[i]);
+                simulations[i].SetScene();
                 
-                render.InitializeParticles(simulation._positions, settings.particleSize);
+                render.InitializeParticles(simulations[i]._positions, settings[i].particleSize);
             }
 
-            renderPositions = new Vector2[simulations[0]._positions.Length * 2];
-            renderVelocities = new Vector2[simulations[0]._positions.Length * 2];
+            renderPositions = new Vector2[simulations[FirstSim]._positions.Length * 2];
+            renderVelocities = new Vector2[simulations[FirstSim]._positions.Length * 2];
         }
     }
 }

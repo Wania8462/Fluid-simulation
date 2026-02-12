@@ -43,7 +43,6 @@ namespace Rendering
             Parallel.For(0, positions.Length, i =>
             {
                 matrices[i] = Matrix4x4.Translate(positions[i]);
-
                 colorsBuffer[i] = GetColorVector(velocities[i]);
             });
             
@@ -72,18 +71,20 @@ namespace Rendering
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {
-            return new Vector4(Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f), 
+            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f);
+            return new Vector4(color, 
                 0, 
-                1 - Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f),
+                1 - color,
                 1);
         }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Color GetColor(Vector2 velocity)
         {
-            return new Color(Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f), 
+            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f);
+            return new Color(color, 
                 0, 
-                1 - Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f));
+                1 - color);
         }
     }
 }

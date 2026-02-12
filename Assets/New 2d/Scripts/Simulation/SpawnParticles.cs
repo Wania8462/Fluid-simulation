@@ -12,9 +12,6 @@ namespace SimulationLogic
         [SerializeField] private float jitterStrength;
         [SerializeField] private Vector2 boundingBoxSizeOffset;
 
-        [Header("References")]
-        [SerializeField] private Transform cam;
-
         public Vector2 boundingBoxSize;
 
         public Vector2[] InitializePositions()
