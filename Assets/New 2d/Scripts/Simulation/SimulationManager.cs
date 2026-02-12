@@ -2,6 +2,8 @@ using System;
 using System.Threading.Tasks;
 using Rendering;
 using UnityEngine;
+using UnityEngine.UI;
+using System.Reflection;
 
 namespace SimulationLogic
 {
@@ -23,7 +25,7 @@ namespace SimulationLogic
     }
     
     [Serializable]
-    public struct SimulationSettings
+    public class SimulationSettings
     {
         [Header("Simulation settings")] 
         public float particleSize;
@@ -57,10 +59,12 @@ namespace SimulationLogic
         [SerializeField] private bool twoSimulations;
         [SerializeField] private int offset;
         [SerializeField] private SimulationSettings settings;
+        private SimulationSettings secondSettings;
         
         [Header("References")] 
         [SerializeField] private SpawnParticles spawn;
         [SerializeField] private Render render;
+        [SerializeField] private InputField inputField;
         
         private Simulation[] simulations;
         private Vector2[] renderPositions;
@@ -82,25 +86,50 @@ namespace SimulationLogic
 
         private void Update()
         {
-            if (pause)
+            if (!inputField.isFocused)
             {
-                RenderParticles();
-                return;
+                if (Input.GetKeyDown(KeyCode.R))
+                    SetScene();
+
+                if (Input.GetKeyDown(KeyCode.Space))
+                    pause = !pause;
             }
-            
-            if (Input.GetKeyDown(KeyCode.R))
-                SetScene();
 
-            if (Input.GetKeyDown(KeyCode.Space))
-                pause = !pause;
-
-            if (pause && !Input.GetKeyDown(KeyCode.RightArrow)) return;
-
-            foreach (var simulation in simulations)
+            if (Input.GetKeyDown(KeyCode.Return))
             {
-                mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                mousePos.x = mousePos.x < 0 ? mousePos.x + offset :  mousePos.x -  offset;
-                simulation.SimulationStep(mousePos);
+                if (!twoSimulations) return;
+                var command = inputField.text.Split(' ');
+                var field = typeof(SimulationSettings).GetField(command[0]);
+
+                if (field != null)
+                {
+                    if (!twoSimulations)
+                    {
+                        field.SetValue(settings, float.Parse(command[1]));
+                        simulations[0].SettingsParser(settings);
+                    }
+
+                    else
+                    {
+                        field.SetValue(secondSettings, float.Parse(command[1]));
+                        simulations[0].SettingsParser(secondSettings);
+                    }
+                }
+
+                else
+                {
+                    Debug.LogWarning($"No field with name {command[0]} is found");
+                }
+            }
+
+            if (!pause && !Input.GetKeyDown(KeyCode.RightArrow))
+            {
+                foreach (var simulation in simulations)
+                {
+                    mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                    mousePos.x = mousePos.x < 0 ? mousePos.x + offset :  mousePos.x -  offset;
+                    simulation.SimulationStep(mousePos);
+                }
             }
             
             RenderParticles();
@@ -144,9 +173,10 @@ namespace SimulationLogic
             
             else
             {
+                secondSettings = settings;
                 simulations = new Simulation[2];
                 simulations[0] = new Simulation(settings, spawn);
-                simulations[1] = new Simulation(settings, spawn);
+                simulations[1] = new Simulation(secondSettings, spawn);
             }
             
             foreach (var simulation in simulations)

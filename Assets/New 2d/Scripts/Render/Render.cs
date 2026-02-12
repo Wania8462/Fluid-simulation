@@ -42,11 +42,7 @@ namespace Rendering
         {
             Parallel.For(0, positions.Length, i =>
             {
-                matrices[i] = Matrix4x4.TRS(
-                    positions[i],
-                    Quaternion.identity,
-                    scale
-                );
+                matrices[i] = Matrix4x4.Translate(positions[i]);
 
                 colorsBuffer[i] = GetColorVector(velocities[i]);
             });
