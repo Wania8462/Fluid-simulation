@@ -1,53 +1,59 @@
-Shader "Instanced/ParticleColor"
+Shader "Custom/InstancedColor"
 {
-    Properties { }
+    Properties
+    {
+        _Color ("Color", Color) = (1,1,1,1)
+    }
+
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "Queue" = "Geometry" }
+        Tags { "RenderType"="Opaque" }
+        LOD 100
+
         Pass
         {
-            ZWrite On
-            ZTest LEqual
-            Cull Off
-
-            HLSLPROGRAM
+            CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma target 4.5
             #pragma multi_compile_instancing
-
             #include "UnityCG.cginc"
-
-            StructuredBuffer<float4> _Positions; // xyz position, w scale
-            StructuredBuffer<float4> _Colors;    // rgba
 
             struct appdata
             {
-                float3 vertex : POSITION;
-                uint instanceID : SV_InstanceID;
+                float4 vertex : POSITION;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f
             {
-                float4 pos : SV_POSITION;
-                float4 color : COLOR0;
+                float4 vertex : SV_POSITION;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
-            v2f vert(appdata v)
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(float4, _Color)
+            UNITY_INSTANCING_BUFFER_END(Props)
+
+            v2f vert (appdata v)
             {
                 v2f o;
-                float4 posData = _Positions[v.instanceID];
-                float3 worldPos = v.vertex * posData.w + posData.xyz;
-                o.pos = UnityWorldToClipPos(worldPos);
-                o.color = _Colors[v.instanceID];
+
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+
+                o.vertex = UnityObjectToClipPos(v.vertex);
                 return o;
             }
 
-            float4 frag(v2f i) : SV_Target
+            fixed4 frag (v2f i) : SV_Target
             {
-                return i.color;
+                UNITY_SETUP_INSTANCE_ID(i);
+
+                // 🔹 Access per-instance color
+                fixed4 col = UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+                return col;
             }
-            ENDHLSL
+            ENDCG
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -45,16 +46,16 @@ namespace Rendering
                 matrices[i] = Matrix4x4.Translate(positions[i]);
                 colorsBuffer[i] = GetColorVector(velocities[i]);
             });
-            
-            mpb.SetVectorArray(colors, colorsBuffer);
 
             for (var i = 0; i < matrices.Count; i += batchSize)
             {
+                var count = Mathf.Min(batchSize, matrices.Count - i);
+                mpb.SetVectorArray("_Color", colorsBuffer.GetRange(i, count));
                 Graphics.DrawMeshInstanced(
                     mesh,
                     0,
                     mat,
-                    matrices.GetRange(i, Mathf.Min(batchSize, matrices.Count - i)),
+                    matrices.GetRange(i, count),
                     mpb
                 );
             }
@@ -67,7 +68,6 @@ namespace Rendering
             matrices.Clear();
         }
         
-        // May be optimized with computing into a variable
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {

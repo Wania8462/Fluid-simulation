@@ -148,12 +148,18 @@ namespace SimulationLogic
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
-                foreach (var simulation in simulations)
+                if (twoSimulations)
                 {
-                    mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                    mousePos.x = mousePos.x < 0 ? mousePos.x + offset :  mousePos.x -  offset;
-                    simulation.SimulationStep(mousePos);
+                    foreach (var simulation in simulations)
+                    {
+                        mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                        mousePos.x = mousePos.x < 0 ? mousePos.x + offset :  mousePos.x -  offset;
+                        simulation.SimulationStep(mousePos);
+                    }
                 }
+
+                else
+                    simulations[FirstSim].SimulationStep(Camera.main.ScreenToWorldPoint(Input.mousePosition));
             }
             
             DrawParticles();

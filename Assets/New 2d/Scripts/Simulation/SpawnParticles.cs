@@ -29,7 +29,7 @@ namespace SimulationLogic
                 }
             }
 
-            boundingBoxSize = new Vector2(particleSquareLength + boundingBoxSizeOffset.x, particleSquareLength + boundingBoxSizeOffset.y); ;
+            boundingBoxSize = new Vector2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2); ;
             return pos;
         }
 

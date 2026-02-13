@@ -543,7 +543,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.6289307, g: 0.6289307, b: 0.6289307, a: 0}
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -672,11 +672,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 30
+  particleSquareLength: 80
   spacing: 2
   useJitter: 1
   jitterStrength: 0
-  boundingBoxSizeOffset: {x: 120, y: 80}
+  boundingBoxSizeOffset: {x: 160, y: 80}
   boundingBoxSize: {x: 0, y: 0}
 --- !u!4 &890908188
 Transform:
@@ -817,7 +817,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   pause: 1
-  twoSimulations: 1
+  twoSimulations: 0
   offset: 76
   settings:
   - particleSize: 0.5
