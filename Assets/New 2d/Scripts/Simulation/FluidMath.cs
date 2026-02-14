@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace SimulationLogic
@@ -6,7 +7,7 @@ namespace SimulationLogic
     public static class FluidMath
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector2 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, Vector2 unitVector)
+        public static float2 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, float2 unitVector)
         {
             return deltaTime * deltaTime *
                 (pseudoPressure * (1 - relativeDistance) + nearPseudoPressure * (1 - relativeDistance) * (1 - relativeDistance)) *
@@ -14,7 +15,7 @@ namespace SimulationLogic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector2 ViscosityImpulse(float deltaTime, float highViscosity, float lowViscosity, float relativeDistance, float inwardVelocity, Vector2 unitVector)
+        public static float2 ViscosityImpulse(float deltaTime, float highViscosity, float lowViscosity, float relativeDistance, float inwardVelocity, float2 unitVector)
         {
             return deltaTime *
                 (1 - relativeDistance) *
@@ -35,7 +36,7 @@ namespace SimulationLogic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector2 DisplacementBySpring(float deltaTime, float springStiffness, float springRestLength, float interactionRadius, float magnitude, Vector2 unitVector)
+        public static float2 DisplacementBySpring(float deltaTime, float springStiffness, float springRestLength, float interactionRadius, float magnitude, float2 unitVector)
         {
             return deltaTime * deltaTime *
                 springStiffness *
@@ -45,13 +46,13 @@ namespace SimulationLogic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector2 UnitVector(Vector2 initialVector, Vector2 finalVector)
+        public static float2 UnitVector(float2 initialVector, float2 finalVector)
         {
             return (finalVector - initialVector) / Distance(initialVector, finalVector);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector2 UnitVector(Vector2 initialVector, Vector2 finalVector, float distance)
+        public static float2 UnitVector(float2 initialVector, float2 finalVector, float distance)
         {
             return (finalVector - initialVector) / distance;
         }
@@ -71,10 +72,10 @@ namespace SimulationLogic
         public static float CubicSpikyKernel(float relativeDistance) => Pow3(1 - relativeDistance);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float Distance(Vector2 p1, Vector2 p2) => Mathf.Sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));
+        public static float Distance(float2 p1, float2 p2) => Mathf.Sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float DistanceSq(Vector2 p1, Vector2 p2) => (p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y);
+        public static float DistanceSq(float2 p1, float2 p2) => (p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float Pow3(float x)

@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace SimulationLogic
 {
     public class SpatialPartitioning
     {
-        public Vector2 offset;
+        public float2 offset;
         public float length;
         public int columns;
         public int rows;
@@ -23,7 +24,7 @@ namespace SimulationLogic
         (1, 0),
         (1, 1)};
 
-        public SpatialPartitioning(Vector2 bottomLeft, Vector2 topRight, float length)
+        public SpatialPartitioning(float2 bottomLeft, float2 topRight, float length)
         {
             this.length = length;
             offset = bottomLeft;
@@ -41,7 +42,7 @@ namespace SimulationLogic
                 grid[i] = new List<int>();
         }
 
-        public void Init(Vector2[] positions)
+        public void Init(float2[] positions)
         {
             foreach (var list in grid)
                 list.Clear();
@@ -50,7 +51,7 @@ namespace SimulationLogic
                 grid[GetGridIndex(positions[i])].Add(i);
         }
 
-        public List<int> GetNeighbours(Vector2 position)
+        public List<int> GetNeighbours(float2 position)
         {
             List<int> result = new();
             var scaled = (position - offset) / length;
@@ -69,7 +70,7 @@ namespace SimulationLogic
             return result;
         }
         
-        public void GetNeighbours(Vector2 position, List<int> list)
+        public void GetNeighbours(float2 position, List<int> list)
         {
             list.Clear();
             var scaled = (position - offset) / length;
@@ -86,7 +87,7 @@ namespace SimulationLogic
             }
         }
 
-        private int GetGridIndex(Vector2 pos)
+        private int GetGridIndex(float2 pos)
         {
             var scaled = (pos - offset) / length;
             var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1), 

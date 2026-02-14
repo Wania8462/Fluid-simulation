@@ -817,6 +817,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   pause: 1
+  realDeltaTime: 0
   twoSimulations: 0
   offset: 76
   settings:
@@ -826,8 +827,8 @@ MonoBehaviour:
     mouseAttractiveness: 1
     mouseRadius: 1000
     body:
-      radius: 0
-      position: {x: 0, y: 0}
+      radius: 5
+      position: {x: 60, y: 0}
       density: 0
       densityResolution: 0
       densityRadius: 0
@@ -841,9 +842,9 @@ MonoBehaviour:
     restDensity: 5
     springInteractionRadius: 2
     springRadius: 1
-    springStiffness: 0.05
+    springStiffness: 0.01
     springDeformationLimit: 0
-    plasticity: 0
+    plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
   spawn: {fileID: 890908187}

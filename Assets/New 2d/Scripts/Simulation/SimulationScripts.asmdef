@@ -2,6 +2,7 @@
     "name": "SimulationScripts",
     "rootNamespace": "",
     "references": [
+        "Unity.Mathematics",
         "GUID:06738dcaa4956e94cbd24308e2358884"
     ],
     "includePlatforms": [],

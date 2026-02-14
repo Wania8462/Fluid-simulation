@@ -1,3 +1,6 @@
 {
-	"name": "RenderScripts"
+    "name": "RenderScripts",
+    "references": [
+        "Unity.Mathematics"
+    ]
 }

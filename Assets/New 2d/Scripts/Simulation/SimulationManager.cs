@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Rendering;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,17 +11,17 @@ namespace SimulationLogic
     public struct Body
     {
         public float radius;
-        public Vector2 position;
+        public float2 position;
         public float density;
         public int densityResolution;
         public int densityRadius;
         private float friction;
 
-        [HideInInspector] public Vector2 prevPosition;
-        [HideInInspector] public Vector2 rotation;
-        [HideInInspector] public Vector2 prevRotation;
-        [HideInInspector] public Vector2 velocity;
-        [HideInInspector] public Vector2[] densityPoints;
+        [HideInInspector] public float2 prevPosition;
+        [HideInInspector] public float2 rotation;
+        [HideInInspector] public float2 prevRotation;
+        [HideInInspector] public float2 velocity;
+        [HideInInspector] public float2[] densityPoints;
     }
 
     [Serializable]
@@ -50,9 +51,7 @@ namespace SimulationLogic
         public float highViscosity;
         public float lowViscosity;
 
-        public SimulationSettings()
-        {
-        }
+        public SimulationSettings() { }
 
         public SimulationSettings(SimulationSettings settings)
         {
@@ -82,6 +81,7 @@ namespace SimulationLogic
     {
         [Header("Manager settings")]
         [SerializeField] private bool pause = true;
+        [SerializeField] private bool realDeltaTime;
         [SerializeField] private bool twoSimulations;
         [SerializeField] private int offset;
         [SerializeField] private SimulationSettings[] settings;
@@ -93,16 +93,19 @@ namespace SimulationLogic
 
         private const int FirstSim = 0;
         private const int SecondSim = 1;
+        private const float fakeDT = 1 / 60f;
+
+        private float dt;
 
         private Simulation[] simulations;
-        private Vector2[] renderPositions;
-        private Vector2[] renderVelocities;
+        private float2[] renderPositions;
+        private float2[] renderVelocities;
 
-        private Vector2 mousePos;
+        private float2 mousePos;
 
         private void Start()
         {
-            Application.targetFrameRate = 120;
+            Application.targetFrameRate = 60;
             InitSimulationInstances();
             Invoke(nameof(Unpause), 0.5f);
         }
@@ -152,19 +155,25 @@ namespace SimulationLogic
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
+                dt = realDeltaTime ? Time.deltaTime : fakeDT;
+
                 if (twoSimulations)
                 {
                     foreach (var simulation in simulations)
                     {
-                        mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                        mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                         mousePos.x = mousePos.x < 0 ? mousePos.x + offset : mousePos.x - offset;
-                        simulation.SimulationStep(mousePos);
+                        simulation.SimulationStep(mousePos, dt);
                     }
                 }
 
                 else
                 {
-                    Watcher.ExecuteWithTimer("1. Step", () => simulations[FirstSim].SimulationStep(Camera.main.ScreenToWorldPoint(Input.mousePosition)));
+                    Watcher.ExecuteWithTimer("1. Step", () =>
+                    {
+                        mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
+                        simulations[FirstSim].SimulationStep(mousePos, dt);
+                    });
                     
                     if (Watcher.Count % 100 == 0)
                     {
@@ -207,7 +216,7 @@ namespace SimulationLogic
             }
 
             else
-                render.DrawParticles(simulations[0]._positions, simulations[0]._velocities);
+                render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities);
         }
 
         private void InitSimulationInstances()
@@ -236,8 +245,8 @@ namespace SimulationLogic
                 render.InitializeParticles(simulations[i]._positions, settings[i].particleSize);
             }
 
-            renderPositions = new Vector2[simulations[FirstSim]._positions.Length * 2];
-            renderVelocities = new Vector2[simulations[FirstSim]._positions.Length * 2];
+            renderPositions = new float2[simulations[FirstSim]._positions.Length * 2];
+            renderVelocities = new float2[simulations[FirstSim]._positions.Length * 2];
         }
     }
 }
