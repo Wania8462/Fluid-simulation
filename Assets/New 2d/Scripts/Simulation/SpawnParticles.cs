@@ -6,11 +6,11 @@ namespace SimulationLogic
     public class SpawnParticles : MonoBehaviour
     {
         [Header("Spawn settings")]
-        [SerializeField] private int particleSquareLength;
-        [SerializeField] private float spacing;
-        [SerializeField] private bool useJitter;
-        [SerializeField] private float jitterStrength;
-        [SerializeField] private Vector2 boundingBoxSizeOffset;
+        [SerializeField] private int particleSquareLength = 50;
+        [SerializeField] private float spacing = 2;
+        [SerializeField] private bool useJitter = true;
+        [SerializeField] private float jitterStrength = 0.2f;
+        [SerializeField] private Vector2 boundingBoxSizeOffset = new Vector2(160, 80);
 
         public Vector2 boundingBoxSize;
 

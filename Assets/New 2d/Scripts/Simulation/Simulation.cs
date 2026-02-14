@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
-using Rendering;
+using Debug = UnityEngine.Debug;
 
 namespace SimulationLogic
 {
@@ -74,22 +74,23 @@ namespace SimulationLogic
         {
             dt = Time.deltaTime;
             // dt = 1 / 60f;
-            particleSP.Init(_positions);
-            bodySP.Init(_positions);
-            springsSP.Init(_positions);
 
-            Parallel.For(0, neighbours.Length, i =>
+            Watcher.ExecuteWithTimer("2. Init", () =>
             {
-                particleSP.GetNeighbours(_positions[i], neighbours[i]);
+                particleSP.Init(_positions);
+                bodySP.Init(_positions);
+                springsSP.Init(_positions);
             });
-            Parallel.For(0, springsNeighbours.Length, i =>
-            {
-                springsSP.GetNeighbours(_positions[i], springsNeighbours[i]);
-            });
-            bodySP.GetNeighbours(body.position, bodyNeighbours);
 
-            ExternalForces();
-            ApplyViscosity();
+            Watcher.ExecuteWithTimer("3. GetNeighbours", () =>
+            {
+                Parallel.For(0, neighbours.Length, i => { particleSP.GetNeighbours(_positions[i], neighbours[i]); });
+                Parallel.For(0, springsNeighbours.Length, i => { springsSP.GetNeighbours(_positions[i], springsNeighbours[i]); });
+                bodySP.GetNeighbours(body.position, bodyNeighbours);
+            });
+
+            Watcher.ExecuteWithTimer("4. ExternalForces", ExternalForces);
+            Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
 
             // Advance to predicted position
             Parallel.For(0, _positions.Length, i =>
@@ -98,20 +99,19 @@ namespace SimulationLogic
                 _positions[i] += dt * _velocities[i];
             });
 
-            AdjustSprings();
-            SpringDisplacements();
+            Watcher.ExecuteWithTimer("6. Springs", () =>
+            {
+                AdjustSprings();
+                SpringDisplacements();
+            });
 
-            DoubleDensityRelaxation();
-            // ResolveCollisions();
+            Watcher.ExecuteWithTimer("7. DoubleDensityRelaxation", DoubleDensityRelaxation);
+            Watcher.ExecuteWithTimer("8. Resolve collisions", ResolveCollisions);
 
             AttractToMouse(mousePos);
-            ResolveBoundaries();
+            Watcher.ExecuteWithTimer("9. Resolve boundaries", ResolveBoundaries);
 
-            // Change in position to calculate velocity 
-            Parallel.For(0, _positions.Length, i =>
-            {
-                _velocities[i] = (_positions[i] - _prevPositions[i]) / dt;
-            });
+            Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
         }
 
         public void ExternalForces()

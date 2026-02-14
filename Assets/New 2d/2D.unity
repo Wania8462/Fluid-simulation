@@ -568,7 +568,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 75
+  orthographic size: 107
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -672,7 +672,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 80
+  particleSquareLength: 50
   spacing: 2
   useJitter: 1
   jitterStrength: 0
@@ -826,7 +826,7 @@ MonoBehaviour:
     mouseAttractiveness: 1
     mouseRadius: 1000
     body:
-      radius: 5
+      radius: 0
       position: {x: 0, y: 0}
       density: 0
       densityResolution: 0
@@ -841,37 +841,11 @@ MonoBehaviour:
     restDensity: 5
     springInteractionRadius: 2
     springRadius: 1
-    springStiffness: 0.01
-    springDeformationLimit: 0
-    plasticity: 0.05
-    highViscosity: 0
-    lowViscosity: 0.2
-  - particleSize: 0
-    interactionRadius: 0
-    gravity: 0
-    mouseAttractiveness: 0
-    mouseRadius: 0
-    body:
-      radius: 0
-      position: {x: 0, y: 0}
-      density: 0
-      densityResolution: 0
-      densityRadius: 0
-      prevPosition: {x: 0, y: 0}
-      rotation: {x: 0, y: 0}
-      prevRotation: {x: 0, y: 0}
-      velocity: {x: 0, y: 0}
-      densityPoints: []
-    stiffness: 0
-    nearStiffness: 0
-    restDensity: 0
-    springInteractionRadius: 0
-    springRadius: 0
-    springStiffness: 0
+    springStiffness: 0.05
     springDeformationLimit: 0
     plasticity: 0
     highViscosity: 0
-    lowViscosity: 0
+    lowViscosity: 0.2
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
   inputField: {fileID: 1902331580}

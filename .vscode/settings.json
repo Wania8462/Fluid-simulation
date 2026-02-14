@@ -56,5 +56,6 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Fluid-simulation.sln"
+    "dotnet.defaultSolution": "Fluid-simulation.sln",
+    "dotnet.preferCSharpExtension": true
 }
