@@ -216,7 +216,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &290152733
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -332,6 +332,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   resolution: 5
+  bodyResolution: 0
   mat: {fileID: 2100000, guid: 0901ec4ad63cccd47b61c2eb947f47a1, type: 2}
 --- !u!4 &452458856
 Transform:
@@ -676,8 +677,12 @@ MonoBehaviour:
   spacing: 2
   useJitter: 1
   jitterStrength: 0
-  boundingBoxSizeOffset: {x: 160, y: 80}
-  boundingBoxSize: {x: 0, y: 0}
+  boundingBoxSizeOffset:
+    x: 160
+    y: 80
+  boundingBoxSize:
+    x: 0
+    y: 0
 --- !u!4 &890908188
 Transform:
   m_ObjectHideFlags: 0
@@ -821,21 +826,31 @@ MonoBehaviour:
   twoSimulations: 0
   offset: 76
   settings:
-  - particleSize: 0.5
-    interactionRadius: 6
+  - interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 1
     mouseRadius: 1000
     body:
-      radius: 5
-      position: {x: 60, y: 0}
-      density: 0
-      densityResolution: 0
-      densityRadius: 0
-      prevPosition: {x: 0, y: 0}
-      rotation: {x: 0, y: 0}
-      prevRotation: {x: 0, y: 0}
-      velocity: {x: 0, y: 0}
+      radius: 10
+      position:
+        x: 70
+        y: 0
+      density: 3
+      densityResolution: 10
+      densityRadius: 2
+      upthrustStrength: 1
+      prevPosition:
+        x: 0
+        y: 0
+      rotation:
+        x: 0
+        y: 0
+      prevRotation:
+        x: 0
+        y: 0
+      velocity:
+        x: 0
+        y: 0
       densityPoints: []
     stiffness: 200
     nearStiffness: 20

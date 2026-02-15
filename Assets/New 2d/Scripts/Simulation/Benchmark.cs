@@ -17,6 +17,7 @@ public class CallStats
     public int Count => calls.Count;
 
     public double GetAverage() => calls.Average();
+    public double GetSum() => calls.Sum();
     public string GetStats() => $"Calls: {calls.Count}, Avg: {calls.Average()}";
 }
 
@@ -30,22 +31,36 @@ public static class Watcher
         sw.Start();
         action();
         sw.Stop();
-        _stats.GetOrAdd(name, new CallStats()).AddCall(sw.ElapsedMilliseconds);
+        _stats.GetOrAdd(name, new CallStats()).AddCall(sw.ElapsedTicks);
     }
-    
+
     public static int Count => _stats.First().Value.Count;
+
+    public static string LogImportant()
+    {
+        var sb = new StringBuilder();
+        var sortedStats = _stats.OrderBy(x => int.Parse(string.Concat(x.Key.TakeWhile(char.IsDigit))));
+
+        foreach (var stat in sortedStats)
+        {
+            if (stat.Value.GetAverage() > 0)
+                sb.AppendLine(stat.Key + ": " + stat.Value.GetAverage());
+        }
+
+        return sb.ToString();
+    }
 
     public static string Log()
     {
         var sb = new StringBuilder();
-        var sortedStats = _stats.OrderBy(x => x.Key);
+        var sortedStats = _stats.OrderBy(x => int.Parse(string.Concat(x.Key.TakeWhile(char.IsDigit))));
 
         foreach (var stat in sortedStats)
             sb.AppendLine(stat.Key + ": " + stat.Value.GetAverage());
 
         return sb.ToString();
     }
-    
+
     public static void Reset()
     {
         _stats.Clear();

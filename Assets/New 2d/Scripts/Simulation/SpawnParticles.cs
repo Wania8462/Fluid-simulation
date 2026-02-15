@@ -67,7 +67,21 @@ namespace SimulationLogic
         public float2[] InitializeVelocities() => new float2[(int)Math.Pow(particleSquareLength, 2)];
 
         public float[] InitializeDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+
         public float[] InitializeNearDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+
+        public float2[] InitializeBodyDensityPoints(int resolution, float radius)
+        {
+            float2[] res = new float2[resolution];
+
+            for (int i = 0; i < resolution; i++)
+            {
+                res[i] = new float2((float)(radius * Math.Cos(Math.PI * (i - 1) / resolution / 2)),
+                                    (float)(radius * Math.Sin(Math.PI * (i - 1) / resolution / 2)));
+            }
+
+            return res;
+        }
 
         public float2 GetRealHalfBoundSize(float radius) => new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
     }

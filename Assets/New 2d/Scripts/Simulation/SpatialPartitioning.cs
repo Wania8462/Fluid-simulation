@@ -69,13 +69,13 @@ namespace SimulationLogic
 
             return result;
         }
-        
+
         public void GetNeighbours(float2 position, List<int> list)
         {
             list.Clear();
             var scaled = (position - offset) / length;
             var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
-    
+
             foreach (var (offsetX, offsetY) in neighbours)
             {
                 var nX = gridX + offsetX;

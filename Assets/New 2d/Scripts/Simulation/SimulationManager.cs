@@ -15,6 +15,7 @@ namespace SimulationLogic
         public float density;
         public int densityResolution;
         public int densityRadius;
+        public float upthrustStrength;
         private float friction;
 
         [HideInInspector] public float2 prevPosition;
@@ -28,7 +29,6 @@ namespace SimulationLogic
     public class SimulationSettings
     {
         [Header("Simulation settings")]
-        public float particleSize;
         public float interactionRadius;
         public float gravity;
         public float mouseAttractiveness;
@@ -55,7 +55,6 @@ namespace SimulationLogic
 
         public SimulationSettings(SimulationSettings settings)
         {
-            particleSize = settings.particleSize;
             interactionRadius = settings.interactionRadius;
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
@@ -100,6 +99,7 @@ namespace SimulationLogic
         private Simulation[] simulations;
         private float2[] renderPositions;
         private float2[] renderVelocities;
+        private float2[] renderBodyPositions;
 
         private float2 mousePos;
 
@@ -169,11 +169,8 @@ namespace SimulationLogic
 
                 else
                 {
-                    Watcher.ExecuteWithTimer("1. Step", () =>
-                    {
-                        mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
-                        simulations[FirstSim].SimulationStep(mousePos, dt);
-                    });
+                    mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
+                    Watcher.ExecuteWithTimer("1. Step", () => { simulations[FirstSim].SimulationStep(mousePos, dt); });
                     
                     if (Watcher.Count % 100 == 0)
                     {
@@ -213,20 +210,28 @@ namespace SimulationLogic
                 });
 
                 render.DrawParticles(renderPositions, renderVelocities);
+
+                renderBodyPositions[FirstSim] = simulations[FirstSim].body.position;
+                renderBodyPositions[SecondSim] = simulations[SecondSim].body.position;
+                render.DrawCustomParticles(renderBodyPositions);
             }
 
             else
+            {
                 render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities);
+                render.DrawCustomParticle(simulations[FirstSim].body.position);
+            }
         }
 
         private void InitSimulationInstances()
         {
             render.DeleteParticles();
+            render.DeleteCustomParticles();
 
             if (!twoSimulations)
             {
                 simulations = new Simulation[1];
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);                
             }
 
             else
@@ -242,11 +247,13 @@ namespace SimulationLogic
                 simulations[i].SettingsParser(settings[i]);
                 simulations[i].SetScene();
 
-                render.InitializeParticles(simulations[i]._positions, settings[i].particleSize);
+                render.InitializeParticles(simulations[i]._positions);
+                render.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.magenta);
             }
 
             renderPositions = new float2[simulations[FirstSim]._positions.Length * 2];
             renderVelocities = new float2[simulations[FirstSim]._positions.Length * 2];
+            if (twoSimulations) renderBodyPositions = new float2[2];
         }
     }
 }

@@ -12,14 +12,13 @@ namespace SimulationLogic
     {
         // General settings
         private bool pause;
-        private float particleSize;
         private float interactionRadius;
         private float gravity;
         private float mouseAttractiveness;
         private float mouseRadius;
 
         // Bodies
-        private Body body;
+        public Body body; // maybe change to prop later
         private float friction;
 
         // Density
@@ -45,8 +44,8 @@ namespace SimulationLogic
         private SpatialPartitioning bodySP;
 
         // Buffers
-        public float2[] _positions;
-        public float2[] _velocities;
+        public float2[] _positions { get; private set; }
+        public float2[] _velocities { get; private set; }
         private float2[] _prevPositions;
         private float[] _densities;
         private float[] _nearDensities;
@@ -60,6 +59,7 @@ namespace SimulationLogic
         // Miscellaneous
         private float2 realHalfBoundSize;
         private float2 realHalfBoundSizeBody;
+        private const float particleRadius = 0.5f;
         private float dt;
 
         // Debug
@@ -92,31 +92,37 @@ namespace SimulationLogic
             Watcher.ExecuteWithTimer("4. ExternalForces", ExternalForces);
             Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
 
-            // Advance to predicted position
-            Parallel.For(0, _positions.Length, i =>
+            Watcher.ExecuteWithTimer("6. Advance predicted pos", () =>
             {
-                _prevPositions[i] = _positions[i];
-                _positions[i] += dt * _velocities[i];
+                // Advance to predicted position
+                Parallel.For(0, _positions.Length, i =>
+                {
+                    _prevPositions[i] = _positions[i];
+                    _positions[i] += dt * _velocities[i];
+                });
             });
 
-            Watcher.ExecuteWithTimer("6. Springs", () =>
-            {
-                AdjustSprings();
-                SpringDisplacements();
-            });
+            Watcher.ExecuteWithTimer("7. Adjust springs", AdjustSprings);
+            Watcher.ExecuteWithTimer("8. Spring displacements", SpringDisplacements);
 
-            Watcher.ExecuteWithTimer("7. DoubleDensityRelaxation", DoubleDensityRelaxation);
-            Watcher.ExecuteWithTimer("8. Resolve collisions", ResolveCollisions);
+            Watcher.ExecuteWithTimer("9. DoubleDensityRelaxation", DoubleDensityRelaxation);
+
+            Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
+            // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
 
             AttractToMouse(mousePos);
-            Watcher.ExecuteWithTimer("9. Resolve boundaries", ResolveBoundaries);
+            Watcher.ExecuteWithTimer("12. Resolve boundaries", ResolveBoundaries);
 
-            Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
+            Watcher.ExecuteWithTimer("13. Calculate velocity", () =>
+            {
+                Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
+            });
         }
 
         public void ExternalForces()
         {
-            Parallel.For(0, _positions.Length, i => { _velocities[i].y += dt * gravity; });
+            for (int i = 0; i < _positions.Length; i++)
+                _velocities[i].y += dt * gravity;
         }
 
         public void DoubleDensityRelaxation()
@@ -129,8 +135,8 @@ namespace SimulationLogic
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
+                    if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
-                    if (!(q <= 1) || q == 0) continue;
 
                     _densities[i] += FluidMath.QuadraticSpikyKernel(q);
                     _nearDensities[i] += FluidMath.CubicSpikyKernel(q);
@@ -143,8 +149,8 @@ namespace SimulationLogic
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
+                    if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
-                    if (!(q <= 1) || q == 0) continue;
 
                     var r = (_positions[j] - _positions[i]) / mag;
                     var displacement = FluidMath.PressureDisplacement(
@@ -274,16 +280,13 @@ namespace SimulationLogic
             body.velocity.y += dt * -2;
 
             var force = float2.zero;
-            var collisionRadiusSq = (body.radius + particleSize) * (body.radius + particleSize);
-            var minDistance = body.radius + particleSize;
-
-            debugParticles.Clear();
+            var collisionRadiusSq = (body.radius + particleRadius) * (body.radius + particleRadius);
+            var minDistance = body.radius + particleRadius;
 
             Parallel.ForEach(bodyNeighbours, n =>
             {
                 var distSq = FluidMath.DistanceSq(body.position, _positions[n]);
                 if (!(distSq < collisionRadiusSq)) return;
-                debugParticles.Add(n);
 
                 var relativeVelocity = _velocities[n] - body.velocity;
                 var normalVector = FluidMath.UnitVector(body.position,
@@ -320,6 +323,32 @@ namespace SimulationLogic
             });
         }
 
+        private void Upthrust()
+        {
+            var submerged = 0f;
+            var tempRadiusSq = body.densityRadius * body.densityRadius;
+            var upUnitVector = new float2(0, 1);
+            // diff: body.density - restDensity
+
+            Parallel.For(0, body.densityResolution, i =>
+            {
+                var neighbours = springsSP.GetNeighbours(body.densityPoints[i]); // temporary maybe
+
+                foreach (var n in neighbours)
+                {
+                    var magSq = FluidMath.DistanceSq(body.densityPoints[i], _positions[i]);
+                    if (magSq < tempRadiusSq)
+                    {
+                        submerged += 1 / body.densityResolution;
+                        break;
+                    }
+                }
+            });
+
+            var force = body.upthrustStrength * submerged * (body.density - restDensity);
+            body.position += dt * dt * force * upUnitVector;
+        }
+
         public void ResolveBoundaries()
         {
             // Particles
@@ -352,7 +381,7 @@ namespace SimulationLogic
             }
         }
 
-        #region Michelsons
+        #region Miscellaneous
 
         public void AttractToMouse(float2 mousePos)
         {
@@ -387,13 +416,13 @@ namespace SimulationLogic
             _springs.Clear();
 
             // Precomputing values
-            realHalfBoundSize = spawn.GetRealHalfBoundSize(particleSize);
+            realHalfBoundSize = spawn.GetRealHalfBoundSize(particleRadius);
             realHalfBoundSizeBody = spawn.GetRealHalfBoundSize(body.radius);
 
             // Spatial partitioning initialization
             particleSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
             springsSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, springInteractionRadius);
-            bodySP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, body.radius + particleSize);
+            bodySP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, body.radius + particleRadius);
 
             neighbours = new List<int>[_positions.Length];
             Parallel.For(0, neighbours.Length, i => { neighbours[i] = new List<int>(); });
@@ -402,12 +431,11 @@ namespace SimulationLogic
             bodyNeighbours = new List<int>();
 
             // In development
-            body.densityPoints = new float2[body.densityResolution];
+            body.densityPoints = spawn.InitializeBodyDensityPoints(body.densityResolution, body.radius);
         }
 
         public void SettingsParser(SimulationSettings settings)
         {
-            particleSize = settings.particleSize;
             interactionRadius = settings.interactionRadius;
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
