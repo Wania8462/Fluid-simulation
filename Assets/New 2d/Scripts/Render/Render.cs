@@ -6,41 +6,46 @@ using Unity.Mathematics;
 
 namespace Rendering
 {
+    struct ParticlesBuffer
+    {
+        public Mesh mesh;
+        public List<Matrix4x4> matrices;
+        public List<Vector4> colorsBuffer;
+        public MaterialPropertyBlock mpb;
+    }
+
     public class Render : MonoBehaviour
     {
         [SerializeField] private int resolution;
         [SerializeField] private int bodyResolution;
         [SerializeField] private Material mat;
 
-        private List<Matrix4x4> matrices = new();
-        private List<Vector4> colorsBuffer = new();
-        private MaterialPropertyBlock mpb;
+        private ParticlesBuffer fluidBuffer;
+        private ParticlesBuffer borderBuffer;
+        private ParticlesBuffer customBuffer;
 
-        private List<Matrix4x4> customMatrices = new();
-        private List<Vector4> customColorsBuffer = new();
-        private MaterialPropertyBlock customMpb;
-
-        private Mesh mesh;
-        private Mesh customMesh;
-        private const int batchSize = 1024;
-        private const float meshRadius = 0.5f;
+        private const int batchSize = 1023;
+        private const float particleRadius = 0.5f;
         private const int submeshIndex = 0;
         private readonly int colors = Shader.PropertyToID("_Color");
         private readonly Vector3 scale = Vector3.one;
 
-        public void InitializeParticles(float2[] positions)
+        # region Fluid particles
+        public void InitParticles(float2[] positions)
         {
-            mesh ??= MeshGenerator.Sphere(meshRadius, resolution);
-            mpb ??= new MaterialPropertyBlock();
+            fluidBuffer.matrices ??= new();
+            fluidBuffer.colorsBuffer ??= new();
+            fluidBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, resolution);
+            fluidBuffer.mpb ??= new MaterialPropertyBlock();
 
             foreach (var pos in positions)
             {
-                matrices.Add(Matrix4x4.TRS(
+                fluidBuffer.matrices.Add(Matrix4x4.TRS(
                     new(pos.x, pos.y),
                     Quaternion.identity,
                     scale
                 ));
-                colorsBuffer.Add(new Vector4());
+                fluidBuffer.colorsBuffer.Add(new Vector4());
             }
         }
 
@@ -48,103 +53,153 @@ namespace Rendering
         {
             // todo add error catching
             // todo try using regular for
+            // todo try removing colors buffer
+
             Parallel.For(0, positions.Length, i =>
             {
-                matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
-                colorsBuffer[i] = GetColorVector(velocities[i]);
+                fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
+                fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
             });
 
-            for (var i = 0; i < matrices.Count; i += batchSize)
+            for (var i = 0; i < fluidBuffer.matrices.Count; i += batchSize)
             {
-                var count = Mathf.Min(batchSize, matrices.Count - i);
-                mpb.SetVectorArray(colors, colorsBuffer.GetRange(i, count));
+                var count = Mathf.Min(batchSize, fluidBuffer.matrices.Count - i);
+                fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
                 Graphics.DrawMeshInstanced(
-                    mesh,
+                    fluidBuffer.mesh,
                     submeshIndex,
                     mat,
-                    matrices.GetRange(i, count),
-                    mpb
+                    fluidBuffer.matrices.GetRange(i, count),
+                    fluidBuffer.mpb
                 );
             }
         }
 
+        public void DeleteParticles()
+        {
+            fluidBuffer.mpb = null;
+            fluidBuffer.matrices?.Clear();
+            fluidBuffer.colorsBuffer?.Clear();
+        }
+        # endregion
+
+        # region Border particles
+        public void InitBorderParticles(float2[] positions)
+        {
+            borderBuffer.matrices ??= new();
+            borderBuffer.colorsBuffer ??= new();
+            borderBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, resolution);
+            borderBuffer.mpb ??= new MaterialPropertyBlock();
+
+            foreach (var pos in positions)
+            {
+                borderBuffer.matrices.Add(Matrix4x4.TRS(
+                    new(pos.x, pos.y),
+                    Quaternion.identity,
+                    scale
+                ));
+            }
+
+            borderBuffer.mpb.SetColor(colors, Color.grey);
+        }
+
+        public void DrawBorderParticles()
+        {
+            for (var i = 0; i < borderBuffer.matrices.Count; i += batchSize)
+            {
+                Graphics.DrawMeshInstanced(
+                    borderBuffer.mesh,
+                    submeshIndex,
+                    mat,
+                    borderBuffer.matrices.GetRange(i, Mathf.Min(batchSize, borderBuffer.matrices.Count - i)),
+                    borderBuffer.mpb
+                );
+            }
+        }
+
+        public void DeleteBorderParticles()
+        {
+            borderBuffer.mpb = null;
+            borderBuffer.matrices?.Clear();
+            borderBuffer.colorsBuffer?.Clear();
+        }
+        # endregion
+
+        # region Custom particles
         public void InitCustomParticle(float2 position, float radius, Color color)
         {
-            customMesh ??= MeshGenerator.Sphere(meshRadius, bodyResolution);
+            customBuffer.matrices ??= new();
+            customBuffer.colorsBuffer ??= new();
+            customBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, bodyResolution);
 
-            customMatrices.Add(Matrix4x4.TRS(
+            customBuffer.matrices.Add(Matrix4x4.TRS(
                 new(position.x, position.y),
                 Quaternion.identity,
                 new(radius * 2, radius * 2, 1)
             ));
 
-            customMpb ??= new MaterialPropertyBlock();
-            customMpb.SetColor(colors, color);
+            customBuffer.mpb ??= new MaterialPropertyBlock();
+            customBuffer.mpb.SetColor(colors, color);
         }
 
         public void DrawCustomParticle(float2 position, int index = 0)
         {
-            customMatrices[index] = Matrix4x4.TRS(
+            customBuffer.matrices[index] = Matrix4x4.TRS(
                 new(position.x, position.y),
                 Quaternion.identity,
-                customMatrices[index].lossyScale
+                customBuffer.matrices[index].lossyScale
             );
 
             Graphics.DrawMeshInstanced(
-                customMesh,
+                customBuffer.mesh,
                 submeshIndex,
                 mat,
-                customMatrices,
-                customMpb
+                customBuffer.matrices,
+                customBuffer.mpb
             );
         }
 
-        public void DrawCustomParticles(float2[] positions)
+        public void DrawAllCustomParticles(float2[] positions)
         {
-            if (customMatrices.Count != positions.Length)
+            if (customBuffer.matrices.Count != positions.Length)
             {
-                if (customMatrices.Count < positions.Length)
+                if (customBuffer.matrices.Count < positions.Length)
                 {
-                    Debug.LogError($"Render: Trying to draw more custom particles than there is matrices. Positions: {positions.Length}, matrices: {customMatrices.Count}");
+                    Debug.LogError($"Render: Trying to draw more custom particles than there is matrices. Positions: {positions.Length}, matrices: {customBuffer.matrices.Count}");
                     return;
                 }
 
                 else
-                    Debug.LogWarning($"Render: There are more custom matrices than positions. Matrices: {customMatrices.Count}, positions: {positions.Length}");
+                    Debug.LogWarning($"Render: There are more custom matrices than positions. Matrices: {customBuffer.matrices.Count}, positions: {positions.Length}");
             }
 
             for (int i = 0; i < positions.Length; i++)
-                customMatrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
+                customBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
 
-            if (customMatrices.Count <= batchSize)
+            if (customBuffer.matrices.Count <= batchSize)
             {
                 Graphics.DrawMeshInstanced(
-                    mesh,
+                    customBuffer.mesh,
                     submeshIndex,
                     mat,
-                    customMatrices,
-                    customMpb
+                    customBuffer.matrices,
+                    customBuffer.mpb
                 );
             }
 
             else
-                Debug.LogError($"Render: Too many custom particles: {customMatrices.Count}");
+                Debug.LogError($"Render: Too many custom particles: {customBuffer.matrices.Count}");
         }
 
         public void DeleteCustomParticles()
         {
-            customMpb = null;
-            customMatrices.Clear();
-            customColorsBuffer.Clear();
+            customBuffer.mpb = null;
+            customBuffer.matrices?.Clear();
+            customBuffer.colorsBuffer?.Clear();
         }
+        # endregion
 
-        public void DeleteParticles()
-        {
-            mpb = null;
-            matrices.Clear();
-            colorsBuffer.Clear();
-        }
-
+        # region Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {
@@ -166,5 +221,6 @@ namespace Rendering
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 ColorToVector(Color color) => new(color.r, color.g, color.b, color.a);
+        # endregion
     }
 }

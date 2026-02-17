@@ -19,8 +19,8 @@ namespace SimulationLogic
         {
             int len = particleSquareLength;
             float2[] pos = new float2[len * len];
-
             jitterStrength = useJitter ? jitterStrength : 0;
+            
             for (int i = 0; i < len; i++)
             {
                 for (int j = 0; j < len; j++)
@@ -34,31 +34,43 @@ namespace SimulationLogic
             return pos;
         }
 
-        public float2[] InitializeBoundaryPositions(float borderDensity)
+        public float2[] InitializeBoundaryPositions(float borderDensity, int layers, float layerOffset)
         {
+            // For now layers don't account for the cornders so some fluid particles might escape
+            
+            // Number of particles on each side
             var lenX = (int)(boundingBoxSize.x * borderDensity);
             var lenY = (int)(boundingBoxSize.y * borderDensity);
-            var pos = new float2[lenX * 2 + lenY * 2];
+            // Total number of particles
+            var pos = new float2[lenX * 2 + lenY * 2 * layers];
             var topLeft = new float2(-(boundingBoxSize.x / 2), boundingBoxSize.y / 2);
 
+            // Distance between particles
             var dx = boundingBoxSize.x / lenX;
             var dy = boundingBoxSize.y / lenY;
 
-            for (var i = 0; i < pos.Length; i++)
+            for (int i = 0; i < layers; i++)
             {
-                if (i < lenX)
-                    pos[i] = new float2(topLeft.x + dx * i, topLeft.y);
-                
-                else if (i < lenX * 2)
-                    pos[i] = new float2(topLeft.x + dx * (i - lenX), topLeft.y - boundingBoxSize.y);
-                
-                else if (i < lenX * 2 + lenY)
-                    pos[i] = new float2(topLeft.x, topLeft.y - dy * (i - lenX * 2));
-                
-                else
-                    pos[i] = new float2(topLeft.x + boundingBoxSize.x, topLeft.y - dy * (i - (lenX * 2 + lenY)));
+                for (var j = 0; j < pos.Length; j++)
+                {
+                    // Top
+                    if (j < lenX)
+                        pos[j] = new float2(topLeft.x + dx * j, topLeft.y - (layerOffset * i));
+
+                    // Bottom
+                    else if (j < lenX * 2)
+                        pos[j] = new float2(topLeft.x + dx * (j - lenX), topLeft.y - boundingBoxSize.y + (layerOffset * i));
+
+                    // Left
+                    else if (j < lenX * 2 + lenY)
+                        pos[j] = new float2(topLeft.x + (layerOffset * i), topLeft.y - dy * (j - lenX * 2));
+
+                    // Right
+                    else
+                        pos[j] = new float2(topLeft.x + boundingBoxSize.x - (layerOffset * i), topLeft.y - dy * (j - (lenX * 2 + lenY)));
+                }
             }
-            
+
             return pos;
         }
 

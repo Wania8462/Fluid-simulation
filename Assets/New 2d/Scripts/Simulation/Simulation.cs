@@ -17,6 +17,11 @@ namespace SimulationLogic
         private float mouseAttractiveness;
         private float mouseRadius;
 
+        // Boundary settings
+        private float borderDensity;
+        private int borderLayers;
+        private float borderLayerOffset;
+
         // Bodies
         public Body body; // maybe change to prop later
         private float friction;
@@ -44,12 +49,16 @@ namespace SimulationLogic
         private SpatialPartitioning bodySP;
 
         // Buffers
+        // Fluid particles
         public float2[] _positions { get; private set; }
         public float2[] _velocities { get; private set; }
         private float2[] _prevPositions;
         private float[] _densities;
         private float[] _nearDensities;
         private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
+
+        // Border particles
+        public float2[] _borderPositions { get; private set; }
 
         // Spatial partitioning buffers
         private List<int>[] neighbours;
@@ -121,6 +130,7 @@ namespace SimulationLogic
 
         public void ExternalForces()
         {
+            // Apply gravity
             for (int i = 0; i < _positions.Length; i++)
                 _velocities[i].y += dt * gravity;
         }
@@ -132,6 +142,7 @@ namespace SimulationLogic
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
 
+                // Calculate densities
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
@@ -142,12 +153,15 @@ namespace SimulationLogic
                     _nearDensities[i] += FluidMath.CubicSpikyKernel(q);
                 }
 
+                // Calculate pressures
                 var pressure = stiffness * (_densities[i] - restDensity);
                 var nearPressure = nearStiffness * _nearDensities[i];
                 float2 deltaX = new(0, 0);
 
+                // Apply displacements from pressures
                 foreach (var j in neighbours[i])
                 {
+                    // Calculate displacement
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
@@ -160,6 +174,7 @@ namespace SimulationLogic
                         nearPressure,
                         r);
 
+                    // Apply displacement to neighbouring particle and accumulate opposite for self
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
                 }
@@ -174,12 +189,12 @@ namespace SimulationLogic
             {
                 foreach (var j in neighbours[i])
                 {
-                    if (i >= j) continue;
+                    if (i >= j) continue; // Avoid double calculation
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     if (mag > springRadius || mag == 0) continue;
 
+                    // Calculate if particles are moving towards each other
                     var q = mag / springRadius;
-
                     var r = (_positions[j] - _positions[i]) / mag;
                     var inwardVelocity = math.dot(_velocities[i] - _velocities[j], r);
                     if (!(inwardVelocity > 0)) continue;
@@ -198,7 +213,6 @@ namespace SimulationLogic
         }
 
         #region Springs
-
         public void AdjustSprings()
         {
             Parallel.For(0, _positions.Length, i =>
@@ -207,6 +221,7 @@ namespace SimulationLogic
                 {
                     if (i >= j) continue;
 
+                    // Remove spring if out of range
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     var q = mag / springInteractionRadius;
                     switch (q)
@@ -255,6 +270,7 @@ namespace SimulationLogic
                 var i = springArray[k].Key.Item1;
                 var j = springArray[k].Key.Item2;
 
+                // Skip if it's the same particle or the particles are at the same position
                 var mag = FluidMath.Distance(_positions[i], _positions[j]);
                 if (mag == 0) return;
 
@@ -270,7 +286,6 @@ namespace SimulationLogic
                 _positions[j] += displacement / 2;
             });
         }
-
         #endregion
 
         public void ResolveCollisions()
@@ -328,7 +343,7 @@ namespace SimulationLogic
             var submerged = 0f;
             var tempRadiusSq = body.densityRadius * body.densityRadius;
             var upUnitVector = new float2(0, 1);
-            // diff: body.density - restDensity
+        
 
             Parallel.For(0, body.densityResolution, i =>
             {
@@ -355,16 +370,11 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 if (Math.Abs(_positions[i].x) >= realHalfBoundSize.x)
-                {
                     _positions[i].x = realHalfBoundSize.x * Math.Sign(_positions[i].x);
-                    // _velocities[i].x = 0;
-                }
 
                 if (Math.Abs(_positions[i].y) >= realHalfBoundSize.y)
-                {
                     _positions[i].y = realHalfBoundSize.y * Math.Sign(_positions[i].y);
-                    // _velocities[i].y = 0;
-                }
+                    
             });
 
             // Bodies
@@ -385,6 +395,7 @@ namespace SimulationLogic
 
         public void AttractToMouse(float2 mousePos)
         {
+            // Attract every particle within range to the mouse
             if (Input.GetMouseButton(0))
             {
                 Parallel.For(0, _positions.Length, i =>
@@ -398,6 +409,7 @@ namespace SimulationLogic
                 });
             }
 
+            // Move body to mouse position
             if (Input.GetMouseButton(1))
             {
                 body.position = mousePos;
@@ -414,6 +426,7 @@ namespace SimulationLogic
             _densities = spawn.InitializeDensities();
             _nearDensities = spawn.InitializeNearDensities();
             _springs.Clear();
+            _borderPositions = spawn.InitializeBoundaryPositions(borderDensity, borderLayers, borderLayerOffset);
 
             // Precomputing values
             realHalfBoundSize = spawn.GetRealHalfBoundSize(particleRadius);
@@ -440,10 +453,17 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
+
+            borderDensity = settings.borderDensity;
+            borderLayers = settings.borderLayers;
+            borderLayerOffset = settings.borderLayerOffset;
+
             body = settings.body;
+
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
             restDensity = settings.restDensity;
+
             springInteractionRadius = settings.springInteractionRadius;
             springRadius = settings.springRadius;
             springStiffness = settings.springStiffness;
@@ -453,6 +473,7 @@ namespace SimulationLogic
             lowViscosity = settings.lowViscosity;
         }
 
+        // Draws the boundary box in scene
         public void DrawDebugSquare(Vector3 center, float2 halfSize, Color color)
         {
             var p0 = center + new Vector3(-halfSize.x, -halfSize.y, 0f);
@@ -466,6 +487,7 @@ namespace SimulationLogic
             Debug.DrawLine(p3, p0, color);
         }
 
+        // Draws the spatial partitioning grid in scene
         public void DrawDebugGrid(Color color, SpatialPartitioning sp)
         {
             for (var i = 0; i <= sp.columns; i++)

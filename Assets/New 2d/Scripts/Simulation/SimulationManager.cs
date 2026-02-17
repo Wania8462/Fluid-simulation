@@ -34,6 +34,11 @@ namespace SimulationLogic
         public float mouseAttractiveness;
         public float mouseRadius;
 
+        [Header("Border settings")]
+        public float borderDensity;
+        public int borderLayers;
+        public float borderLayerOffset;
+
         [Header("Body settings")]
         public Body body;
 
@@ -59,6 +64,10 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
+
+            borderDensity = settings.borderDensity;
+            borderLayers = settings.borderLayers;
+            borderLayerOffset = settings.borderLayerOffset;
 
             body = settings.body;
 
@@ -117,6 +126,7 @@ namespace SimulationLogic
 
         private void Update()
         {
+            // Allows typing
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
@@ -128,7 +138,6 @@ namespace SimulationLogic
 
             if (Input.GetKeyDown(KeyCode.Return))
             {
-                if (!twoSimulations) return;
                 var command = inputField.text.Split(' ');
                 var field = typeof(SimulationSettings).GetField(command[0]);
 
@@ -148,9 +157,7 @@ namespace SimulationLogic
                 }
 
                 else
-                {
                     Debug.LogWarning($"No field with name {command[0]} is found");
-                }
             }
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
@@ -172,6 +179,7 @@ namespace SimulationLogic
                     mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                     Watcher.ExecuteWithTimer("1. Step", () => { simulations[FirstSim].SimulationStep(mousePos, dt); });
                     
+                    // Logs the time taken for each step every 100 frames
                     if (Watcher.Count % 100 == 0)
                     {
                         Debug.Log(Watcher.Log());
@@ -185,6 +193,7 @@ namespace SimulationLogic
 
         private void OnValidate()
         {
+            // Updates the simulation settings when changed in the inspector
             if (simulations == null) return;
 
             for (var i = 0; i < simulations.Length; i++)
@@ -195,6 +204,7 @@ namespace SimulationLogic
         {
             if (twoSimulations)
             {
+                // Packs the offseted positions into a single array for rendering along with combining velocities into one array
                 Parallel.For(0, simulations[FirstSim]._positions.Length, i =>
                 {
                     renderPositions[i].x = simulations[FirstSim]._positions[i].x - offset;
@@ -210,15 +220,20 @@ namespace SimulationLogic
                 });
 
                 render.DrawParticles(renderPositions, renderVelocities);
+                render.DrawBorderParticles();
 
-                renderBodyPositions[FirstSim] = simulations[FirstSim].body.position;
-                renderBodyPositions[SecondSim] = simulations[SecondSim].body.position;
-                render.DrawCustomParticles(renderBodyPositions);
+                // Offsets the body positions for rendering
+                renderBodyPositions[FirstSim].x = simulations[FirstSim].body.position.x - offset;
+                renderBodyPositions[FirstSim].y = simulations[FirstSim].body.position.y;
+                renderBodyPositions[SecondSim].x = simulations[SecondSim].body.position.x + offset;
+                renderBodyPositions[SecondSim].y = simulations[SecondSim].body.position.y;
+                render.DrawAllCustomParticles(renderBodyPositions);
             }
 
             else
             {
                 render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities);
+                render.DrawBorderParticles();
                 render.DrawCustomParticle(simulations[FirstSim].body.position);
             }
         }
@@ -227,7 +242,9 @@ namespace SimulationLogic
         {
             render.DeleteParticles();
             render.DeleteCustomParticles();
+            render.DeleteBorderParticles();
 
+            // Initializes the simulations' settings
             if (!twoSimulations)
             {
                 simulations = new Simulation[1];
@@ -247,13 +264,23 @@ namespace SimulationLogic
                 simulations[i].SettingsParser(settings[i]);
                 simulations[i].SetScene();
 
-                render.InitializeParticles(simulations[i]._positions);
+                render.InitParticles(simulations[i]._positions);
+                render.InitBorderParticles(simulations[i]._borderPositions);
                 render.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.magenta);
             }
 
+            // Calculates the total number of particles for 2 simulations. Not used if only 1 simulation is active
             renderPositions = new float2[simulations[FirstSim]._positions.Length * 2];
             renderVelocities = new float2[simulations[FirstSim]._positions.Length * 2];
             if (twoSimulations) renderBodyPositions = new float2[2];
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (render == null) return;
+            render.DeleteParticles();
+            render.DeleteBorderParticles();
+            render.DeleteCustomParticles();
         }
     }
 }
