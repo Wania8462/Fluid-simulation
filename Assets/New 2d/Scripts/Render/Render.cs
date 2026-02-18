@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Mathematics;
+using System;
 
 namespace Rendering
 {
@@ -65,6 +66,7 @@ namespace Rendering
             {
                 var count = Mathf.Min(batchSize, fluidBuffer.matrices.Count - i);
                 fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
+
                 Graphics.DrawMeshInstanced(
                     fluidBuffer.mesh,
                     submeshIndex,
@@ -77,6 +79,8 @@ namespace Rendering
 
         public void DeleteParticles()
         {
+            // Destroying hash for memory safety
+            Destroy(fluidBuffer.mesh);
             fluidBuffer.mpb = null;
             fluidBuffer.matrices?.Clear();
             fluidBuffer.colorsBuffer?.Clear();
@@ -90,6 +94,7 @@ namespace Rendering
             borderBuffer.colorsBuffer ??= new();
             borderBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, resolution);
             borderBuffer.mpb ??= new MaterialPropertyBlock();
+            var grey = ColorToVector(Color.grey);
 
             foreach (var pos in positions)
             {
@@ -98,9 +103,10 @@ namespace Rendering
                     Quaternion.identity,
                     scale
                 ));
+                borderBuffer.colorsBuffer.Add(grey);
             }
 
-            borderBuffer.mpb.SetColor(colors, Color.grey);
+            borderBuffer.mpb.SetVectorArray(colors, borderBuffer.colorsBuffer);
         }
 
         public void DrawBorderParticles()
@@ -119,6 +125,7 @@ namespace Rendering
 
         public void DeleteBorderParticles()
         {
+            Destroy(borderBuffer.mesh);
             borderBuffer.mpb = null;
             borderBuffer.matrices?.Clear();
             borderBuffer.colorsBuffer?.Clear();
@@ -129,7 +136,6 @@ namespace Rendering
         public void InitCustomParticle(float2 position, float radius, Color color)
         {
             customBuffer.matrices ??= new();
-            customBuffer.colorsBuffer ??= new();
             customBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, bodyResolution);
 
             customBuffer.matrices.Add(Matrix4x4.TRS(
@@ -193,9 +199,9 @@ namespace Rendering
 
         public void DeleteCustomParticles()
         {
+            Destroy(customBuffer.mesh);
             customBuffer.mpb = null;
             customBuffer.matrices?.Clear();
-            customBuffer.colorsBuffer?.Clear();
         }
         # endregion
 

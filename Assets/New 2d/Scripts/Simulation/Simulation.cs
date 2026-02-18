@@ -116,13 +116,13 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("9. DoubleDensityRelaxation", DoubleDensityRelaxation);
 
-            Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
+            // Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
             // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
 
             AttractToMouse(mousePos);
-            Watcher.ExecuteWithTimer("12. Resolve boundaries", ResolveBoundaries);
+            Watcher.ExecuteWithTimer("11. Resolve boundaries", ResolveBoundaries);
 
-            Watcher.ExecuteWithTimer("13. Calculate velocity", () =>
+            Watcher.ExecuteWithTimer("12. Calculate velocity", () =>
             {
                 Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
             });
@@ -130,7 +130,6 @@ namespace SimulationLogic
 
         public void ExternalForces()
         {
-            // Apply gravity
             for (int i = 0; i < _positions.Length; i++)
                 _velocities[i].y += dt * gravity;
         }
@@ -142,7 +141,6 @@ namespace SimulationLogic
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
 
-                // Calculate densities
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
@@ -153,12 +151,10 @@ namespace SimulationLogic
                     _nearDensities[i] += FluidMath.CubicSpikyKernel(q);
                 }
 
-                // Calculate pressures
                 var pressure = stiffness * (_densities[i] - restDensity);
                 var nearPressure = nearStiffness * _nearDensities[i];
                 float2 deltaX = new(0, 0);
 
-                // Apply displacements from pressures
                 foreach (var j in neighbours[i])
                 {
                     // Calculate displacement
@@ -174,7 +170,6 @@ namespace SimulationLogic
                         nearPressure,
                         r);
 
-                    // Apply displacement to neighbouring particle and accumulate opposite for self
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
                 }
@@ -189,11 +184,10 @@ namespace SimulationLogic
             {
                 foreach (var j in neighbours[i])
                 {
-                    if (i >= j) continue; // Avoid double calculation
+                    if (i >= j) continue;
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     if (mag > springRadius || mag == 0) continue;
 
-                    // Calculate if particles are moving towards each other
                     var q = mag / springRadius;
                     var r = (_positions[j] - _positions[i]) / mag;
                     var inwardVelocity = math.dot(_velocities[i] - _velocities[j], r);
@@ -221,7 +215,6 @@ namespace SimulationLogic
                 {
                     if (i >= j) continue;
 
-                    // Remove spring if out of range
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     var q = mag / springInteractionRadius;
                     switch (q)
@@ -270,7 +263,6 @@ namespace SimulationLogic
                 var i = springArray[k].Key.Item1;
                 var j = springArray[k].Key.Item2;
 
-                // Skip if it's the same particle or the particles are at the same position
                 var mag = FluidMath.Distance(_positions[i], _positions[j]);
                 if (mag == 0) return;
 
@@ -395,7 +387,6 @@ namespace SimulationLogic
 
         public void AttractToMouse(float2 mousePos)
         {
-            // Attract every particle within range to the mouse
             if (Input.GetMouseButton(0))
             {
                 Parallel.For(0, _positions.Length, i =>
@@ -409,7 +400,6 @@ namespace SimulationLogic
                 });
             }
 
-            // Move body to mouse position
             if (Input.GetMouseButton(1))
             {
                 body.position = mousePos;

@@ -223,18 +223,18 @@ namespace SimulationLogic
                 render.DrawBorderParticles();
 
                 // Offsets the body positions for rendering
-                renderBodyPositions[FirstSim].x = simulations[FirstSim].body.position.x - offset;
-                renderBodyPositions[FirstSim].y = simulations[FirstSim].body.position.y;
-                renderBodyPositions[SecondSim].x = simulations[SecondSim].body.position.x + offset;
-                renderBodyPositions[SecondSim].y = simulations[SecondSim].body.position.y;
-                render.DrawAllCustomParticles(renderBodyPositions);
+                // renderBodyPositions[FirstSim].x = simulations[FirstSim].body.position.x - offset;
+                // renderBodyPositions[FirstSim].y = simulations[FirstSim].body.position.y;
+                // renderBodyPositions[SecondSim].x = simulations[SecondSim].body.position.x + offset;
+                // renderBodyPositions[SecondSim].y = simulations[SecondSim].body.position.y;
+                // render.DrawAllCustomParticles(renderBodyPositions);
             }
 
             else
             {
                 render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities);
                 render.DrawBorderParticles();
-                render.DrawCustomParticle(simulations[FirstSim].body.position);
+                // render.DrawCustomParticle(simulations[FirstSim].body.position);
             }
         }
 
