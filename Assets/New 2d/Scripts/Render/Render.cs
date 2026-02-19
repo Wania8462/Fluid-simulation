@@ -209,6 +209,13 @@ namespace Rendering
             DeleteCustomParticles();
         }
 
+        public void DestroyMeshes()
+        {
+            Destroy(fluidBuffer.mesh);
+            Destroy(borderBuffer.mesh);
+            Destroy(customBuffer.mesh);
+        }
+
         # region Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)

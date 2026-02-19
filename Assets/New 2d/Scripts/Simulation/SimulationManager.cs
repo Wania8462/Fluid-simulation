@@ -189,17 +189,6 @@ namespace SimulationLogic
             DrawParticles();
         }
 
-        private void OnValidate()
-        {
-            if (simulations == null) return;
-
-            for (var i = 0; i < simulations.Length; i++)
-                simulations[i].SettingsParser(settings[i]);
-
-            render.DeleteBorderParticles();
-            render.InitBorderParticles(OffsetBorderParticles(simulations[FirstSim]._borderPositions, simulations[SecondSim]._borderPositions));
-        }
-
         private void DrawParticles()
         {
             if (twoSimulations)
@@ -287,6 +276,22 @@ namespace SimulationLogic
             renderPositions = new float2[simulations[FirstSim]._positions.Length * 2];
             renderVelocities = new float2[simulations[FirstSim]._positions.Length * 2];
             if (twoSimulations) renderBodyPositions = new float2[2];
+        }
+
+        private void OnValidate()
+        {
+            if (simulations == null) return;
+
+            for (var i = 0; i < simulations.Length; i++)
+                simulations[i].SettingsParser(settings[i]);
+
+            render.DeleteBorderParticles();
+            render.InitBorderParticles(OffsetBorderParticles(simulations[FirstSim]._borderPositions, simulations[SecondSim]._borderPositions));
+        }
+
+        private void OnDestroy()
+        {
+            render.DestroyMeshes();
         }
 
         private float2[] OffsetBorderParticles(float2[] positions1, float2[] positions2)
