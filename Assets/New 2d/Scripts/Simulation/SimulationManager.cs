@@ -230,6 +230,7 @@ namespace SimulationLogic
         private void InitSimulationInstances()
         {
             render.DeleteAllTypesOfParticles();
+            Camera.main.orthographicSize = twoSimulations ? offset : Camera.main.orthographicSize;
 
             if (settings == null || settings.Length == 0)
             {
