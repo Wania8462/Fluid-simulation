@@ -569,7 +569,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 107
+  orthographic size: 107.5
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -684,7 +684,7 @@ MonoBehaviour:
     x: 0
     y: 0
   borderDensity: 1
-  layers: 3
+  layers: 1
   layerOffset: 1
 --- !u!4 &890908188
 Transform:
@@ -827,12 +827,51 @@ MonoBehaviour:
   pause: 1
   realDeltaTime: 0
   twoSimulations: 0
-  offset: 76
+  offset: 186
   settings:
   - interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 1
     mouseRadius: 1000
+    useParticlesAsBorder: 0
+    body:
+      radius: 10
+      position:
+        x: 70
+        y: 0
+      density: 3
+      densityResolution: 10
+      densityRadius: 2
+      upthrustStrength: 1
+      prevPosition:
+        x: 0
+        y: 0
+      rotation:
+        x: 0
+        y: 0
+      prevRotation:
+        x: 0
+        y: 0
+      velocity:
+        x: 0
+        y: 0
+      densityPoints: []
+    stiffness: 200
+    nearStiffness: 20
+    borderStiffness: 100
+    restDensity: 5
+    springInteractionRadius: 2
+    springRadius: 1
+    springStiffness: 0.01
+    springDeformationLimit: 0
+    plasticity: 0.05
+    highViscosity: 0
+    lowViscosity: 0.2
+  - interactionRadius: 6
+    gravity: -20
+    mouseAttractiveness: 1
+    mouseRadius: 1000
+    useParticlesAsBorder: 1
     body:
       radius: 10
       position:

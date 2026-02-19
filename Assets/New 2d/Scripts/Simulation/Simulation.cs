@@ -16,6 +16,7 @@ namespace SimulationLogic
         private float gravity;
         private float mouseAttractiveness;
         private float mouseRadius;
+        private float collisionDamp;
         private bool useParticlesAsBorder;
 
         // Bodies
@@ -384,10 +385,16 @@ namespace SimulationLogic
             Parallel.For(0, _positions.Length, i =>
             {
                 if (Math.Abs(_positions[i].x) >= realHalfBoundSize.x)
+                {
                     _positions[i].x = realHalfBoundSize.x * Math.Sign(_positions[i].x);
+                    _positions[i].x += -Math.Sign(_positions[i].x) * collisionDamp;
+                }
 
                 if (Math.Abs(_positions[i].y) >= realHalfBoundSize.y)
+                {
                     _positions[i].y = realHalfBoundSize.y * Math.Sign(_positions[i].y);
+                    _positions[i].y += -Math.Sign(_positions[i].y) * collisionDamp;
+                }
                     
             });
 
@@ -466,6 +473,7 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
+            collisionDamp = settings.collisionDamping;
             useParticlesAsBorder = settings.useParticlesAsBorder;
             
             body = settings.body;

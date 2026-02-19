@@ -34,6 +34,7 @@ namespace SimulationLogic
         public float gravity;
         public float mouseAttractiveness;
         public float mouseRadius;
+        public float collisionDamping;
         public bool useParticlesAsBorder;
 
         [Header("Body settings")]
@@ -62,6 +63,7 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
+            collisionDamping = settings.collisionDamping;
             useParticlesAsBorder = settings.useParticlesAsBorder;
 
             body = settings.body;
