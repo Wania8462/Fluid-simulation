@@ -16,11 +16,7 @@ namespace SimulationLogic
         private float gravity;
         private float mouseAttractiveness;
         private float mouseRadius;
-
-        // Boundary settings
-        private float borderDensity;
-        private int borderLayers;
-        private float borderLayerOffset;
+        private bool useParticlesAsBorder;
 
         // Bodies
         public Body body; // maybe change to prop later
@@ -29,6 +25,7 @@ namespace SimulationLogic
         // Density
         private float stiffness;
         private float nearStiffness;
+        private float borderStiffness;
         private float restDensity;
 
         // Springs
@@ -55,6 +52,7 @@ namespace SimulationLogic
         private float2[] _prevPositions;
         private float[] _densities;
         private float[] _nearDensities;
+        private float[] _borderDensities;
         private ConcurrentDictionary<(int, int), float> _springs = new(); // (i, j), rest length
 
         // Border particles
@@ -140,6 +138,7 @@ namespace SimulationLogic
             {
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
+                _borderDensities[i] = 0;
 
                 foreach (var j in neighbours[i])
                 {
@@ -151,18 +150,29 @@ namespace SimulationLogic
                     _nearDensities[i] += FluidMath.CubicSpikyKernel(q);
                 }
 
+                if (useParticlesAsBorder)
+                {
+                    foreach (var j in _borderPositions)
+                    {
+                        var mag = FluidMath.Distance(_positions[i], j);
+                        if (mag == 0 || mag > interactionRadius) continue;
+                        var q = mag / interactionRadius;
+                        _borderDensities[i] += FluidMath.QuadraticSpikyKernel(q);
+                    }
+                }
+
                 var pressure = stiffness * (_densities[i] - restDensity);
                 var nearPressure = nearStiffness * _nearDensities[i];
+                var borderPressure = borderStiffness * _borderDensities[i];
                 float2 deltaX = new(0, 0);
 
                 foreach (var j in neighbours[i])
                 {
-                    // Calculate displacement
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    var r = (_positions[j] - _positions[i]) / mag;
+                    var r = FluidMath.UnitVector(_positions[i], _positions[j], mag);
                     var displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,
@@ -172,6 +182,18 @@ namespace SimulationLogic
 
                     _positions[j] += displacement / 2;
                     deltaX -= displacement / 2;
+                }
+
+                if (useParticlesAsBorder)
+                {
+                    foreach (var j in _borderPositions)
+                    {
+                        var mag = FluidMath.Distance(_positions[i], j);
+                        if (mag == 0 || mag > interactionRadius) continue;
+                        var q = mag / interactionRadius;
+                        var r = FluidMath.UnitVector(_positions[i], j, mag);
+                        _positions[i] -= dt * dt * borderPressure * (1 - q) * r;
+                    }
                 }
 
                 _positions[i] += deltaX;
@@ -415,8 +437,9 @@ namespace SimulationLogic
             _velocities = spawn.InitializeVelocities();
             _densities = spawn.InitializeDensities();
             _nearDensities = spawn.InitializeNearDensities();
+            _borderDensities = spawn.InitializeBoundaryDensities();
             _springs.Clear();
-            _borderPositions = spawn.InitializeBoundaryPositions(borderDensity, borderLayers, borderLayerOffset);
+            _borderPositions = spawn.InitializeBoundaryPositions();
 
             // Precomputing values
             realHalfBoundSize = spawn.GetRealHalfBoundSize(particleRadius);
@@ -443,15 +466,13 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
-
-            borderDensity = settings.borderDensity;
-            borderLayers = settings.borderLayers;
-            borderLayerOffset = settings.borderLayerOffset;
-
+            useParticlesAsBorder = settings.useParticlesAsBorder;
+            
             body = settings.body;
 
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
+            borderStiffness = settings.borderStiffness;
             restDensity = settings.restDensity;
 
             springInteractionRadius = settings.springInteractionRadius;

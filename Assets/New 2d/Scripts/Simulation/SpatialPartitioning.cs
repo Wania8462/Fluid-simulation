@@ -29,7 +29,7 @@ namespace SimulationLogic
             this.length = length;
             offset = bottomLeft;
             var width = topRight.x - bottomLeft.x;
-            var height =  topRight.y - bottomLeft.y; 
+            var height = topRight.y - bottomLeft.y;
             columns = (int)(width / length);
             rows = (int)(height / length);
 

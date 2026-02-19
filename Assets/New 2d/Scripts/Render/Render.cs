@@ -79,8 +79,6 @@ namespace Rendering
 
         public void DeleteParticles()
         {
-            // Destroying hash for memory safety
-            Destroy(fluidBuffer.mesh);
             fluidBuffer.mpb = null;
             fluidBuffer.matrices?.Clear();
             fluidBuffer.colorsBuffer?.Clear();
@@ -125,7 +123,6 @@ namespace Rendering
 
         public void DeleteBorderParticles()
         {
-            Destroy(borderBuffer.mesh);
             borderBuffer.mpb = null;
             borderBuffer.matrices?.Clear();
             borderBuffer.colorsBuffer?.Clear();
@@ -199,11 +196,18 @@ namespace Rendering
 
         public void DeleteCustomParticles()
         {
-            Destroy(customBuffer.mesh);
             customBuffer.mpb = null;
             customBuffer.matrices?.Clear();
+            customBuffer.colorsBuffer?.Clear();
         }
         # endregion
+
+        public void DeleteAllTypesOfParticles()
+        {
+            DeleteParticles();
+            DeleteBorderParticles();
+            DeleteCustomParticles();
+        }
 
         # region Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

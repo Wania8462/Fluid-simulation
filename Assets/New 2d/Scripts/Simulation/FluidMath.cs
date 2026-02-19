@@ -9,8 +9,10 @@ namespace SimulationLogic
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float2 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, float2 unitVector)
         {
+            var invRelativeDist = 1 - relativeDistance;
             return deltaTime * deltaTime *
-                (pseudoPressure * (1 - relativeDistance) + nearPseudoPressure * (1 - relativeDistance) * (1 - relativeDistance)) *
+                (pseudoPressure * invRelativeDist +
+                nearPseudoPressure * invRelativeDist * invRelativeDist) *
                 unitVector;
         }
 
