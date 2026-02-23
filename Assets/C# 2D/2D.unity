@@ -569,7 +569,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 107.5
+  orthographic size: 110
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -833,6 +833,7 @@ MonoBehaviour:
     gravity: -20
     mouseAttractiveness: 1
     mouseRadius: 1000
+    collisionDamping: 0.083
     useParticlesAsBorder: 0
     body:
       radius: 10
@@ -871,7 +872,8 @@ MonoBehaviour:
     gravity: -20
     mouseAttractiveness: 1
     mouseRadius: 1000
-    useParticlesAsBorder: 1
+    collisionDamping: 0
+    useParticlesAsBorder: 0
     body:
       radius: 10
       position:
