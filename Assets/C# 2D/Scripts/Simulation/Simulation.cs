@@ -382,21 +382,23 @@ namespace SimulationLogic
         public void ResolveBoundaries()
         {
             // Particles
-            Parallel.For(0, _positions.Length, i =>
+            // Not sure if parallel for is faster for large number of particles
+            for (int i = 0; i < _positions.Length; i++)
             {
                 if (Math.Abs(_positions[i].x) >= realHalfBoundSize.x)
                 {
-                    _positions[i].x = realHalfBoundSize.x * Math.Sign(_positions[i].x);
-                    _positions[i].x += -Math.Sign(_positions[i].x) * collisionDamp;
+                    var sign = Math.Sign(_positions[i].x);
+                    _positions[i].x = realHalfBoundSize.x * sign;
+                    _positions[i].x += -sign * collisionDamp;
                 }
 
                 if (Math.Abs(_positions[i].y) >= realHalfBoundSize.y)
                 {
-                    _positions[i].y = realHalfBoundSize.y * Math.Sign(_positions[i].y);
-                    _positions[i].y += -Math.Sign(_positions[i].y) * collisionDamp;
+                    var sign = Math.Sign(_positions[i].y);
+                    _positions[i].y = realHalfBoundSize.y * sign;
+                    _positions[i].y += -sign * collisionDamp;
                 }
-                    
-            });
+            }
 
             // Bodies
             if (Math.Abs(body.position.x) >= realHalfBoundSizeBody.x)
