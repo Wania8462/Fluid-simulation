@@ -12,5 +12,6 @@ EditorBuildSettings:
     path: Assets/C# 2D/2D.unity
     guid: 3afd4b540be31414a9bb4ea2f958480b
   m_configObjects:
+    com.unity.input.settings: {fileID: 11400000, guid: fd5a681f047c14302a45a4f33825698c, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0

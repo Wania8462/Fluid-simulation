@@ -237,25 +237,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   settings:
-    interactionRadius: 0
-    gravity: 0
-    mouseAttractiveness: 0
-    mouseRadius: 0
-    collisionDamping: 0
+    interactionRadius: 6
+    gravity: -10
+    mouseAttractiveness: 3
+    mouseRadius: 1000
+    collisionDamping: 0.086
     useParticlesAsBorder: 0
-    stiffness: 0
-    nearStiffness: 0
+    stiffness: 200
+    nearStiffness: 20
     borderStiffness: 0
-    restDensity: 0
-    springInteractionRadius: 0
-    springRadius: 0
-    springStiffness: 0
+    restDensity: 5
+    springInteractionRadius: 2
+    springRadius: 1
+    springStiffness: 0.05
     springDeformationLimit: 0
-    plasticity: 0
+    plasticity: 0.05
     highViscosity: 0
-    lowViscosity: 0
+    lowViscosity: 0.1
   particleRadius: 0.5
   useRealDeltaTime: 0
+  render: {fileID: 68674316}
   spawn: {fileID: 263797678}
   compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
 --- !u!1 &685662515
@@ -319,7 +320,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 118.55
+  orthographic size: 60
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2

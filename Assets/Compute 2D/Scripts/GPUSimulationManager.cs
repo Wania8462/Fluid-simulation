@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Xml;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -67,6 +65,8 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private SimulationSettings settings;
     [SerializeField] public float particleRadius;
     [SerializeField] private bool useRealDeltaTime;
+
+    [SerializeField] private GPURender render;
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ComputeShader compute;
 
@@ -86,14 +86,14 @@ public class GPUSimulationManager : MonoBehaviour
     private readonly Dictionary<string, int> KernelIDs =
     new()
     {
-        { "ExternalForcesKernel", 0 },
-        // { "DoubleDensityRelaxation", 1 },
-        // { "ApplyViscosity", 2 },
-        // { "AdjustSprings", 3 },
-        // { "SpringDisplacements", 4 },
-        // { "ResolveBoundaries", 5 },
-        // { "AdvancePredictedPositions", 6 },
-        // { "CalculateVelocity", 7 }
+        { "ExternalForces", 0 },
+        { "DoubleDensityRelaxation", 1 },
+        { "ApplyViscosity", 2 },
+        { "AdjustSprings", 3 },
+        { "SpringDisplacements", 4 },
+        { "ResolveBoundaries", 5 },
+        { "AdvancePredictedPositions", 6 },
+        { "CalculateVelocity", 7 }
     };
 
     private const int threadGropus = 256;
@@ -103,27 +103,34 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void Start()
     {
-        // numParticles = spawn.GetNumberOfParticles();
-        // CreateBuffers();
-        // SetBuffers();
-        // SetComputeSettings();
-
+        numParticles = spawn.GetNumberOfParticles();
+        CreateBuffers();
+        SetBuffers();
+        SetComputeSettings();
         buffers["Positions"].SetData(spawn.InitializePositions());
+        buffers["PrevPositions"].SetData(spawn.InitializePositions());
+        render.Setup();
     }
 
     private void Update()
     {
-        // float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
-        // compute.SetFloat("dt", dt);
+        SimulationStep();
+        render.DrawParticles();
+    }
 
-        // compute.Dispatch(KernelIDs["ExternalForces"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus, 1, 1);
+    private void SimulationStep()
+    {
+        float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
+        compute.SetFloat("dt", dt);
+
+        compute.Dispatch(KernelIDs["ExternalForces"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus, 1, 1);
     }
 
     private void SetComputeSettings()
@@ -153,7 +160,6 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void SetBuffers()
     {
-        // Maybe not set each buffer to each kernel
         foreach (var kernel in KernelIDs)
             foreach (var buffer in buffers)
                 compute.SetBuffer(kernel.Value, buffer.Key, buffer.Value);

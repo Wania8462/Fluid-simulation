@@ -22,13 +22,12 @@ public class GPURender : MonoBehaviour
 
     public void Setup()
     {
-        mat.SetBuffer("Points", sim.buffers["PositionsBuffer"]);
+        mat.SetBuffer("Points", sim.buffers["Positions"]);
         mat.SetColor("_Color", color);
 
         mesh = Sphere(sim.particleRadius, resolution);
 
         bounds = new(Vector3.zero, Vector3.one * drawingBoundary);
-
         uint[] args = new uint[]
         {
             mesh.GetIndexCount(subMeshIndex),
@@ -39,15 +38,15 @@ public class GPURender : MonoBehaviour
         };
 
         argsBuffer = new(
-            numberOfElements,
-            args.Length * sizeof(uint),
+            args.Length,
+            sizeof(uint),
             ComputeBufferType.IndirectArguments
         );
 
         argsBuffer.SetData(args);
     }
 
-    void LateUpdate()
+    public void DrawParticles()
     {
         if (mat != null && mesh != null)
         {
