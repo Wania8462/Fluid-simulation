@@ -86,6 +86,7 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
             float2 r = UnitVector(Positions[id.x], Positions[k], mag);
             float2 displacement = PressureDisplacement(dt, q, pseudoPressure, nearPseudoPressure, r);
 
+            Positions[k] += displacement / 2;
             deltaX -= displacement / 2;
         }
 
