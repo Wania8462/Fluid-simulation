@@ -3,69 +3,43 @@ using UnityEngine;
 
 public class GPURender : MonoBehaviour
 {
-    [Header("Render settings")]
-    [SerializeField] private int resolution;
-    public uint offset;
-    [SerializeField] private Color color;
-
-    [Header("References")]
-    [SerializeField] private Material mat;
     [SerializeField] private GPUSimulationManager sim;
-    [SerializeField] private Spawn2DParticles spawn;
-
-    private ComputeBuffer argsBuffer;
-    private Bounds bounds;
+    [SerializeField] private Material material;
     private Mesh mesh;
-    private const int subMeshIndex = 0;
-    private const int drawingBoundary = 10000;
-    private const int numberOfElements = 1;
+
+    GraphicsBuffer commandBuf;
+    GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
+    const int commandCount = 1;
 
     public void Setup()
     {
-        mat.SetBuffer("Points", sim.buffers["Positions"]);
-        mat.SetColor("_Color", color);
-
-        mesh = Sphere(sim.particleRadius, resolution);
-
-        bounds = new(Vector3.zero, Vector3.one * drawingBoundary);
-        uint[] args = new uint[]
-        {
-            mesh.GetIndexCount(subMeshIndex),
-            (uint)spawn.GetNumberOfParticles(),
-            mesh.GetIndexStart(subMeshIndex),
-            mesh.GetBaseVertex(subMeshIndex),
-            offset
-        };
-
-        argsBuffer = new(
-            args.Length,
-            sizeof(uint),
-            ComputeBufferType.IndirectArguments
-        );
-
-        argsBuffer.SetData(args);
+        commandBuf = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
+        commandData = new GraphicsBuffer.IndirectDrawIndexedArgs[commandCount];
+        mesh = Circle(0.5f, 10);
     }
 
     public void DrawParticles()
     {
-        if (mat != null && mesh != null)
+        RenderParams rp = new(material)
         {
-            Graphics.DrawMeshInstancedIndirect(
-                mesh,
-                subMeshIndex,
-                mat,
-                bounds,
-                argsBuffer
-            );
-        }
+            worldBounds = new Bounds(Vector3.zero, 10000 * Vector3.one),
+            matProps = new MaterialPropertyBlock()
+        };
+
+        rp.matProps.SetBuffer("Positions", sim.buffers["Positions"]);
+        commandData[0].indexCountPerInstance = mesh.GetIndexCount(0);
+        commandData[0].instanceCount = (uint)sim.numParticles;
+        commandBuf.SetData(commandData);
+        Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount);
     }
 
     void OnDestroy()
     {
-        argsBuffer?.Release();
+        commandBuf?.Release();
+        commandBuf = null;
     }
 
-    public static Mesh Sphere(float radius, int resolution)
+    static Mesh Circle(float radius, int resolution)
     {
         Vector3[] verticies = new Vector3[4 * resolution + 1];
         int[] triangles = new int[resolution * 12];

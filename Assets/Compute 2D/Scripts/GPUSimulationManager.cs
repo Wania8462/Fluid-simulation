@@ -70,7 +70,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ComputeShader compute;
 
-    private int numParticles;
+    [HideInInspector] public int numParticles;
 
     public readonly Dictionary<string, ComputeBuffer> buffers =
     new()
@@ -92,8 +92,9 @@ public class GPUSimulationManager : MonoBehaviour
         { "AdjustSprings", 3 },
         { "SpringDisplacements", 4 },
         { "ResolveBoundaries", 5 },
-        { "AdvancePredictedPositions", 6 },
-        { "CalculateVelocity", 7 }
+        { "AttractToMouse", 6 },
+        { "AdvancePredictedPositions", 7 },
+        { "CalculateVelocity", 8 }
     };
 
     private const int threadGropus = 256;
@@ -122,20 +123,33 @@ public class GPUSimulationManager : MonoBehaviour
     {
         float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
         compute.SetFloat("dt", dt);
+        compute.SetVector("mousePosition", new Vector4(Input.mousePosition.x, Input.mousePosition.y));
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus, 1, 1);
-        compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
+        // compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
+
+        if (Input.GetMouseButton(0))
+            compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus, 1, 1);
+
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus, 1, 1);
     }
 
-    private void SetComputeSettings()
+    private void OnValidate()
     {
-        compute.SetInt("numParticles", numParticles);
+        // todo add check if the settings have changed and only update if they have
+        if (buffers["Positions"] != null)
+        {
+            UpdateComputeSettings();
+        }
+    }
+
+    private void UpdateComputeSettings()
+    {
         compute.SetFloat("interactionRadius", settings.interactionRadius);
         compute.SetFloat("gravity", settings.gravity);
         compute.SetFloat("mouseAttractiveness", settings.mouseAttractiveness);
@@ -152,7 +166,12 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("plasticity", settings.plasticity);
         compute.SetFloat("highViscosity", settings.highViscosity);
         compute.SetFloat("lowViscosity", settings.lowViscosity);
+    }
 
+    private void SetComputeSettings()
+    {
+        compute.SetInt("numParticles", numParticles);
+        UpdateComputeSettings();
         float2 rhbs = spawn.GetRealHalfBoundSize(particleRadius);
         compute.SetVector("realHalfBoundSize", new Vector4(rhbs.x, rhbs.y));
         compute.SetFloat("particleRadius", particleRadius);

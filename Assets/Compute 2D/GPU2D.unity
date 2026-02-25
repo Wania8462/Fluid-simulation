@@ -128,7 +128,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 68674315}
-  - component: {fileID: 68674316}
+  - component: {fileID: 68674318}
   m_Layer: 0
   m_Name: Render
   m_TagString: Untagged
@@ -151,7 +151,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &68674316
+--- !u!114 &68674318
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -160,15 +160,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 68674314}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 46c052e40e727b241a71fc3c28c20f71, type: 3}
+  m_Script: {fileID: 11500000, guid: 7b3094873c5c547b58bb2b91f157835c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
-  resolution: 5
-  offset: 0
-  color: {r: 0, g: 0.533069, b: 0.81761, a: 0}
-  mat: {fileID: 2100000, guid: 0901ec4ad63cccd47b61c2eb947f47a1, type: 2}
+  m_EditorClassIdentifier: Assembly-CSharp::TestRender
   sim: {fileID: 263797679}
-  spawn: {fileID: 263797678}
+  material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
 --- !u!1 &263797676
 GameObject:
   m_ObjectHideFlags: 0
@@ -238,7 +234,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   settings:
     interactionRadius: 6
-    gravity: -10
+    gravity: -0.2
     mouseAttractiveness: 3
     mouseRadius: 1000
     collisionDamping: 0.086
@@ -256,9 +252,10 @@ MonoBehaviour:
     lowViscosity: 0.1
   particleRadius: 0.5
   useRealDeltaTime: 0
-  render: {fileID: 68674316}
+  render: {fileID: 68674318}
   spawn: {fileID: 263797678}
   compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
+  numParticles: 0
 --- !u!1 &685662515
 GameObject:
   m_ObjectHideFlags: 0
