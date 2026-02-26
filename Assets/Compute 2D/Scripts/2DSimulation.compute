@@ -1,0 +1,168 @@
+#pragma kernel ExternalForces
+#pragma kernel DoubleDensityRelaxation
+#pragma kernel ApplyViscosity
+#pragma kernel AdjustSprings
+#pragma kernel SpringDisplacements
+#pragma kernel ResolveBoundaries
+#pragma kernel AttractToMouse
+#pragma kernel AdvancePredictedPositions
+#pragma kernel CalculateVelocity
+
+#include "./FluidMath.hlsl"
+
+static const int ThreadGroupSize = 256;
+static const float2 ZeroImpulse = float2(0, 0);
+
+RWStructuredBuffer<float2> Positions;
+RWStructuredBuffer<float2> PrevPositions;
+RWStructuredBuffer<float2> Velocities;
+RWStructuredBuffer<float> Densities;
+RWStructuredBuffer<float> NearDensities;
+RWStructuredBuffer<float> Springs;
+
+// todo add SP
+
+const uint numParticles;
+const float interactionRadius;
+const float gravity;
+const float mouseAttractiveness;
+const float mouseRadius;
+const float collisionDamp;
+
+const float stiffness;
+const float nearStiffness;
+const float restDensity;
+
+const float springInteractionRadius;
+const float springStiffness;
+const float springDeformationLimit;
+const float plasticity;
+const float highViscosity;
+const float lowViscosity;
+
+const float2 realHalfBoundSize;
+const float particleRadius;
+const float2 mousePosition;
+const float dt;
+
+[numthreads(ThreadGroupSize,1,1)]
+void ExternalForces (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    Velocities[id.x].y += dt * gravity;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+        Densities[id.x] = 0;
+        NearDensities[id.x] = 0;
+
+        for (uint j = 0; j < numParticles; j++)
+        {
+            float mag = Distance(Positions[id.x], Positions[j]);
+            if (mag == 0 || mag > interactionRadius) continue;
+
+            float q = mag / interactionRadius;
+            Densities[id.x] += QuadraticSpikyKernel(q);
+            NearDensities[id.x] += CubicSpikyKernel(q);
+        }
+
+        float pseudoPressure = stiffness * (Densities[id.x] - restDensity);
+        float nearPseudoPressure = nearStiffness * NearDensities[id.x];
+        float2 deltaX = ZeroImpulse;
+
+        for (uint k = 0; k < numParticles; k++)
+        {
+            float mag = Distance(Positions[id.x], Positions[k]);
+            if (mag == 0 || mag > interactionRadius) continue;
+            
+            float q = mag / interactionRadius;
+            float2 r = UnitVector(Positions[id.x], Positions[k], mag);
+            float2 displacement = PressureDisplacement(dt, q, pseudoPressure, nearPseudoPressure, r);
+
+            Positions[k] += displacement / 2;
+            deltaX -= displacement / 2;
+        }
+
+        Positions[id.x] += deltaX;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ApplyViscosity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void AdjustSprings (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void SpringDisplacements (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ResolveBoundaries (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    if (abs(Positions[id.x].x) >= realHalfBoundSize.x)
+    {
+        int signOfPos = sign(Positions[id.x].x);
+        Positions[id.x].x = realHalfBoundSize.x * signOfPos;
+        Positions[id.x].x += -signOfPos * collisionDamp;
+    }
+
+    if (abs(Positions[id.x].y) >= realHalfBoundSize.y)
+    {
+        int signOfPos = sign(Positions[id.x].y);
+        Positions[id.x].y = realHalfBoundSize.y * signOfPos;
+        Positions[id.x].y += -signOfPos * collisionDamp;
+    }
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void AdvancePredictedPositions (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    PrevPositions[id.x] = Positions[id.x];
+    Positions[id.x] += dt * Velocities[id.x];
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void AttractToMouse (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    float mag = Distance(Positions[id.x], mousePosition);
+    if (mag > mouseRadius) return;
+
+    float2 r = UnitVector(Positions[id.x], mousePosition, mag);
+    Positions[id.x] += dt * mouseAttractiveness * r;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void CalculateVelocity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
+}

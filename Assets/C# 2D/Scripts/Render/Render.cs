@@ -36,7 +36,7 @@ namespace Rendering
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
-            fluidBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, resolution);
+            fluidBuffer.mesh ??= MeshGenerator.Circle(particleRadius, resolution);
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
 
             foreach (var pos in positions)
@@ -90,7 +90,7 @@ namespace Rendering
         {
             borderBuffer.matrices ??= new();
             borderBuffer.colorsBuffer ??= new();
-            borderBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, resolution);
+            borderBuffer.mesh ??= MeshGenerator.Circle(particleRadius, resolution);
             borderBuffer.mpb ??= new MaterialPropertyBlock();
             var grey = ColorToVector(Color.grey);
 
@@ -133,7 +133,7 @@ namespace Rendering
         public void InitCustomParticle(float2 position, float radius, Color color)
         {
             customBuffer.matrices ??= new();
-            customBuffer.mesh ??= MeshGenerator.Sphere(particleRadius, bodyResolution);
+            customBuffer.mesh ??= MeshGenerator.Circle(particleRadius, bodyResolution);
 
             customBuffer.matrices.Add(Matrix4x4.TRS(
                 new(position.x, position.y),

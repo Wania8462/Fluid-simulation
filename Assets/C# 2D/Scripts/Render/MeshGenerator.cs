@@ -5,7 +5,7 @@ namespace Rendering
 {
     public static class MeshGenerator
     {
-        public static Mesh Sphere(float radius, int resolution)
+        public static Mesh Circle(float radius, int resolution)
         {
             Vector3[] verticies = new Vector3[4 * resolution + 1];
             int[] triangles = new int[resolution * 12];
