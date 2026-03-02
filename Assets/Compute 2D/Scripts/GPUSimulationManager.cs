@@ -121,7 +121,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void SimulationStep()
     {
-        float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
+        var dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
         compute.SetFloat("dt", dt);
         compute.SetVector("mousePosition", new Vector4(Input.mousePosition.x, Input.mousePosition.y));
 
@@ -130,7 +130,7 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus, 1, 1);
         compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus, 1, 1);
-        // compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
+        compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus, 1, 1);
 
         if (Input.GetMouseButton(0))
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus, 1, 1);

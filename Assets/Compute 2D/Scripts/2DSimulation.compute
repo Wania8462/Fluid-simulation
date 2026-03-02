@@ -63,9 +63,9 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
         Densities[id.x] = 0;
         NearDensities[id.x] = 0;
 
-        for (uint j = 0; j < numParticles; j++)
+        for (uint i = 0; i < numParticles; i++)
         {
-            float mag = Distance(Positions[id.x], Positions[j]);
+            float mag = Distance(Positions[id.x], Positions[i]);
             if (mag == 0 || mag > interactionRadius) continue;
 
             float q = mag / interactionRadius;
@@ -73,20 +73,20 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
             NearDensities[id.x] += CubicSpikyKernel(q);
         }
 
-        float pseudoPressure = stiffness * (Densities[id.x] - restDensity);
-        float nearPseudoPressure = nearStiffness * NearDensities[id.x];
+        float pressure = stiffness * (Densities[id.x] - restDensity);
+        float nearPressure = nearStiffness * NearDensities[id.x];
         float2 deltaX = ZeroImpulse;
 
-        for (uint k = 0; k < numParticles; k++)
+        for (uint j = 0; j < numParticles; j++)
         {
-            float mag = Distance(Positions[id.x], Positions[k]);
+            float mag = Distance(Positions[id.x], Positions[j]);
             if (mag == 0 || mag > interactionRadius) continue;
             
             float q = mag / interactionRadius;
-            float2 r = UnitVector(Positions[id.x], Positions[k], mag);
-            float2 displacement = PressureDisplacement(dt, q, pseudoPressure, nearPseudoPressure, r);
+            float2 r = UnitVector(Positions[id.x], Positions[j], mag);
+            float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r);
 
-            Positions[k] += displacement / 2;
+            Positions[j] += displacement / 2;
             deltaX -= displacement / 2;
         }
 
@@ -98,6 +98,22 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
+
+    for (uint i = 0; i < numParticles; i++)
+    {
+        if (i >= id.x) continue;
+        float mag = Distance(Positions[id.x], Positions[i]);
+        if (mag > interactionRadius || mag == 0) continue;
+
+        float q = mag / interactionRadius;
+        float2 r = UnitVector(Positions[id.x], Positions[i], mag);
+        float inwardVelocity = dot(Velocities[id.x] - Velocities[i], r);
+        if(inwardVelocity <= 0) continue;
+
+        float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r);
+        Velocities[id.x] -= impulse / 2;
+        Velocities[i] += impulse / 2;
+    }
 }
 
 [numthreads(ThreadGroupSize,1,1)]
