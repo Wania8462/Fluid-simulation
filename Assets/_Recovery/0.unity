@@ -747,7 +747,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   pause: 1
   realDeltaTime: 0
-  targetFrameRate: 120
   twoSimulations: 0
   offset: 186
   settings:

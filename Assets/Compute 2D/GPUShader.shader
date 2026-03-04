@@ -1,11 +1,5 @@
 Shader "Custom/TestShaderGPU"
 {
-    Properties
-    {
-        // Will be used later
-        _Color ("Color", Color) = (1,1,1,1)
-    }
-
     SubShader
     {
         Pass
@@ -20,6 +14,7 @@ Shader "Custom/TestShaderGPU"
             #define UNITY_INDIRECT_DRAW_ARGS IndirectDrawIndexedArgs
 
             StructuredBuffer<float2> Positions;
+            StructuredBuffer<float4> Colors;
 
             struct v2f
             {
@@ -31,7 +26,7 @@ Shader "Custom/TestShaderGPU"
             {
                 v2f o;
 
-                float3 localPos = float4(
+                float4 localPos = float4(
                     v.vertex.x + Positions[instanceID].x,
                     v.vertex.y + Positions[instanceID].y,
                     0,
@@ -39,7 +34,7 @@ Shader "Custom/TestShaderGPU"
                 );
 
                 o.pos = UnityObjectToClipPos(localPos);
-                o.color = float4(1,1,1,1);
+                o.color = Colors[instanceID];
 
                 return o;
             }

@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using log4net.Layout;
 using Rendering;
 using Unity.Mathematics;
 using UnityEngine;
@@ -88,6 +87,7 @@ namespace SimulationLogic
         [Header("Manager settings")]
         [SerializeField] private bool pause = true;
         [SerializeField] private bool realDeltaTime;
+        [SerializeField] private int targetFrameRate;
         [SerializeField] private bool twoSimulations;
         [SerializeField] private int offset;
         [SerializeField] private SimulationSettings[] settings;
@@ -112,7 +112,7 @@ namespace SimulationLogic
 
         private void Start()
         {
-            Application.targetFrameRate = 60;
+            Application.targetFrameRate = targetFrameRate;
             InitSimulationInstances();
             Invoke(nameof(Unpause), 0.5f);
         }

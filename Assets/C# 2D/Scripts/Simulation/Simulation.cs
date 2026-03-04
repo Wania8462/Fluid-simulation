@@ -68,6 +68,7 @@ namespace SimulationLogic
         private float2 realHalfBoundSize;
         private float2 realHalfBoundSizeBody;
         private const float particleRadius = 0.5f;
+        private float2 up = new(0, 1);
         private float dt;
 
         // Debug
@@ -98,7 +99,7 @@ namespace SimulationLogic
             });
 
             Watcher.ExecuteWithTimer("4. ExternalForces", ExternalForces);
-            Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
+            // Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
 
             Watcher.ExecuteWithTimer("6. Advance predicted pos", () =>
             {
@@ -110,8 +111,8 @@ namespace SimulationLogic
                 });
             });
 
-            Watcher.ExecuteWithTimer("7. Adjust springs", AdjustSprings);
-            Watcher.ExecuteWithTimer("8. Spring displacements", SpringDisplacements);
+            // Watcher.ExecuteWithTimer("7. Adjust springs", AdjustSprings);
+            // Watcher.ExecuteWithTimer("8. Spring displacements", SpringDisplacements);
 
             Watcher.ExecuteWithTimer("9. DoubleDensityRelaxation", DoubleDensityRelaxation);
 
@@ -144,7 +145,7 @@ namespace SimulationLogic
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    if (mag == 0 || mag > interactionRadius) continue;
+                    if (i == j || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
                     _densities[i] += FluidMath.QuadraticSpikyKernel(q);
@@ -170,10 +171,10 @@ namespace SimulationLogic
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    if (mag == 0 || mag > interactionRadius) continue;
+                    if (i == j || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    var r = FluidMath.UnitVector(_positions[i], _positions[j], mag);
+                    var r = mag > 0 ? FluidMath.UnitVector(_positions[i], _positions[j], mag) : up;
                     var displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,

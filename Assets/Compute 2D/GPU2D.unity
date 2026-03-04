@@ -164,6 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TestRender
   sim: {fileID: 263797679}
+  compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
 --- !u!1 &263797676
 GameObject:
@@ -210,10 +211,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 50
+  particleSquareLength: 200
   spacing: 2
-  useJitter: 1
-  jitterStrength: 0.2
+  useJitter: 0
+  jitterStrength: 0.5
   boundingBoxSizeOffset:
     x: 160
     y: 80
@@ -232,9 +233,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8887504430f5bf64aac7c469145f770d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  paused: 0
   settings:
     interactionRadius: 6
-    gravity: -0.2
+    gravity: -20
     mouseAttractiveness: 3
     mouseRadius: 1000
     collisionDamping: 0.086
@@ -251,6 +253,7 @@ MonoBehaviour:
     highViscosity: 0
     lowViscosity: 0.1
   particleRadius: 0.5
+  targetFrameRate: 200
   useRealDeltaTime: 0
   render: {fileID: 68674318}
   spawn: {fileID: 263797678}
@@ -317,7 +320,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 60
+  orthographic size: 192.3
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2

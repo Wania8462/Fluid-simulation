@@ -1,0 +1,13 @@
+#pragma kernel CalculateColors
+
+static const int ThreadGroupSize = 256;
+
+RWStructuredBuffer<float2> Velocities;
+RWStructuredBuffer<float4> Colors;
+
+[numthreads(ThreadGroupSize,1,1)]
+void CalculateColors (uint3 id : SV_DispatchThreadID)
+{
+    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
+    Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+}

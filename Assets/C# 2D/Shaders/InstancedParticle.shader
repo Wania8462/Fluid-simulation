@@ -49,7 +49,6 @@ Shader "Custom/InstancedColor"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
 
-                // 🔹 Access per-instance color
                 fixed4 col = UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
                 return col;
             }

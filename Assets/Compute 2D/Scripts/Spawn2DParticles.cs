@@ -29,19 +29,25 @@ public class Spawn2DParticles : MonoBehaviour
             }
         }
 
-        boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2); ;
+        boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+
+        if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
+            Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
+
         return pos;
     }
 
-    public float2[] InitializePreviousPositions() => new float2[(int)Math.Pow(particleSquareLength, 2)];
+    public float2[] InitializePreviousPositions() => new float2[particleSquareLength * particleSquareLength];
 
-    public float2[] InitializeVelocities() => new float2[(int)Math.Pow(particleSquareLength, 2)];
+    public float2[] InitializeVelocities() => new float2[particleSquareLength * particleSquareLength];
 
-    public float[] InitializeDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+    public float[] InitializeDensities() => new float[particleSquareLength * particleSquareLength];
 
-    public float[] InitializeNearDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+    public float[] InitializeNearDensities() => new float[particleSquareLength * particleSquareLength];
 
-    public float[] InitializeBoundaryDensities() => new float[(int)Math.Pow(particleSquareLength, 2)];
+    public float[] InitializeSprings() => new float[particleSquareLength * particleSquareLength];
+
+    public float[] InitializeBoundaryDensities() => new float[particleSquareLength * particleSquareLength * 50];
 
     public float2[] InitializeBodyDensityPoints(int resolution, float radius)
     {
@@ -56,5 +62,14 @@ public class Spawn2DParticles : MonoBehaviour
         return res;
     }
 
-    public float2 GetRealHalfBoundSize(float radius) => new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+    public float2 GetRealHalfBoundSize(float radius)
+    {
+        if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
+            boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+
+        if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
+            Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
+
+        return new float2(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+    }
 }
