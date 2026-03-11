@@ -15,14 +15,19 @@
 // try 64
 static const int ThreadGroupSize = 256;
 static const float2 ZeroImpulse = float2(0, 0);
+static const int FloatScale = 1000000;
 
 RWStructuredBuffer<float2> Positions;
 RWStructuredBuffer<float2> PrevPositions;
-RWStructuredBuffer<float2> ForceBuffers;
+RWStructuredBuffer<int> ForceBuffersX;
+RWStructuredBuffer<int> ForceBuffersY;
 RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> NearDensities;
 RWStructuredBuffer<float> Springs;
+
+RWStructuredBuffer<float> DebugFloat;
+RWStructuredBuffer<int> DebugInt;
 
 // todo add SP
 
@@ -49,6 +54,24 @@ const float particleRadius;
 const float2 mousePosition;
 const float dt;
 
+void SetForceBuffer(uint index, float2 value)
+{
+    ForceBuffersX[index] = (int)(value.x * FloatScale);
+    ForceBuffersY[index] = (int)(value.y * FloatScale);
+}
+
+void AtomicAddForceBuffer(uint index, float2 value)
+{
+    InterlockedAdd(ForceBuffersX[index], (int)(value.x * FloatScale));
+    InterlockedAdd(ForceBuffersY[index], (int)(value.y * FloatScale));
+}
+
+float2 ReadForceBuffer(uint index)
+{
+    return float2((float)ForceBuffersX[index] / FloatScale, 
+                  (float)ForceBuffersY[index] / FloatScale);
+}
+
 [numthreads(ThreadGroupSize,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
 {
@@ -64,7 +87,7 @@ void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles)
         return;
 
-    ForceBuffers[id.x] = ZeroImpulse;
+    SetForceBuffer(id.x, ZeroImpulse);
 }
 
 [numthreads(ThreadGroupSize,1,1)]
@@ -96,11 +119,10 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
         
         float q = mag / interactionRadius;
         float2 r = UnitVector(Positions[id.x], Positions[j], mag);
-        float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r);
+        float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
-        // todo add interlocked add
-        ForceBuffers[j] += displacement * 0.5f;
-        ForceBuffers[id.x] -= displacement * 0.5f;
+        AtomicAddForceBuffer(j, displacement);
+        AtomicAddForceBuffer(id.x, -displacement);
     }
 }
 
@@ -110,7 +132,7 @@ void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles)
         return;
 
-    Positions[id.x] += ForceBuffers[id.x];
+    Positions[id.x] += ReadForceBuffer(id.x);
 }
 
 [numthreads(ThreadGroupSize,1,1)]

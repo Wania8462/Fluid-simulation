@@ -237,7 +237,7 @@ MonoBehaviour:
     highViscosity: 0
     lowViscosity: 3
   particleRadius: 0.5
-  targetFrameRate: 60
+  targetFrameRate: 120
   useRealDeltaTime: 0
   render: {fileID: 441569833}
   spawn: {fileID: 1001776192}

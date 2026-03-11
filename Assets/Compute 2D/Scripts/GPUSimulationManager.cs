@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
+using NUnit.Framework.Interfaces;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -21,7 +23,8 @@ public struct SimulationSettings
 
     [Header("Density")]
     public float stiffness;
-    public float nearStiffness;    public float restDensity;
+    public float nearStiffness;
+    public float restDensity;
 
     [Header("Springs")]
     public float springInteractionRadius;
@@ -52,11 +55,14 @@ public class GPUSimulationManager : MonoBehaviour
     {
         { "Positions", null },
         { "PrevPositions", null },
-        { "ForceBuffers", null },
+        { "ForceBuffersX", null },
+        { "ForceBuffersY", null },
         { "Velocities", null },
         { "Densities", null },
         { "NearDensities", null },
         { "Springs", null },
+        { "DebugFloat", null },
+        { "DebugInt", null }
     };
 
     private readonly Dictionary<string, int> KernelIDs =
@@ -76,9 +82,10 @@ public class GPUSimulationManager : MonoBehaviour
     };
 
     public ThreadGroups threadGropus;
-    private const int floatSize = 4;
     private const int float2Size = 8;
     private const float fakeDT = 1 / 60f;
+
+    private readonly int debugLength = 100;
 
     private void Start()
     {
@@ -89,7 +96,7 @@ public class GPUSimulationManager : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.R))
             Setup();
-            
+
         if (Input.GetKeyDown(KeyCode.Space))
             paused = !paused;
 
@@ -150,11 +157,15 @@ public class GPUSimulationManager : MonoBehaviour
     {
         buffers["Positions"].SetData(spawn.InitializePositions());
         buffers["PrevPositions"].SetData(spawn.InitializePreviousPositions());
-        buffers["ForceBuffers"].SetData(spawn.InitializeForceBuffers());
+        buffers["ForceBuffersX"].SetData(spawn.InitializeForceBuffers());
+        buffers["ForceBuffersY"].SetData(spawn.InitializeForceBuffers());
         buffers["Velocities"].SetData(spawn.InitializeVelocities());
         buffers["Densities"].SetData(spawn.InitializeDensities());
         buffers["NearDensities"].SetData(spawn.InitializeNearDensities());
         buffers["Springs"].SetData(spawn.InitializeSprings());
+
+        buffers["DebugFloat"].SetData(new float[debugLength]);
+        buffers["DebugInt"].SetData(new int[debugLength]);
     }
 
     private void UpdateComputeSettings()
@@ -197,12 +208,16 @@ public class GPUSimulationManager : MonoBehaviour
     {
         buffers["Positions"] = new ComputeBuffer(numParticles, float2Size);
         buffers["PrevPositions"] = new ComputeBuffer(numParticles, float2Size);
-        buffers["ForceBuffers"] = new ComputeBuffer(numParticles, float2Size);
+        buffers["ForceBuffersX"] = new ComputeBuffer(numParticles, sizeof(int));
+        buffers["ForceBuffersY"] = new ComputeBuffer(numParticles, sizeof(int));
         buffers["Velocities"] = new ComputeBuffer(numParticles, float2Size);
-        buffers["Densities"] = new ComputeBuffer(numParticles, floatSize);
-        buffers["NearDensities"] = new ComputeBuffer(numParticles, floatSize);
+        buffers["Densities"] = new ComputeBuffer(numParticles, sizeof(float));
+        buffers["NearDensities"] = new ComputeBuffer(numParticles, sizeof(float));
         // Double the size if need more springs
-        buffers["Springs"] = new ComputeBuffer(numParticles * 50, floatSize);
+        buffers["Springs"] = new ComputeBuffer(numParticles * 50, sizeof(float));
+
+        buffers["DebugFloat"] = new ComputeBuffer(debugLength, sizeof(float));
+        buffers["DebugInt"] = new ComputeBuffer(debugLength, sizeof(int));
     }
 
     private void Dispatch(int kernelID)
@@ -214,6 +229,46 @@ public class GPUSimulationManager : MonoBehaviour
     {
         foreach (var buffer in buffers)
             buffer.Value?.Release();
+    }
+
+    private void GetDebugFloat()
+    {
+        AsyncGPUReadback.Request(
+            buffers["DebugFloat"],
+            request =>
+            {
+                if (!request.hasError)
+                {
+                    var data = request.GetData<float>();
+                    Debug.Log($"Add 2: Value init: ({data[0]}, {data[1]})");
+                    Debug.Log($"Read 6: Scaled read value: ({data[4]}, {data[5]})");
+                }
+
+                else
+                    Debug.Log("GPU simulation: Debug error");
+            }
+        );
+    }
+
+    private void GetDebugInt()
+    {
+        AsyncGPUReadback.Request(
+            buffers["DebugInt"],
+            request =>
+            {
+                if (!request.hasError)
+                {
+                    var data = request.GetData<int>();
+                    Debug.Log($"Add 1: Force buffer init: ({data[0]}, {data[1]})");
+                    Debug.Log($"Add 3: Value scaled: ({data[2]}, {data[3]})");
+                    Debug.Log($"Add 4: Add result ({data[4]}, {data[5]})");
+                    Debug.Log($"Read 5: Read value: ({data[6]}, {data[7]})");
+                }
+
+                else
+                    Debug.Log("GPU simulation: Debug error");
+            }
+        );
     }
 
     private void OnDestroy()

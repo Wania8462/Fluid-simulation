@@ -39,7 +39,7 @@ public class Spawn2DParticles : MonoBehaviour
     }
 
     public float2[] InitializePreviousPositions() => new float2[particleSquareLength * particleSquareLength];
-    public float2[] InitializeForceBuffers() => new float2[particleSquareLength * particleSquareLength];
+    public int[] InitializeForceBuffers() => new int[particleSquareLength * particleSquareLength];
 
     public float2[] InitializeVelocities() => new float2[particleSquareLength * particleSquareLength];
 
