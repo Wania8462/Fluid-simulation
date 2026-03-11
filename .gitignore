@@ -76,6 +76,3 @@ crashlytics-build.properties
 
 # Project files to keep local/out of version control
 .vscode/settings.json
-Assets/Resources/UniversalRenderPipelineGlobalSettings.asset
-Packages/manifest.json
-Packages/packages-lock.json

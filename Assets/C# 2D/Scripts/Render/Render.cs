@@ -30,13 +30,19 @@ namespace Rendering
         private const int submeshIndex = 0;
         private readonly int colors = Shader.PropertyToID("_Color");
         private readonly Vector3 scale = Vector3.one;
+#if UNITY_EDITOR
+        private readonly List<Matrix4x4> identityMatrixList = new();
+        private Material topMatertial;
+        private MaterialPropertyBlock lineMpb;
+        private Mesh lineMesh;
+#endif
 
         # region Fluid particles
         public void InitParticles(float2[] positions)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
-            fluidBuffer.mesh ??= MeshGenerator.Circle(particleRadius, resolution);
+            fluidBuffer.mesh = fluidBuffer.mesh != null ? fluidBuffer.mesh : MeshGenerator.Circle(particleRadius, resolution);
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
 
             foreach (var pos in positions)
@@ -50,17 +56,25 @@ namespace Rendering
             }
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities)
+        public void DrawParticles(float2[] positions, float2[] velocities, int[] highlightGreen = null, int[] highlightYellow = null)
         {
-            // todo add error catching
-            // todo try using regular for
-            // todo try removing colors buffer
-
             Parallel.For(0, positions.Length, i =>
             {
                 fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
                 fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
             });
+
+            if (highlightGreen != null)
+            {
+                for (int i = 0; i < highlightGreen.Length; i++)
+                    fluidBuffer.colorsBuffer[highlightGreen[i]] = Color.green;
+            }
+
+            if (highlightYellow != null)
+            {
+                for (int i = 0; i < highlightYellow.Length; i++)
+                    fluidBuffer.colorsBuffer[highlightYellow[i]] = Color.yellow;
+            }
 
             for (var i = 0; i < fluidBuffer.matrices.Count; i += batchSize)
             {
@@ -75,6 +89,36 @@ namespace Rendering
                     fluidBuffer.mpb
                 );
             }
+        }
+
+        public void DrawParticles(float2[] positions, float2[] velocities, int[] highlightGreen = null, int highlightYellow = -1)
+        {
+            if (highlightYellow != -1)
+                DrawParticles(positions, velocities, highlightGreen, new int[] { highlightYellow });
+
+            else
+                DrawParticles(positions, velocities, highlightGreen, null);
+        }
+
+        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, int[] highlightYellow = null)
+        {
+            if (highlightGreen != -1)
+                DrawParticles(positions, velocities, new int[] { highlightGreen }, highlightYellow);
+
+            else
+                DrawParticles(positions, velocities, null, highlightYellow);
+        }
+
+        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, int highlightYellow = -1)
+        {
+            if (highlightYellow != -1 && highlightYellow != -1)
+                DrawParticles(positions, velocities, new int[] { highlightGreen }, new int[] { highlightYellow });
+
+            else if (highlightYellow != -1)
+                DrawParticles(positions, velocities, null, new int[] { highlightYellow });
+
+            else if (highlightGreen != -1)
+                DrawParticles(positions, velocities, new int[] { highlightGreen }, null);
         }
 
         public void DeleteParticles()
@@ -216,7 +260,50 @@ namespace Rendering
             Destroy(customBuffer.mesh);
         }
 
-        # region Helpers
+        // If needs to be on prod, optimise
+        #region Debug
+#if UNITY_EDITOR
+        void Awake()
+        {
+            identityMatrixList.Add(Matrix4x4.identity);
+            topMatertial = new(mat) { renderQueue = 100_000 };
+            lineMpb = new();
+            lineMpb.SetColor(colors, new Color(1, 1, 1, 1));
+            lineMesh = MeshGenerator.Line(new float2(0, 0), new float2(1, 0), 1f);
+        }
+        
+        public void DrawLine(float2 start, float2 end, float width, Color color)
+        {
+            float2 dir = end - start;
+            float length = math.length(dir);
+            if (length < Mathf.Epsilon) return;
+
+            identityMatrixList[0] = Matrix4x4.TRS(
+                new Vector3(start.x, start.y),
+                Quaternion.Euler(0, 0, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg),
+                new Vector3(length, width, 1f));
+            lineMpb.SetColor(colors, color);
+
+            Graphics.DrawMeshInstanced(
+                lineMesh,
+                0,
+                topMatertial,
+                identityMatrixList,
+                lineMpb,
+                UnityEngine.Rendering.ShadowCastingMode.Off,
+                false
+            );
+        }
+
+        public void DrawLines(float2 start, float2[] ends, float width)
+        {
+            for (int i = 0; i < ends.Length; i++)
+                DrawLine(start, ends[i], width, Color.white);
+        }
+#endif
+        #endregion
+
+        #region Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {

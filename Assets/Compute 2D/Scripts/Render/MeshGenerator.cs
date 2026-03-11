@@ -5,6 +5,18 @@ public static class MeshGenerator
 {
     public static Mesh Circle(float radius, int resolution)
     {
+        if (radius <= 0)
+        {
+            Debug.LogError($"Mesh generator: Mesh can't have radius of {radius}");
+            return null;
+        }
+
+        if (resolution <= 0)
+        {
+            Debug.LogError($"Mesh generator: Mesh can't have resolution of {resolution}");
+            return null;
+        }
+
         Vector3[] verticies = new Vector3[4 * resolution + 1];
         int[] triangles = new int[resolution * 12];
 

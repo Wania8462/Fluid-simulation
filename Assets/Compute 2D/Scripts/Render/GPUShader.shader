@@ -19,7 +19,7 @@ Shader "Custom/TestShaderGPU"
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float4 color : COLOR0;
+                nointerpolation float4 color : COLOR0;
             };
 
             v2f vert(appdata_base v, uint instanceID : SV_InstanceID)

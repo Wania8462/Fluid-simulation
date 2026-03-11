@@ -595,10 +595,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   particleSquareLength: 50
-  spawnCircle: 0
+  spawnCircle: 1
   spacing: 2
-  useJitter: 0
-  jitterStrength: 0.2
+  useJitter: 1
+  jitterStrength: 0
   boundingBoxSizeOffset:
     x: 160
     y: 80
@@ -748,7 +748,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   pause: 1
   realDeltaTime: 0
-  targetFrameRate: 120
+  targetFrameRate: 60
   twoSimulations: 0
   offset: 186
   settings:
@@ -830,8 +830,6 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-  trackParticle: 1200
-  debugDisplay: 2
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
   inputField: {fileID: 1902331580}

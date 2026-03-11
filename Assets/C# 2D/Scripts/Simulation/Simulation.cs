@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -50,7 +51,11 @@ namespace SimulationLogic
         // Fluid particles
         public float2[] _positions { get; private set; }
         public float2[] _velocities { get; private set; }
+        private float2[] _forceBuffers;
         private float2[] _prevPositions;
+#if UNITY_EDITOR
+        public float2[] _prevVelocities { get; private set; }
+#endif
         private float[] _densities;
         private float[] _nearDensities;
         private float[] _borderDensities;
@@ -124,7 +129,11 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("12. Calculate velocity", () =>
             {
-                Parallel.For(0, _positions.Length, i => { _velocities[i] = (_positions[i] - _prevPositions[i]) / dt; });
+                Parallel.For(0, _positions.Length, i =>
+                {
+                    _prevVelocities[i] = _velocities[i];
+                    _velocities[i] = (_positions[i] - _prevPositions[i]) / dt;
+                });
             });
         }
 
@@ -136,7 +145,13 @@ namespace SimulationLogic
 
         public void DoubleDensityRelaxation()
         {
-            Parallel.For(0, _positions.Length, i =>
+            for (int i = 0; i < _positions.Length; i++)
+                _forceBuffers[i] = new(0, 0);
+
+            ParallelOptions options = new();
+            options.MaxDegreeOfParallelism = 20;
+
+            Parallel.For(0, _positions.Length, options, i =>
             {
                 _densities[i] = 0;
                 _nearDensities[i] = 0;
@@ -145,7 +160,7 @@ namespace SimulationLogic
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    if (i == j || mag > interactionRadius) continue;
+                    if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
                     _densities[i] += FluidMath.QuadraticSpikyKernel(q);
@@ -166,15 +181,14 @@ namespace SimulationLogic
                 var pressure = stiffness * (_densities[i] - restDensity);
                 var nearPressure = nearStiffness * _nearDensities[i];
                 var borderPressure = borderStiffness * _borderDensities[i];
-                float2 deltaX = new(0, 0);
 
                 foreach (var j in neighbours[i])
                 {
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    if (i == j || mag > interactionRadius) continue;
+                    if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    var r = mag > 0 ? FluidMath.UnitVector(_positions[i], _positions[j], mag) : up;
+                    var r = FluidMath.UnitVector(_positions[i], _positions[j], mag);
                     var displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,
@@ -182,8 +196,8 @@ namespace SimulationLogic
                         nearPressure,
                         r);
 
-                    _positions[j] += displacement / 2;
-                    deltaX -= displacement / 2;
+                    _forceBuffers[j] += displacement / 2;
+                    _forceBuffers[i] -= displacement / 2;
                 }
 
                 if (useParticlesAsBorder)
@@ -197,9 +211,10 @@ namespace SimulationLogic
                         _positions[i] -= dt * dt * borderPressure * (1 - q) * r;
                     }
                 }
-
-                _positions[i] += deltaX;
             });
+
+            for (int i = 0; i < _positions.Length; i++)
+                _positions[i] += _forceBuffers[i];
         }
 
         public void ApplyViscosity()
@@ -359,7 +374,7 @@ namespace SimulationLogic
             var submerged = 0f;
             var tempRadiusSq = body.densityRadius * body.densityRadius;
             var upUnitVector = new float2(0, 1);
-        
+
 
             Parallel.For(0, body.densityResolution, i =>
             {
@@ -445,6 +460,10 @@ namespace SimulationLogic
             _positions = spawn.InitializePositions();
             _prevPositions = spawn.InitializePreviousPositions();
             _velocities = spawn.InitializeVelocities();
+#if UNITY_EDITOR
+            _prevVelocities = spawn.InitializeVelocities();
+#endif
+            _forceBuffers = spawn.InitializeForcesBuffer();
             _densities = spawn.InitializeDensities();
             _nearDensities = spawn.InitializeNearDensities();
             _borderDensities = spawn.InitializeBoundaryDensities();
@@ -478,7 +497,7 @@ namespace SimulationLogic
             mouseRadius = settings.mouseRadius;
             collisionDamp = settings.collisionDamping;
             useParticlesAsBorder = settings.useParticlesAsBorder;
-            
+
             body = settings.body;
 
             stiffness = settings.stiffness;
@@ -493,6 +512,51 @@ namespace SimulationLogic
             plasticity = settings.plasticity;
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
+        }
+
+        public int[] GetNeighbourParticles(int particleIndex)
+        {
+            List<int> indices = new();
+            var neighbours = particleSP.GetNeighbours(_positions[particleIndex]);
+
+            foreach (int n in neighbours)
+            {
+                var dist = FluidMath.Distance(_positions[particleIndex], _positions[n]);
+                if (dist <= interactionRadius && n != particleIndex)
+                    indices.Add(n);
+            }
+
+            return indices.ToArray();
+        }
+
+        public int[] GetNeighbourParticles(float2 pos)
+        {
+            List<int> indices = new();
+            var neighbours = particleSP.GetNeighbours(pos);
+
+            foreach (int n in neighbours)
+            {
+                var dist = FluidMath.Distance(pos, _positions[n]);
+                if (dist <= interactionRadius)
+                    indices.Add(n);
+            }
+
+            return indices.ToArray();
+        }
+
+        public float2[] GetNeighbourParticlesPositions(float2 pos)
+        {
+            List<float2> indices = new();
+            var neighbours = particleSP.GetNeighbours(pos);
+
+            foreach (int n in neighbours)
+            {
+                var dist = FluidMath.Distance(pos, _positions[n]);
+                if (dist <= interactionRadius)
+                    indices.Add(_positions[n]);
+            }
+
+            return indices.ToArray();
         }
 
         // Draws the boundary box in scene

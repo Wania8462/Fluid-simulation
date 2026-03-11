@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using Unity.Collections;
+using System.Threading;
+using System.Threading.Tasks;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [Serializable]
 public struct SimulationSettings
@@ -14,16 +15,13 @@ public struct SimulationSettings
     public float mouseAttractiveness;
     public float mouseRadius;
     public float collisionDamping;
-    public bool useParticlesAsBorder;
 
     // [Header("Body settings")]
     // public Body body;
 
     [Header("Density")]
     public float stiffness;
-    public float nearStiffness;
-    public float borderStiffness;
-    public float restDensity;
+    public float nearStiffness;    public float restDensity;
 
     [Header("Springs")]
     public float springInteractionRadius;
@@ -54,6 +52,7 @@ public class GPUSimulationManager : MonoBehaviour
     {
         { "Positions", null },
         { "PrevPositions", null },
+        { "ForceBuffers", null },
         { "Velocities", null },
         { "Densities", null },
         { "NearDensities", null },
@@ -64,38 +63,33 @@ public class GPUSimulationManager : MonoBehaviour
     new()
     {
         { "ExternalForces", 0 },
-        { "DoubleDensityRelaxation", 1 },
-        { "ApplyViscosity", 2 },
-        { "AdjustSprings", 3 },
-        { "SpringDisplacements", 4 },
-        { "ResolveBoundaries", 5 },
-        { "AttractToMouse", 6 },
-        { "AdvancePredictedPositions", 7 },
-        { "CalculateVelocity", 8 }
+        { "ClearForceBuffers", 1 },
+        { "DoubleDensityRelaxation", 2 },
+        { "ApplyForceBuffers", 3 },
+        { "ApplyViscosity", 4 },
+        { "AdjustSprings", 5 },
+        { "SpringDisplacements", 6 },
+        { "ResolveBoundaries", 7 },
+        { "AttractToMouse", 8 },
+        { "AdvancePredictedPositions", 9 },
+        { "CalculateVelocity", 10 }
     };
 
-    public TheradGroups threadGropus;
+    public ThreadGroups threadGropus;
     private const int floatSize = 4;
     private const int float2Size = 8;
     private const float fakeDT = 1 / 60f;
 
     private void Start()
     {
-        Application.targetFrameRate = targetFrameRate;
-        numParticles = spawn.GetNumberOfParticles();
-
-        CreateBuffers();
-        SetBuffers();
-        SetComputeSettings();
-        SetInitialBufferData();
-        GetThreadGroups();
-        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
-
-        render.Setup();
+        Setup();
     }
 
     private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.R))
+            Setup();
+            
         if (Input.GetKeyDown(KeyCode.Space))
             paused = !paused;
 
@@ -112,11 +106,13 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetVector("mousePosition", new Vector4(Input.mousePosition.x, Input.mousePosition.y));
 
         Dispatch(KernelIDs["ExternalForces"]);
-        Dispatch(KernelIDs["ApplyViscosity"]);
+        // Dispatch(KernelIDs["ApplyViscosity"]);
         Dispatch(KernelIDs["AdvancePredictedPositions"]);
         // Dispatch(KernelIDs["AdjustSprings"]);
         // Dispatch(KernelIDs["SpringDisplacements"]);
+        Dispatch(KernelIDs["ClearForceBuffers"]);
         Dispatch(KernelIDs["DoubleDensityRelaxation"]);
+        Dispatch(KernelIDs["ApplyForceBuffers"]);
 
         // if (Input.GetMouseButton(0))
         //     Dispatch(KernelIDs["AttractToMouse"]);
@@ -127,17 +123,34 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void OnValidate()
     {
-        // todo add check if the settings have changed and only update if they have
         if (buffers["Positions"] != null)
         {
+            Application.targetFrameRate = targetFrameRate;
             UpdateComputeSettings();
         }
+    }
+
+    private void Setup()
+    {
+        Application.targetFrameRate = targetFrameRate;
+        numParticles = spawn.GetNumberOfParticles();
+
+        ReleaseBuffers();
+        CreateBuffers();
+        SetBuffers();
+        SetComputeSettings();
+        SetInitialBufferData();
+        threadGropus = new ThreadGroups(KernelIDs["ExternalForces"], compute);
+        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
+
+        render.Setup();
     }
 
     private void SetInitialBufferData()
     {
         buffers["Positions"].SetData(spawn.InitializePositions());
-        buffers["PrevPositions"].SetData(spawn.InitializePositions());
+        buffers["PrevPositions"].SetData(spawn.InitializePreviousPositions());
+        buffers["ForceBuffers"].SetData(spawn.InitializeForceBuffers());
         buffers["Velocities"].SetData(spawn.InitializeVelocities());
         buffers["Densities"].SetData(spawn.InitializeDensities());
         buffers["NearDensities"].SetData(spawn.InitializeNearDensities());
@@ -184,6 +197,7 @@ public class GPUSimulationManager : MonoBehaviour
     {
         buffers["Positions"] = new ComputeBuffer(numParticles, float2Size);
         buffers["PrevPositions"] = new ComputeBuffer(numParticles, float2Size);
+        buffers["ForceBuffers"] = new ComputeBuffer(numParticles, float2Size);
         buffers["Velocities"] = new ComputeBuffer(numParticles, float2Size);
         buffers["Densities"] = new ComputeBuffer(numParticles, floatSize);
         buffers["NearDensities"] = new ComputeBuffer(numParticles, floatSize);
@@ -196,26 +210,34 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(kernelID, threadGropus.x, threadGropus.y, threadGropus.y);
     }
 
-    private void GetThreadGroups()
+    private void ReleaseBuffers()
     {
-        compute.GetKernelThreadGroupSizes(0, out uint x, out uint y, out uint z);
-        threadGropus.x = (int)x;
-        threadGropus.y = (int)y;
-        threadGropus.z = (int)z;
+        foreach (var buffer in buffers)
+            buffer.Value?.Release();
     }
 
     private void OnDestroy()
     {
-        foreach (var buffer in buffers)
-        {
-            buffer.Value?.Release();
-        }
+        ReleaseBuffers();
     }
 }
 
-public struct TheradGroups
+public class ThreadGroups
 {
     public int x;
     public int y;
     public int z;
+
+    public ThreadGroups(int kernelID, ComputeShader compute)
+    {
+        GetThreadGroups(kernelID, compute);
+    }
+
+    public void GetThreadGroups(int kernelID, ComputeShader compute)
+    {
+        compute.GetKernelThreadGroupSizes(0, out uint xt, out uint yt, out uint zt);
+        x = (int)xt;
+        y = (int)yt;
+        z = (int)zt;
+    }
 }

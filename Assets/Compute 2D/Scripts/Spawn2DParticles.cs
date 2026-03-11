@@ -1,5 +1,6 @@
 using System;
 using Unity.Mathematics;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class Spawn2DParticles : MonoBehaviour
@@ -9,7 +10,7 @@ public class Spawn2DParticles : MonoBehaviour
     [SerializeField] private float spacing = 2;
     [SerializeField] private bool useJitter = true;
     [SerializeField] private float jitterStrength = 0.2f;
-    [SerializeField] private float2 boundingBoxSizeOffset = new float2(160, 80);
+    [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
     public float2 boundingBoxSize;
 
     public int GetNumberOfParticles() => particleSquareLength * particleSquareLength;
@@ -38,6 +39,7 @@ public class Spawn2DParticles : MonoBehaviour
     }
 
     public float2[] InitializePreviousPositions() => new float2[particleSquareLength * particleSquareLength];
+    public float2[] InitializeForceBuffers() => new float2[particleSquareLength * particleSquareLength];
 
     public float2[] InitializeVelocities() => new float2[particleSquareLength * particleSquareLength];
 
@@ -64,12 +66,9 @@ public class Spawn2DParticles : MonoBehaviour
 
     public float2 GetRealHalfBoundSize(float radius)
     {
-        if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
+        if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
             boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
-
-        if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
-            Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
-
-        return new float2(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+            
+        return new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
     }
 }

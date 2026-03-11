@@ -1,5 +1,7 @@
 #pragma kernel ExternalForces
+#pragma kernel ClearForceBuffers
 #pragma kernel DoubleDensityRelaxation
+#pragma kernel ApplyForceBuffers
 #pragma kernel ApplyViscosity
 #pragma kernel AdjustSprings
 #pragma kernel SpringDisplacements
@@ -10,11 +12,13 @@
 
 #include "./FluidMath.hlsl"
 
+// try 64
 static const int ThreadGroupSize = 256;
 static const float2 ZeroImpulse = float2(0, 0);
 
 RWStructuredBuffer<float2> Positions;
 RWStructuredBuffer<float2> PrevPositions;
+RWStructuredBuffer<float2> ForceBuffers;
 RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> NearDensities;
@@ -55,42 +59,58 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(ThreadGroupSize,1,1)]
+void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    ForceBuffers[id.x] = ZeroImpulse;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
 void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
 
-        Densities[id.x] = 0;
-        NearDensities[id.x] = 0;
+    Densities[id.x] = 0;
+    NearDensities[id.x] = 0;
 
-        for (uint i = 0; i < numParticles; i++)
-        {
-            float mag = Distance(Positions[id.x], Positions[i]);
-            if (mag == 0 || mag > interactionRadius) continue;
+    for (uint i = 0; i < numParticles; i++)
+    {
+        float mag = Distance(Positions[id.x], Positions[i]);
+        if (mag == 0 || mag > interactionRadius) continue;
 
-            float q = mag / interactionRadius;
-            Densities[id.x] += QuadraticSpikyKernel(q);
-            NearDensities[id.x] += CubicSpikyKernel(q);
-        }
+        float q = mag / interactionRadius;
+        Densities[id.x] += QuadraticSpikyKernel(q);
+        NearDensities[id.x] += CubicSpikyKernel(q);
+    }
 
-        float pressure = stiffness * (Densities[id.x] - restDensity);
-        float nearPressure = nearStiffness * NearDensities[id.x];
-        float2 deltaX = ZeroImpulse;
+    float pressure = stiffness * (Densities[id.x] - restDensity);
+    float nearPressure = nearStiffness * NearDensities[id.x];
 
-        for (uint j = 0; j < numParticles; j++)
-        {
-            float mag = Distance(Positions[id.x], Positions[j]);
-            if (mag == 0 || mag > interactionRadius) continue;
-            
-            float q = mag / interactionRadius;
-            float2 r = UnitVector(Positions[id.x], Positions[j], mag);
-            float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r);
+    for (uint j = 0; j < numParticles; j++)
+    {
+        float mag = Distance(Positions[id.x], Positions[j]);
+        if (mag == 0 || mag > interactionRadius) continue;
+        
+        float q = mag / interactionRadius;
+        float2 r = UnitVector(Positions[id.x], Positions[j], mag);
+        float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r);
 
-            Positions[j] += displacement / 2;
-            deltaX -= displacement / 2;
-        }
+        // todo add interlocked add
+        ForceBuffers[j] += displacement * 0.5f;
+        ForceBuffers[id.x] -= displacement * 0.5f;
+    }
+}
 
-        Positions[id.x] += deltaX;
+[numthreads(ThreadGroupSize,1,1)]
+void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    Positions[id.x] += ForceBuffers[id.x];
 }
 
 [numthreads(ThreadGroupSize,1,1)]

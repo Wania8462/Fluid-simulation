@@ -1,10 +1,62 @@
 using System;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Rendering
 {
     public static class MeshGenerator
     {
+        public static Mesh Rectangle(float width, float height)
+        {
+            Vector3[] verticies = new Vector3[]
+            {
+                // Top left
+                new(-0.5f * width, 0.5f * height),
+                // Top right
+                new(0.5f * width, 0.5f * height),
+                // Bottom left
+                new(-0.5f * width, -0.5f * height),
+                // Bottom right
+                new(0.5f * width, -0.5f * height)
+            };
+
+            int[] triangles = new int[] { 2, 0, 1, 3, 2, 1 };
+            Mesh mesh = new()
+            {
+                vertices = verticies,
+                triangles = triangles
+            };
+
+            return mesh;
+        }
+
+        public static Mesh Line(float2 start, float2 end, float width)
+        {
+            float2 perpendicular = end - start;
+            float magnitude = math.length(perpendicular);
+            if (magnitude < Mathf.Epsilon) return null;
+            perpendicular = new (-perpendicular.y, perpendicular.x);
+            perpendicular /= Mathf.Sqrt(perpendicular.x * perpendicular.x + perpendicular.y * perpendicular.y);
+            perpendicular *= width * 0.5f;
+
+            Vector3[] verticies = new Vector3[]
+            {
+                new(start.x + perpendicular.x, start.y + perpendicular.y),
+                new(start.x - perpendicular.x, start.y - perpendicular.y),
+                new(end.x + perpendicular.x, end.y + perpendicular.y),
+                new(end.x - perpendicular.x, end.y - perpendicular.y)
+            };
+            
+            int[] triangles = new int[] { 1, 0, 2, 1, 2, 3 };
+            Mesh mesh = new()
+            {
+                vertices = verticies,
+                triangles = triangles
+            };
+
+            return mesh;
+        }
+
         public static Mesh Circle(float radius, int resolution)
         {
             Vector3[] verticies = new Vector3[4 * resolution + 1];

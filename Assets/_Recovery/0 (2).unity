@@ -594,11 +594,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 50
-  spawnCircle: 0
+  particleSquareLength: 80
   spacing: 2
-  useJitter: 0
-  jitterStrength: 0.2
+  useJitter: 1
+  jitterStrength: 0
   boundingBoxSizeOffset:
     x: 160
     y: 80
@@ -790,7 +789,7 @@ MonoBehaviour:
     springDeformationLimit: 0
     plasticity: 0.05
     highViscosity: 0
-    lowViscosity: 0
+    lowViscosity: 0.2
   - interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 1
@@ -830,8 +829,6 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-  trackParticle: 1200
-  debugDisplay: 2
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
   inputField: {fileID: 1902331580}
