@@ -329,11 +329,13 @@ namespace SimulationLogic
             var collisionRadiusSq = (body.radius + particleRadius) * (body.radius + particleRadius);
             var minDistance = body.radius + particleRadius;
 
+            // remove the optiminsations for simplicity
             Parallel.ForEach(bodyNeighbours, n =>
             {
                 var distSq = FluidMath.DistanceSq(body.position, _positions[n]);
                 if (!(distSq < collisionRadiusSq)) return;
 
+                // try using absolute value
                 var relativeVelocity = _velocities[n] - body.velocity;
                 var normalVector = FluidMath.UnitVector(body.position,
                     _positions[n],
@@ -343,6 +345,7 @@ namespace SimulationLogic
                 force += dt * normalVelocity;
             });
 
+            // try interpreting "modify" differently
             body.velocity += force;
             body.position += dt * body.velocity;
 
@@ -357,6 +360,7 @@ namespace SimulationLogic
                     Mathf.Sqrt(distSq));
                 var normalVelocity = math.dot(relativeVelocity, normalVector) * normalVector;
 
+                // try adding
                 _positions[n] -= dt * normalVelocity;
 
                 distSq = FluidMath.DistanceSq(body.position, _positions[n]);
