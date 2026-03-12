@@ -70,6 +70,7 @@ namespace Rendering
                     fluidBuffer.colorsBuffer[highlightGreen[i]] = Color.green;
             }
 
+            // Yellow gets priority
             if (highlightYellow != null)
             {
                 for (int i = 0; i < highlightYellow.Length; i++)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GluonGui.Dialog;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -56,7 +57,7 @@ namespace SimulationLogic
             List<int> result = new();
             var scaled = (position - offset) / length;
             var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
-    
+
             foreach (var (offsetX, offsetY) in neighbours)
             {
                 var nX = gridX + offsetX;
@@ -87,10 +88,26 @@ namespace SimulationLogic
             }
         }
 
+#if UNITY_EDITOR
+        public float2[] GetNeighboursDimentions(float2 position)
+        {
+            var result = new float2[4];
+            var scaled = (position - offset) / length;
+            var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
+
+            result[0] = new float2(offset.x + (gridX - 1) * length, offset.y + (gridY - 1) * length);
+            result[1] = new float2(offset.x + (gridX + 2) * length, offset.y + (gridY - 1) * length);
+            result[2] = new float2(offset.x + (gridX - 1) * length, offset.y + (gridY + 2) * length);
+            result[3] = new float2(offset.x + (gridX + 2) * length, offset.y + (gridY + 2) * length);
+
+            return result;
+        }
+#endif
+
         private int GetGridIndex(float2 pos)
         {
             var scaled = (pos - offset) / length;
-            var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1), 
+            var (gridX, gridY) = ((int)Math.Clamp(scaled.x, 0, columns - 1),
                                         (int)Math.Clamp(scaled.y, 0, rows - 1));
             return gridX + gridY * columns;
         }

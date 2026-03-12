@@ -767,6 +767,7 @@ MonoBehaviour:
       densityResolution: 10
       densityRadius: 2
       upthrustStrength: 1
+      friction: 0
       prevPosition:
         x: 0
         y: 0
@@ -806,6 +807,7 @@ MonoBehaviour:
       densityResolution: 10
       densityRadius: 2
       upthrustStrength: 1
+      friction: 0
       prevPosition:
         x: 0
         y: 0
@@ -831,7 +833,9 @@ MonoBehaviour:
     highViscosity: 0
     lowViscosity: 0.2
   trackParticle: 1200
-  debugDisplay: 2
+  particleDebugDisplay: 0
+  bodyDebug: 1
+  bodyDebugDisplay: 0
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}
   inputField: {fileID: 1902331580}

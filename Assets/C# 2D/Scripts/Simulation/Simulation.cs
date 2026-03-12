@@ -81,9 +81,11 @@ namespace SimulationLogic
 
         public Simulation(SimulationSettings settings, SpawnParticles spawn)
         {
-            SettingsParser(settings);
+            SetSettings(settings);
             this.spawn = spawn;
         }
+
+        #region Simulation
 
         public void SimulationStep(float2 mousePos, float deltatime)
         {
@@ -116,8 +118,8 @@ namespace SimulationLogic
                 });
             });
 
-            // Watcher.ExecuteWithTimer("7. Adjust springs", AdjustSprings);
-            // Watcher.ExecuteWithTimer("8. Spring displacements", SpringDisplacements);
+            Watcher.ExecuteWithTimer("7. Adjust springs", AdjustSprings);
+            Watcher.ExecuteWithTimer("8. Spring displacements", SpringDisplacements);
 
             Watcher.ExecuteWithTimer("9. DoubleDensityRelaxation", DoubleDensityRelaxation);
 
@@ -135,6 +137,8 @@ namespace SimulationLogic
                     _velocities[i] = (_positions[i] - _prevPositions[i]) / dt;
                 });
             });
+
+            DrawDebugGrid(Color.green, particleSP);
         }
 
         public void ExternalForces()
@@ -159,6 +163,7 @@ namespace SimulationLogic
 
                 foreach (var j in neighbours[i])
                 {
+                    // try distance squared
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
@@ -245,7 +250,6 @@ namespace SimulationLogic
             });
         }
 
-        #region Springs
         public void AdjustSprings()
         {
             Parallel.For(0, _positions.Length, i =>
@@ -317,7 +321,6 @@ namespace SimulationLogic
                 _positions[j] += displacement / 2;
             });
         }
-        #endregion
 
         public void ResolveCollisions()
         {
@@ -326,24 +329,28 @@ namespace SimulationLogic
             body.velocity.y += dt * -2;
 
             var force = float2.zero;
-            var collisionRadiusSq = (body.radius + particleRadius) * (body.radius + particleRadius);
-            var minDistance = body.radius + particleRadius;
+            var collisionRad = body.radius + particleRadius;
+
+            var debug = new ConcurrentBag<int>();
 
             // remove the optiminsations for simplicity
             Parallel.ForEach(bodyNeighbours, n =>
             {
-                var distSq = FluidMath.DistanceSq(body.position, _positions[n]);
-                if (!(distSq < collisionRadiusSq)) return;
+                var dist = FluidMath.Distance(body.position, _positions[n]);
+                if (!(dist <= collisionRad)) return;
+                debug.Add(n);
 
                 // try using absolute value
                 var relativeVelocity = _velocities[n] - body.velocity;
                 var normalVector = FluidMath.UnitVector(body.position,
                     _positions[n],
-                    Mathf.Sqrt(distSq));
+                    dist);
                 var normalVelocity = math.dot(relativeVelocity, normalVector) * normalVector;
 
                 force += dt * normalVelocity;
             });
+
+            Debug.Log(debug.Count);
 
             // try interpreting "modify" differently
             body.velocity += force;
@@ -351,25 +358,25 @@ namespace SimulationLogic
 
             Parallel.ForEach(bodyNeighbours, n =>
             {
-                var distSq = FluidMath.DistanceSq(body.position, _positions[n]);
-                if (!(distSq < collisionRadiusSq)) return;
+                var dist = FluidMath.Distance(body.position, _positions[n]);
+                if (!(dist <= collisionRad)) return;
 
                 var relativeVelocity = _velocities[n] - body.velocity;
                 var normalVector = FluidMath.UnitVector(body.position,
                     _positions[n],
-                    Mathf.Sqrt(distSq));
+                    dist);
                 var normalVelocity = math.dot(relativeVelocity, normalVector) * normalVector;
 
                 // try adding
                 _positions[n] -= dt * normalVelocity;
 
-                distSq = FluidMath.DistanceSq(body.position, _positions[n]);
-                if (!(distSq < collisionRadiusSq)) return;
+                dist = FluidMath.Distance(body.position, _positions[n]);
+                if (!(dist < collisionRad)) return;
 
                 var unitVector = FluidMath.UnitVector(body.position,
                     _positions[n],
-                    MathF.Sqrt(distSq));
-                _positions[n] = body.position + unitVector * minDistance;
+                    dist);
+                _positions[n] = body.position + unitVector * collisionRad;
             });
         }
 
@@ -434,8 +441,6 @@ namespace SimulationLogic
             }
         }
 
-        #region Miscellaneous
-
         public void AttractToMouse(float2 mousePos)
         {
             if (Input.GetMouseButton(0))
@@ -457,6 +462,9 @@ namespace SimulationLogic
                 body.velocity = float2.zero;
             }
         }
+
+        #endregion
+        #region Miscellaneous
 
         public void SetScene()
         {
@@ -493,7 +501,13 @@ namespace SimulationLogic
             body.densityPoints = spawn.InitializeBodyDensityPoints(body.densityResolution, body.radius);
         }
 
-        public void SettingsParser(SimulationSettings settings)
+        public void SetSettings(SimulationSettings settings)
+        {
+            UpdateSettings(settings);
+            body = settings.body;
+        }
+
+        public void UpdateSettings(SimulationSettings settings)
         {
             interactionRadius = settings.interactionRadius;
             gravity = settings.gravity;
@@ -502,7 +516,12 @@ namespace SimulationLogic
             collisionDamp = settings.collisionDamping;
             useParticlesAsBorder = settings.useParticlesAsBorder;
 
-            body = settings.body;
+            body.radius = settings.body.radius;
+            body.density = settings.body.density;
+            body.densityResolution = settings.body.densityResolution;
+            body.densityRadius = settings.body.densityRadius;
+            body.upthrustStrength = settings.body.upthrustStrength;
+            body.friction = settings.body.friction;
 
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
@@ -517,6 +536,33 @@ namespace SimulationLogic
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
         }
+
+        #endregion
+        #region Debug purpoused
+
+        public float2[] GetBodySPDimentions() => bodySP.GetNeighboursDimentions(body.position);
+
+        public int[] GetBodySPNeighbours() => bodySP.GetNeighbours(body.position).ToArray();
+
+        public int[] GetBodyNeighbours()
+        {
+            List<int> indices = new();
+            var neighbours = bodySP.GetNeighbours(body.position);
+            var collisionRad = body.radius + particleRadius;
+
+            foreach (int n in neighbours)
+            {
+                var dist = FluidMath.Distance(body.position, _positions[n]);
+                if (dist <= collisionRad)
+                    indices.Add(n);
+            }
+
+            return indices.ToArray();
+        }
+
+        public float2[] GetParticleSPDimentions(int particleIndex) => particleSP.GetNeighboursDimentions(_positions[particleIndex]);
+
+        public int[] GetParticlesSPNeighbours(int particleIndex) => particleSP.GetNeighbours(_positions[particleIndex]).ToArray();
 
         public int[] GetNeighbourParticles(int particleIndex)
         {
