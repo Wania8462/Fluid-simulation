@@ -19,6 +19,7 @@ namespace SimulationLogic
         private float mouseRadius;
         private float collisionDamp;
         private bool useParticlesAsBorder;
+        private bool includeBody;
 
         // Bodies
         public Body body; // maybe change to prop later
@@ -123,8 +124,11 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("9. DoubleDensityRelaxation", DoubleDensityRelaxation);
 
-            // Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
-            // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
+            if (includeBody)
+            {
+                Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
+                // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
+            }
 
             AttractToMouse(mousePos);
             Watcher.ExecuteWithTimer("11. Resolve boundaries", ResolveBoundaries);
@@ -333,7 +337,6 @@ namespace SimulationLogic
 
             var debug = new ConcurrentBag<int>();
 
-            // remove the optiminsations for simplicity
             Parallel.ForEach(bodyNeighbours, n =>
             {
                 var dist = FluidMath.Distance(body.position, _positions[n]);
@@ -349,8 +352,6 @@ namespace SimulationLogic
 
                 force += dt * normalVelocity;
             });
-
-            Debug.Log(debug.Count);
 
             // try interpreting "modify" differently
             body.velocity += force;
@@ -514,6 +515,7 @@ namespace SimulationLogic
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
             collisionDamp = settings.collisionDamping;
+            includeBody = settings.includeBody;
             useParticlesAsBorder = settings.useParticlesAsBorder;
 
             body.radius = settings.body.radius;

@@ -757,7 +757,7 @@ MonoBehaviour:
     mouseAttractiveness: 0.5
     mouseRadius: 1000
     collisionDamping: 0.083
-    includeBody: 1
+    includeBody: 0
     useParticlesAsBorder: 0
     body:
       radius: 10
@@ -834,9 +834,9 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-  trackParticle: -1
+  trackParticle: 1200
   particleDebugDisplay: 0
-  bodyDebug: 1
+  bodyDebug: 0
   bodyDebugDisplay: 0
   spawn: {fileID: 890908187}
   render: {fileID: 452458855}

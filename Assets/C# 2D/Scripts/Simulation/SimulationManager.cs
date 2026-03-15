@@ -46,6 +46,7 @@ namespace SimulationLogic
         public float mouseAttractiveness;
         public float mouseRadius;
         public float collisionDamping;
+        public bool includeBody;
         public bool useParticlesAsBorder;
 
         [Header("Body settings")]
@@ -203,7 +204,7 @@ namespace SimulationLogic
                 {
                     mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                     Watcher.ExecuteWithTimer("1. Step", () => { simulations[FirstSim].SimulationStep(mousePos, dt); });
-                    LogFrameData();
+                    // LogFrameData();
                 }
             }
 
@@ -245,13 +246,17 @@ namespace SimulationLogic
 #if UNITY_STANDALONE
                 render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, null, null);
                 // render.DrawBorderParticles();
-                // render.DrawCustomParticle(simulations[FirstSim].body.position);
+                if (settings[FirstSim].includeBody)
+                    render.DrawCustomParticle(simulations[FirstSim].body.position);
 #endif
 #if UNITY_EDITOR
                 greenParticles.Clear();
                 yellowParticles.Clear();
                 HighlghtParticlesForDebug();
-                HighlighParticlesBodyForDebug();
+
+                if (settings[FirstSim].includeBody)
+                    HighlighParticlesBodyForDebug();
+
                 render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, greenParticles.ToArray(), yellowParticles.ToArray());
 #endif
             }
@@ -294,7 +299,7 @@ namespace SimulationLogic
                 simulations[i].SetScene();
 
                 render.InitParticles(simulations[i]._positions);
-                render.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.magenta);
+                render.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.antiqueWhite);
             }
 
             if (!twoSimulations)
@@ -324,19 +329,19 @@ namespace SimulationLogic
 #if UNITY_EDITOR
         private void HighlghtParticlesForDebug()
         {
-            if (Input.GetKeyDown(KeyCode.B))
+            if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.B))
                 particleDebugDisplay = DebugDisplay.SPBox;
 
-            else if (Input.GetKeyDown(KeyCode.A))
+            else if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.A))
                 particleDebugDisplay = DebugDisplay.AllNeighbours;
 
-            else if (Input.GetKeyDown(KeyCode.V))
+            else if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.V))
                 particleDebugDisplay = DebugDisplay.Velocity;
 
-            else if (Input.GetKeyDown(KeyCode.F))
+            else if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.F))
                 particleDebugDisplay = DebugDisplay.Force;
 
-            else if (Input.GetKeyDown(KeyCode.W))
+            else if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.W))
             {
                 var pos = new float2(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                 var neighboursIndices = simulations[FirstSim].GetNeighbourParticles(pos);
@@ -349,7 +354,7 @@ namespace SimulationLogic
                 }
             }
 
-            else if (Input.GetKeyDown(KeyCode.P))
+            else if (!Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.P))
                 trackParticle = -1;
 
             if (trackParticle != -1)
@@ -407,11 +412,17 @@ namespace SimulationLogic
 
         private void HighlighParticlesBodyForDebug()
         {
-            if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.B))
-                particleDebugDisplay = DebugDisplay.SPBox;
+            // if (Input.GetKeyDown(KeyCode.B))
+            //     Debug.Log("B");
 
-            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.P))
+            // if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.B))
+            //     Debug.Log("Shift + B");
+
+            if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.P))
                 bodyDebug = !bodyDebug;
+
+            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.B))
+                bodyDebugDisplay = DebugDisplay.SPBox;
 
             else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.A))
                 bodyDebugDisplay = DebugDisplay.AllNeighbours;
