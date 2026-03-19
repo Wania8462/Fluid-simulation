@@ -1,0 +1,58 @@
+#pragma kernel CalculateDensities
+#pragma kernel ClassifySquares
+
+static const int ThreadGroupSize = 256;
+
+RWStructuredBuffer<float2> GridPositions;
+RWStructuredBuffer<float2> Positions;
+RWStructuredBuffer<float> GridDensities;
+RWStructuredBuffer<int> SquareCaseIndices;
+
+const uint numParticles;
+const uint numVerticies;
+const uint totalSquares;
+
+const int gridWidth;
+const int gridHeight;
+const float isoLevel;
+
+[numthreads(ThreadGroupSize,1,1)]
+void CalculateDensities (uint3 id : SV_DispatchThreadID)
+{
+    // todo add SP
+    if (id.x >= numVerticies)
+        return;
+
+    GridDensities[id.x] = 0;
+
+    for (uint i = 0; i < numParticles; i++)
+    {
+        float mag = DistanceSq(GridPositions[id.x], Positions[i]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        float q = sqrt(mag) / interactionRadius;
+        GridDensities[id.x] += QuadraticSpikyKernel(q);
+    }
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ClassifySquares (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= totalSquares)
+        return;
+
+    uint x = id.x % squaresPerRow;
+    uint y = id.x / squaresPerRow;
+
+    uint i0 = y * gridWidth + x;
+    uint i1 = i0 + 1;
+    uint i2 = i0 + gridWidth + 1;
+    uint i3 = i0 + gridWidth;
+
+    int caseIndex = 0;
+    if (GridDensities[i0] >= isoLevel) caseIndex |= 1;
+    if (GridDensities[i1] >= isoLevel) caseIndex |= 2;
+    if (GridDensities[i2] >= isoLevel) caseIndex |= 4;
+    if (GridDensities[i3] >= isoLevel) caseIndex |= 8;
+
+    SquareCaseIndices[id.x] = caseIndex;
+}

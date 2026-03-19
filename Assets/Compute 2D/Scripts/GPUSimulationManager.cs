@@ -44,7 +44,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
 
-    [SerializeField] private GPURender render;
+    [SerializeField] private RenderManager render;
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ComputeShader compute;
 
@@ -103,7 +103,7 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        render.DrawParticles();
+        render.Draw();
     }
 
     private void SimulationStep()
@@ -171,6 +171,7 @@ public class GPUSimulationManager : MonoBehaviour
     private void UpdateComputeSettings()
     {
         compute.SetFloat("interactionRadius", settings.interactionRadius);
+        compute.SetFloat("interactionRadiusSq", settings.interactionRadius * settings.interactionRadius);
         compute.SetFloat("gravity", settings.gravity);
         compute.SetFloat("mouseAttractiveness", settings.mouseAttractiveness);
         compute.SetFloat("mouseRadius", settings.mouseRadius);

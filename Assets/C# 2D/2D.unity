@@ -312,6 +312,7 @@ GameObject:
   m_Component:
   - component: {fileID: 452458856}
   - component: {fileID: 452458855}
+  - component: {fileID: 452458857}
   m_Layer: 0
   m_Name: Rendering
   m_TagString: Untagged
@@ -349,6 +350,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &452458857
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 452458854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccd7f5485d3b7aa4d824b551726cbb70, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: RenderScripts::Rendering.RenderMarchingSquares
+  quality: 10
+  test: {fileID: 3275417067910763038, guid: 0827696f7574b9741ad6e9eb4503449a, type: 3}
 --- !u!1 &485211996
 GameObject:
   m_ObjectHideFlags: 0
@@ -750,6 +765,7 @@ MonoBehaviour:
   realDeltaTime: 0
   targetFrameRate: 120
   twoSimulations: 0
+  renderType: 1
   offset: 186
   settings:
   - interactionRadius: 6
@@ -839,7 +855,8 @@ MonoBehaviour:
   bodyDebug: 1
   bodyDebugDisplay: 0
   spawn: {fileID: 890908187}
-  render: {fileID: 452458855}
+  renderParticles: {fileID: 452458855}
+  renderSquares: {fileID: 452458857}
   inputField: {fileID: 1902331580}
 --- !u!1 &1769889573
 GameObject:

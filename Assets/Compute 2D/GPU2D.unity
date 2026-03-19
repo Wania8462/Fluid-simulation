@@ -129,6 +129,8 @@ GameObject:
   m_Component:
   - component: {fileID: 441569832}
   - component: {fileID: 441569833}
+  - component: {fileID: 441569835}
+  - component: {fileID: 441569834}
   m_Layer: 0
   m_Name: Render
   m_TagString: Untagged
@@ -163,10 +165,57 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b3094873c5c547b58bb2b91f157835c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GPURender
-  quality: 10
+  useMarchingCubes: 0
   sim: {fileID: 1001776193}
-  compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
+  particleRender: {fileID: 441569835}
+  marchingCubes: {fileID: 441569834}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
+--- !u!114 &441569834
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 441569831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d0404f194455d74f8479e524537c934, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MarchingCubes
+  gridLength: 0
+  isoLevel: 1
+  compute: {fileID: 0}
+  marchingSquareMeshes:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+--- !u!114 &441569835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 441569831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 484800d263ec76146badf50e9dbde6c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ParticleRender
+  particleQuality: 5
+  compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
 --- !u!1 &1001776191
 GameObject:
   m_ObjectHideFlags: 0

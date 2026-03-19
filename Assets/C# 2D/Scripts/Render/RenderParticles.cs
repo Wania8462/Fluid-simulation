@@ -15,7 +15,7 @@ namespace Rendering
         public MaterialPropertyBlock mpb;
     }
 
-    public class Render : MonoBehaviour
+    public class RenderParticles : MonoBehaviour
     {
         [SerializeField] private int resolution;
         [SerializeField] private int bodyResolution;

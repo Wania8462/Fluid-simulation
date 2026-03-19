@@ -132,6 +132,14 @@ namespace SimulationLogic
             return res;
         }
 
+        public float2 GetBoundSize()
+        {
+            if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
+                boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+
+            return boundingBoxSize;
+        }
+
         public float2 GetRealHalfBoundSize(float radius)
         {
             if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)

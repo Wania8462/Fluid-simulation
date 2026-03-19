@@ -17,6 +17,12 @@ public enum DebugDisplay
 }
 #endif
 
+public enum RenderType
+{
+    Particles,
+    MarchingSquares
+}
+
 namespace SimulationLogic
 {
     [Serializable]
@@ -102,6 +108,7 @@ namespace SimulationLogic
         [SerializeField] private bool realDeltaTime;
         [SerializeField] private int targetFrameRate;
         [SerializeField] private bool twoSimulations;
+        [SerializeField] private RenderType renderType;
         [SerializeField] private int offset;
         [SerializeField] private SimulationSettings[] settings;
 
@@ -118,7 +125,8 @@ namespace SimulationLogic
 
         [Header("References")]
         [SerializeField] private SpawnParticles spawn;
-        [SerializeField] private Render render;
+        [SerializeField] private RenderParticles renderParticles;
+        [SerializeField] private RenderMarchingSquares renderSquares;
         [SerializeField] private InputField inputField;
 
         private const int FirstSim = 0;
@@ -230,8 +238,7 @@ namespace SimulationLogic
                     renderVelocities[i + simulations[SecondSim]._positions.Length] = simulations[SecondSim]._velocities[i];
                 });
 
-                render.DrawParticles(renderPositions, renderVelocities, null, null);
-                // render.DrawBorderParticles();
+                renderParticles.DrawParticles(renderPositions, renderVelocities, null, null);
 
                 // Offsets the body positions for rendering
                 // renderBodyPositions[FirstSim].x = simulations[FirstSim].body.position.x - offset;
@@ -244,33 +251,50 @@ namespace SimulationLogic
             else
             {
 #if UNITY_STANDALONE
-                render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, null, null);
-                // render.DrawBorderParticles();
-                if (settings[FirstSim].includeBody)
-                    render.DrawCustomParticle(simulations[FirstSim].body.position);
+                if (renderType == RenderType.Particles)
+                {
+                    renderParticles.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, null, null);
+                    if (settings[FirstSim].includeBody)
+                        renderParticles.DrawCustomParticle(simulations[FirstSim].body.position);
+                }
 #endif
 #if UNITY_EDITOR
-                greenParticles.Clear();
-                yellowParticles.Clear();
-                HighlghtParticlesForDebug();
+                if (renderType == RenderType.Particles)
+                {
+                    greenParticles.Clear();
+                    yellowParticles.Clear();
+                    HighlghtParticlesForDebug();
 
-                if (settings[FirstSim].includeBody)
-                    HighlighParticlesBodyForDebug();
+                    if (settings[FirstSim].includeBody)
+                        HighlighParticlesBodyForDebug();
 
-                render.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, greenParticles.ToArray(), yellowParticles.ToArray());
+                    renderParticles.DrawParticles(simulations[FirstSim]._positions, simulations[FirstSim]._velocities, greenParticles.ToArray(), yellowParticles.ToArray());
+                }
+
+                else if (renderType == RenderType.MarchingSquares)
+                {
+                    
+                }
 #endif
             }
         }
 
         private void InitSimulationInstances()
         {
-            render.DeleteAllTypesOfParticles();
+            renderParticles.DeleteAllTypesOfParticles();
+
             Camera.main.orthographicSize = twoSimulations ? offset : Camera.main.orthographicSize;
 
             if (settings == null || settings.Length == 0)
             {
                 Debug.LogError("Simulation manager: There are no settings");
-                Application.Quit(); // Avoids error spamming
+                UnityEditor.EditorApplication.isPlaying = false; // Avoids error spamming
+            }
+
+            if (renderType == RenderType.MarchingSquares && twoSimulations)
+            {
+                Debug.LogError("Simulation manager: Can't run 2 simulations with marching squares");
+                UnityEditor.EditorApplication.isPlaying = false;
             }
 
             if (!twoSimulations)
@@ -298,15 +322,11 @@ namespace SimulationLogic
                 simulations[i].SetSettings(settings[i]);
                 simulations[i].SetScene();
 
-                render.InitParticles(simulations[i]._positions);
-                render.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.antiqueWhite);
+                renderParticles.InitParticles(simulations[i]._positions);
+                renderParticles.InitCustomParticle(settings[i].body.position, settings[i].body.radius, Color.antiqueWhite);
             }
 
-            if (!twoSimulations)
-                render.InitBorderParticles(simulations[FirstSim]._borderPositions);
-
-            else
-                render.InitBorderParticles(OffsetBorderParticles(simulations[FirstSim]._borderPositions, simulations[SecondSim]._borderPositions));
+            renderSquares.Init(spawn.GetBoundSize());
 
             // Calculates the total number of particles for 2 simulations. Not used if only 1 simulation is active
             renderPositions = new float2[simulations[FirstSim]._positions.Length * 2];
@@ -321,9 +341,6 @@ namespace SimulationLogic
             Application.targetFrameRate = targetFrameRate;
             for (var i = 0; i < simulations.Length; i++)
                 simulations[i].UpdateSettings(settings[i]);
-
-            render.DeleteBorderParticles();
-            // render.InitBorderParticles(OffsetBorderParticles(simulations[FirstSim]._borderPositions, simulations[SecondSim]._borderPositions));
         }
 
 #if UNITY_EDITOR
@@ -370,14 +387,14 @@ namespace SimulationLogic
                 if (particleDebugDisplay == DebugDisplay.SPBox)
                 {
                     greenParticles.AddRange(simulations[FirstSim].GetParticlesSPNeighbours(trackParticle));
-                    
+
                     var lineThickness = 0.2f;
                     var SPBox = simulations[FirstSim].GetParticleSPDimentions(trackParticle);
 
-                    render.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
-                    render.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
-                    render.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
-                    render.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
                 }
 
                 if (particleDebugDisplay == DebugDisplay.AllNeighbours)
@@ -390,14 +407,14 @@ namespace SimulationLogic
                     for (int i = 0; i < neighbours.Length; i++)
                         neighbourPoss[i] = simulations[FirstSim]._positions[neighbours[i]];
 
-                    render.DrawLines(simulations[FirstSim]._positions[trackParticle], neighbourPoss, lineThickness);
+                    renderParticles.DrawLines(simulations[FirstSim]._positions[trackParticle], neighbourPoss, lineThickness);
                 }
 
                 else if (particleDebugDisplay == DebugDisplay.Velocity)
                 {
                     var lineThickness = 0.5f;
                     var predictedPos = simulations[FirstSim]._positions[trackParticle] + simulations[FirstSim]._velocities[trackParticle];
-                    render.DrawLine(simulations[FirstSim]._positions[trackParticle], predictedPos, lineThickness, Color.white);
+                    renderParticles.DrawLine(simulations[FirstSim]._positions[trackParticle], predictedPos, lineThickness, Color.white);
                 }
 
                 else if (particleDebugDisplay == DebugDisplay.Force)
@@ -405,7 +422,7 @@ namespace SimulationLogic
                     var lineThickness = 0.5f;
                     var force = (simulations[FirstSim]._velocities[trackParticle] - simulations[FirstSim]._prevVelocities[trackParticle]) * 5;
                     var forceEnd = simulations[FirstSim]._positions[trackParticle] + force;
-                    render.DrawLine(simulations[FirstSim]._positions[trackParticle], forceEnd, lineThickness, Color.white);
+                    renderParticles.DrawLine(simulations[FirstSim]._positions[trackParticle], forceEnd, lineThickness, Color.white);
                 }
             }
         }
@@ -442,10 +459,10 @@ namespace SimulationLogic
                     var lineThickness = 0.2f;
                     var SPBox = simulations[FirstSim].GetBodySPDimentions();
 
-                    render.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
-                    render.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
-                    render.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
-                    render.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
+                    renderParticles.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
                 }
 
                 else if (bodyDebugDisplay == DebugDisplay.AllNeighbours)
@@ -455,7 +472,7 @@ namespace SimulationLogic
                 {
                     var lineThickness = 0.5f;
                     var predictedPos = simulations[FirstSim].body.position + simulations[FirstSim].body.velocity;
-                    render.DrawLine(simulations[FirstSim].body.position, predictedPos, lineThickness, Color.white);
+                    renderParticles.DrawLine(simulations[FirstSim].body.position, predictedPos, lineThickness, Color.white);
                 }
 
                 else if (particleDebugDisplay == DebugDisplay.Force)
@@ -476,7 +493,7 @@ namespace SimulationLogic
 
         private void OnDestroy()
         {
-            render.DestroyMeshes();
+            renderParticles.DestroyMeshes();
         }
 
         private float2[] OffsetBorderParticles(float2[] positions1, float2[] positions2)

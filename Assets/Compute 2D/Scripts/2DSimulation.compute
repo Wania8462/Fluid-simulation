@@ -33,6 +33,7 @@ RWStructuredBuffer<int> DebugInt;
 
 const uint numParticles;
 const float interactionRadius;
+const float interactionRadiusSq;
 const float gravity;
 const float mouseAttractiveness;
 const float mouseRadius;
@@ -101,8 +102,9 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 
     for (uint i = 0; i < numParticles; i++)
     {
-        float mag = Distance(Positions[id.x], Positions[i]);
-        if (mag == 0 || mag > interactionRadius) continue;
+        float mag = DistanceSq(Positions[id.x], Positions[i]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        mag = sqrt(mag);
 
         float q = mag / interactionRadius;
         Densities[id.x] += QuadraticSpikyKernel(q);
@@ -114,8 +116,9 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 
     for (uint j = 0; j < numParticles; j++)
     {
-        float mag = Distance(Positions[id.x], Positions[j]);
-        if (mag == 0 || mag > interactionRadius) continue;
+        float mag = DistanceSq(Positions[id.x], Positions[j]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        mag = sqrt(mag);
         
         float q = mag / interactionRadius;
         float2 r = UnitVector(Positions[id.x], Positions[j], mag);

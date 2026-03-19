@@ -1,14 +1,12 @@
-using System;
-using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
-public class GPURender : MonoBehaviour
+public class ParticleRender : MonoBehaviour
 {
-    [SerializeField] private int quality;
-    [SerializeField] private GPUSimulationManager sim;
+    [SerializeField] private int particleQuality;
     [SerializeField] private ComputeShader compute;
-    [SerializeField] private Material material;
+    
+    private Material material;
     private Mesh mesh;
 
     private ComputeBuffer colorsBuffer;
@@ -22,12 +20,13 @@ public class GPURender : MonoBehaviour
     const int CalculateColorsKernelID = 0;
     const int float4Size = 16;
 
-    public void Setup()
+    public void Setup(Material mat, GPUSimulationManager sim)
     {
-        mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, quality) : mesh;
+        material = mat;
+        mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, particleQuality) : mesh;
         commandBuf ??= new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
         commandData ??= new GraphicsBuffer.IndirectDrawIndexedArgs[commandCount];
-        
+
         commandData[0].indexCountPerInstance = mesh.GetIndexCount(0);
         commandData[0].instanceCount = (uint)sim.numParticles;
         commandBuf.SetData(commandData);

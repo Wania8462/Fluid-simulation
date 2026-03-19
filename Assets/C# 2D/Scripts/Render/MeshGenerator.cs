@@ -35,7 +35,7 @@ namespace Rendering
             float2 perpendicular = end - start;
             float magnitude = math.length(perpendicular);
             if (magnitude < Mathf.Epsilon) return null;
-            perpendicular = new (-perpendicular.y, perpendicular.x);
+            perpendicular = new(-perpendicular.y, perpendicular.x);
             perpendicular /= Mathf.Sqrt(perpendicular.x * perpendicular.x + perpendicular.y * perpendicular.y);
             perpendicular *= width * 0.5f;
 
@@ -46,7 +46,7 @@ namespace Rendering
                 new(end.x + perpendicular.x, end.y + perpendicular.y),
                 new(end.x - perpendicular.x, end.y - perpendicular.y)
             };
-            
+
             int[] triangles = new int[] { 1, 0, 2, 1, 2, 3 };
             Mesh mesh = new()
             {
@@ -89,6 +89,95 @@ namespace Rendering
             };
 
             return mesh;
+        }
+
+        public static Mesh[] MarchingSquareVariations()
+        {
+            // Directions
+            const float Up = 0.5f;
+            const float RightDir = 0.5f;
+            const float Down = -0.5f;
+            const float LeftDir = -0.5f;
+            // Corners
+            const int TL = 0;
+            const int TR = 1;
+            const int BL = 2;
+            const int BR = 3;
+
+            // Edge midpoints
+            const int Top = 4;
+            const int Right = 5;
+            const int Bottom = 6;
+            const int Left = 7;
+
+            Vector3[] vertices =
+            {
+                // Vertices
+                new(LeftDir, Up),  // top left
+                new(RightDir, Up),  // top right
+                new(LeftDir, Down),  // bottom left
+                new(RightDir, Down),  // bottom right
+
+                // Middle
+                new(0, Up),  // top
+                new(RightDir, 0),  // right
+                new(0, Down),  // bottom
+                new(LeftDir, 0)  // left
+            };
+
+            int[][] triangles = new int[][]
+            {
+                // Empty
+                new int[] { },
+
+                // Top-left corner
+                new int[] { Top, TL, Left },
+                // Top-right corner
+                new int[] { TR, Top, Right },
+                // Bottom-right corner
+                new int[] { Bottom, BR, Right },
+                // Bottom-left corner
+                new int[] { BL, Bottom, Left },
+
+                // Saddle (TL + BR)
+                new int[] { Top, TL, Left,  Bottom, BR, Right },
+                // Saddle (TR + BL)
+                new int[] { TR, Top, Right,  BL, Bottom, Left },
+
+                // Top edge (TL + TR)
+                new int[] { TL, Right, TR,  TL, Left, Right },
+                // Right edge (TR + BR)
+                new int[] { TR, Bottom, BR,  TR, Top, Bottom },
+                // Left edge (TL + BL)
+                new int[] { TL, Bottom, Top,  TL, BL, Bottom },
+                // Bottom edge (BL + BR)
+                new int[] { BL, Bottom, Right,  BL, BR, Right },
+
+                // Filled except BL
+                new int[] { TL, BR, TR,  TL, Bottom, BR,  TL, Left, Bottom },
+                // Filled except BR
+                new int[] { TL, Right, TR,  TL, Bottom, Right,  TL, BL, Bottom },
+                // Filled except TR
+                new int[] { TL, Right, Top,  TL, BR, Right,  TL, BL, BR },
+                // Filled except TL
+                new int[] { TR, BL, BR,  TR, Left, BL,  TR, Top, Left },
+
+                // Full
+                new int[] { TL, BR, TR,  TL, BL, BR },
+            };
+
+            var meshes = new Mesh[16];
+
+            for (int i = 0; i < triangles.Length; i++)
+            {
+                meshes[i] = new Mesh()
+                {
+                    vertices = vertices,
+                    triangles = triangles[i]
+                };
+            }
+
+            return meshes;
         }
     }
 }
