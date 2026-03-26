@@ -2,26 +2,29 @@ using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-using SimulationLogic;
 
 namespace Rendering
-{   
+{
     public class RenderMarchingSquares : MonoBehaviour
     {
         [SerializeField] private int quality;
         [SerializeField] private float threashold;
 
+        [SerializeField] private Material mat;
+        [SerializeField] private Material testMat;
+        [SerializeField] private GameObject testSquare;
+        [SerializeField] private int drawIndex;
+        private List<GameObject> testObjects = new();
+        private int prevDrawIndex;
+
         // Marching squares
         private Mesh[] meshes;
-        private float2[] edges;
+        public float2[] edges { get; private set; }
+        private int width, height;
         private float2[] centres;
-        private float scale;
+        private float cellWidth, cellHeight;
 
-        // Draw buffers
         private List<Matrix4x4> matrices;
-        private List<Vector4> colorsBuffer;
-        private MaterialPropertyBlock mpb;
-        private readonly int colors = Shader.PropertyToID("_Color");
 
         public void Init(float2 bounds)
         {
@@ -34,83 +37,134 @@ namespace Rendering
             meshes = MeshGenerator.MarchingSquareVariations();
             GenerateEdges(bounds);
             GenerateCentres(bounds);
-            GenerateDrawBuffers();
+            GenerateMatrices();
         }
 
-        public void Draw()
+        public void Draw(float[] densities)
         {
-            for (int i = 0; i < edges.Length; i++)
+            for (int y = 0; y < height - 1; y++)
             {
+                for (int x = 0; x < width - 1; x++)
+                {
+                    var edgeIndex = y * width + x;
+                    var centreIndex = y * (width - 1) + x;
+                    var meshIndex = 0;
 
+                    if (densities[edgeIndex] >= 4) meshIndex |= 1;
+                    if (densities[edgeIndex + 1] >= 4) meshIndex |= 2;
+                    if (densities[edgeIndex + width + 1] >= 4) meshIndex |= 4;
+                    if (densities[edgeIndex + width] >= 4) meshIndex |= 8;
+
+                    if (meshIndex != 0)
+                        Graphics.DrawMesh(meshes[meshIndex], matrices[centreIndex], mat, 1);
+                }
             }
         }
-        
-        // private int GetMeshCase(int index)
-        // {
-            
-        // }
 
         private void GenerateEdges(float2 bounds)
         {
             var topLeft = new float2(-bounds.x / 2, bounds.y / 2);
             var aspectRatio = bounds.x / bounds.y;
             var edgesList = new List<float2>();
-            var len = bounds.y / (quality - 1);
-            var width = (int)(quality * aspectRatio);
+            height = quality;
+            width = (int)(quality * aspectRatio);
+            cellWidth = bounds.x / (width - 1);
+            cellHeight = bounds.y / (height - 1);
 
-            for (int i = 0; i < quality; i++)
+            for (int i = 0; i < height; i++)
             {
                 for (int j = 0; j < width; j++)
                 {
                     edgesList.Add(new float2(
-                        topLeft.x + (len * j),
-                        topLeft.y - (len * i)
+                        topLeft.x + (cellWidth * j),
+                        topLeft.y - (cellHeight * i)
                     ));
                 }
             }
 
             edges = edgesList.ToArray();
-            scale = len;
+            // DrawEdges();
         }
 
         private void GenerateCentres(float2 bounds)
         {
             var centresList = new List<float2>();
-            var aspectRatio = bounds.x / bounds.y;
-            var width = (int)(quality * aspectRatio);
 
-            for (int i = 0; i < quality - 1; i++)
+            for (int i = 0; i < height - 1; i++)
             {
                 for (int j = 0; j < width - 1; j++)
                 {
                     centresList.Add(new float2(
-                        edges[i * width + j].x + scale / 2,
-                        edges[i * width + j].y - scale / 2
+                        edges[i * width + j].x + cellWidth / 2,
+                        edges[i * width + j].y - cellHeight / 2
                     ));
                 }
             }
 
             centres = centresList.ToArray();
+            // DrawCentres();
+            // DrawSquare();
         }
-        
-        private void GenerateDrawBuffers()
+
+        private void GenerateMatrices()
         {
             matrices ??= new();
-            colorsBuffer ??= new();
-            mpb ??= new MaterialPropertyBlock();
 
             for (int i = 0; i < centres.Length; i++)
             {
                 matrices.Add(Matrix4x4.TRS(
-                    new(edges[i].x, edges[i].y),
+                    new(centres[i].x, centres[i].y),
                     Quaternion.identity,
-                    new(scale, scale, 1)
+                    new(cellWidth, cellHeight, 1)
                 ));
-
-                colorsBuffer.Add(Color.blue);
             }
+        }
 
-            mpb.SetVectorArray(colors, colorsBuffer);
+        private void DrawEdges()
+        {
+            testSquare.GetComponent<SpriteRenderer>().color = Color.white;
+            foreach (var edge in edges)
+                Instantiate(testSquare, new Vector3(edge.x, edge.y), Quaternion.identity);
+        }
+
+        private void DrawCentres()
+        {
+            testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
+            foreach (var centre in centres)
+                Instantiate(testSquare, new Vector3(centre.x, centre.y), Quaternion.identity);
+        }
+
+        private void OnValidate()
+        {
+            // if (prevDrawIndex != drawIndex)
+            // {
+            //     prevDrawIndex = drawIndex;
+            //     DrawSquare();
+            // }
+        }
+
+        private void DrawSquare()
+        {
+            foreach (var testObject in testObjects)
+                Destroy(testObject);
+
+            var offset = Mathf.FloorToInt((float)drawIndex / (width - 1));
+            Debug.Log($"Draw Index: {drawIndex}, width: {width - 1}, offset: {offset}");
+            testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
+            testObjects.Add(Instantiate(testSquare, new Vector3(centres[drawIndex].x, centres[drawIndex].y), Quaternion.identity));
+            testSquare.GetComponent<SpriteRenderer>().color = Color.white;
+
+            testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset].x, edges[drawIndex + offset].y), Quaternion.identity));
+            testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset + 1].x, edges[drawIndex + offset + 1].y), Quaternion.identity));
+            testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset + width].x, edges[drawIndex + offset + width].y), Quaternion.identity));
+            testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset + width + 1].x, edges[drawIndex + offset + width + 1].y), Quaternion.identity));
+        }
+
+        public void DestroyMeshes()
+        {
+            if (meshes == null) return;
+            for (int i = 0; i < meshes.Length; i++)
+                Destroy(meshes[i]);
         }
     }
 }

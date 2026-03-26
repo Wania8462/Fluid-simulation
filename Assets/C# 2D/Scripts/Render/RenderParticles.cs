@@ -56,70 +56,36 @@ namespace Rendering
             }
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int[] highlightGreen = null, int[] highlightYellow = null)
+        public void DrawParticles(float2[] positions, float2[] velocities, List<int> highlightGreen = null, List<int> highlightYellow = null)
         {
-            Parallel.For(0, positions.Length, i =>
-            {
-                fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
-                fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
-            });
-
-            if (highlightGreen != null)
-            {
-                for (int i = 0; i < highlightGreen.Length; i++)
-                    fluidBuffer.colorsBuffer[highlightGreen[i]] = Color.green;
-            }
-
-            // Yellow gets priority
-            if (highlightYellow != null)
-            {
-                for (int i = 0; i < highlightYellow.Length; i++)
-                    fluidBuffer.colorsBuffer[highlightYellow[i]] = Color.yellow;
-            }
-
-            for (var i = 0; i < fluidBuffer.matrices.Count; i += batchSize)
-            {
-                var count = Mathf.Min(batchSize, fluidBuffer.matrices.Count - i);
-                fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
-
-                Graphics.DrawMeshInstanced(
-                    fluidBuffer.mesh,
-                    submeshIndex,
-                    mat,
-                    fluidBuffer.matrices.GetRange(i, count),
-                    fluidBuffer.mpb
-                );
-            }
+            UpdateParticleBuffers(positions, velocities);
+            ApplyHighlight(highlightGreen, Color.green);
+            ApplyHighlight(highlightYellow, Color.yellow);
+            DrawParticleBatches();
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int[] highlightGreen = null, int highlightYellow = -1)
+        public void DrawParticles(float2[] positions, float2[] velocities, List<int> highlightGreen = null, int highlightYellow = -1)
         {
-            if (highlightYellow != -1)
-                DrawParticles(positions, velocities, highlightGreen, new int[] { highlightYellow });
-
-            else
-                DrawParticles(positions, velocities, highlightGreen, null);
+            UpdateParticleBuffers(positions, velocities);
+            ApplyHighlight(highlightGreen, Color.green);
+            ApplyHighlight(highlightYellow, Color.yellow);
+            DrawParticleBatches();
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, int[] highlightYellow = null)
+        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, List<int> highlightYellow = null)
         {
-            if (highlightGreen != -1)
-                DrawParticles(positions, velocities, new int[] { highlightGreen }, highlightYellow);
-
-            else
-                DrawParticles(positions, velocities, null, highlightYellow);
+            UpdateParticleBuffers(positions, velocities);
+            ApplyHighlight(highlightGreen, Color.green);
+            ApplyHighlight(highlightYellow, Color.yellow);
+            DrawParticleBatches();
         }
 
         public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, int highlightYellow = -1)
         {
-            if (highlightYellow != -1 && highlightYellow != -1)
-                DrawParticles(positions, velocities, new int[] { highlightGreen }, new int[] { highlightYellow });
-
-            else if (highlightYellow != -1)
-                DrawParticles(positions, velocities, null, new int[] { highlightYellow });
-
-            else if (highlightGreen != -1)
-                DrawParticles(positions, velocities, new int[] { highlightGreen }, null);
+            UpdateParticleBuffers(positions, velocities);
+            ApplyHighlight(highlightGreen, Color.green);
+            ApplyHighlight(highlightYellow, Color.yellow);
+            DrawParticleBatches();
         }
 
         public void DeleteParticles()
@@ -305,6 +271,49 @@ namespace Rendering
         #endregion
 
         #region Helpers
+        private void UpdateParticleBuffers(float2[] positions, float2[] velocities)
+        {
+            Parallel.For(0, positions.Length, i =>
+            {
+                fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
+                fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
+            });
+        }
+
+        private void ApplyHighlight(List<int> highlightIndices, Color color)
+        {
+            if (highlightIndices == null)
+                return;
+
+            for (int i = 0; i < highlightIndices.Count; i++)
+                fluidBuffer.colorsBuffer[highlightIndices[i]] = color;
+        }
+
+        private void ApplyHighlight(int highlightIndex, Color color)
+        {
+            if (highlightIndex == -1)
+                return;
+
+            fluidBuffer.colorsBuffer[highlightIndex] = color;
+        }
+
+        private void DrawParticleBatches()
+        {
+            for (var i = 0; i < fluidBuffer.matrices.Count; i += batchSize)
+            {
+                var count = Mathf.Min(batchSize, fluidBuffer.matrices.Count - i);
+                fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
+
+                Graphics.DrawMeshInstanced(
+                    fluidBuffer.mesh,
+                    submeshIndex,
+                    mat,
+                    fluidBuffer.matrices.GetRange(i, count),
+                    fluidBuffer.mpb
+                );
+            }
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {

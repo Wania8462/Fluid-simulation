@@ -1,6 +1,3 @@
 ﻿<Solution>
   <Project Path="Assembly-CSharp.csproj" />
-  <Project Path="SimulationScripts.csproj" />
-  <Project Path="NonPlaySimulationTests.csproj" />
-  <Project Path="RenderScripts.csproj" />
 </Solution>

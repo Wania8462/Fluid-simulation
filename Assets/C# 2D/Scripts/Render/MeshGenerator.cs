@@ -129,41 +129,36 @@ namespace Rendering
             {
                 // Empty
                 new int[] { },
-
                 // Top-left corner
-                new int[] { Top, TL, Left },
+                new int[] { Left, TL, Top },
                 // Top-right corner
-                new int[] { TR, Top, Right },
-                // Bottom-right corner
-                new int[] { Bottom, BR, Right },
-                // Bottom-left corner
-                new int[] { BL, Bottom, Left },
-
-                // Saddle (TL + BR)
-                new int[] { Top, TL, Left,  Bottom, BR, Right },
-                // Saddle (TR + BL)
-                new int[] { TR, Top, Right,  BL, Bottom, Left },
-
+                new int[] { Top, TR, Right },
                 // Top edge (TL + TR)
-                new int[] { TL, Right, TR,  TL, Left, Right },
+                new int[] { Left, TL, TR,  Left, TR, Right },
+                // Bottom-right corner
+                new int[] { Right, BR, Bottom },
+                // Saddle (TL + BR)
+                new int[] { Left, TL, Top,  Right, BR, Bottom },
                 // Right edge (TR + BR)
-                new int[] { TR, Bottom, BR,  TR, Top, Bottom },
-                // Left edge (TL + BL)
-                new int[] { TL, Bottom, Top,  TL, BL, Bottom },
-                // Bottom edge (BL + BR)
-                new int[] { BL, Bottom, Right,  BL, BR, Right },
-
+                new int[] { Top, TR, BR,  Top, BR, Bottom },
                 // Filled except BL
-                new int[] { TL, BR, TR,  TL, Bottom, BR,  TL, Left, Bottom },
+                new int[] { Left, TL, TR,  Left, TR, BR,  Left, BR, Bottom },
+                // Bottom-left corner
+                new int[] { Bottom, BL, Left },
+                // Left edge (TL + BL)
+                new int[] { Top, Bottom, BL,  Top, BL, TL },
+                // Saddle (TR + BL)
+                new int[] { Top, TR, Right,  Bottom, BL, Left },
                 // Filled except BR
-                new int[] { TL, Right, TR,  TL, Bottom, Right,  TL, BL, Bottom },
+                new int[] { TL, TR, Right,  TL, Right, Bottom,  TL, Bottom, BL },
+                // Bottom edge (BL + BR)
+                new int[] { Right, BR, BL,  Right, BL, Left },
                 // Filled except TR
-                new int[] { TL, Right, Top,  TL, BR, Right,  TL, BL, BR },
+                new int[] { TL, Top, Right,  TL, Right, BR,  TL, BR, BL },
                 // Filled except TL
-                new int[] { TR, BL, BR,  TR, Left, BL,  TR, Top, Left },
-
+                new int[] { Top, TR, BR,  Top, BR, BL,  Top, BL, Left },
                 // Full
-                new int[] { TL, BR, TR,  TL, BL, BR },
+                new int[] { TL, TR, BR,  TL, BR, BL }
             };
 
             var meshes = new Mesh[16];

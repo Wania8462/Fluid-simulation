@@ -142,7 +142,7 @@ namespace SimulationLogic
                 });
             });
 
-            DrawDebugGrid(Color.green, particleSP);
+            // DrawDebugGrid(Color.green, particleSP);
         }
 
         public void ExternalForces()
@@ -537,6 +537,23 @@ namespace SimulationLogic
             plasticity = settings.plasticity;
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
+        }
+
+        public float GetDensity(float2 position)
+        {
+            var neighbours = particleSP.GetNeighbours(position);
+            var density = 0f;
+
+            foreach (var n in neighbours)
+            {
+                var mag = FluidMath.Distance(position, _positions[n]);
+                if (mag == 0 || mag > interactionRadius) continue;
+                var q = mag / interactionRadius;
+
+                density += FluidMath.QuadraticSpikyKernel(q);
+            }
+
+            return density;
         }
 
         #endregion
