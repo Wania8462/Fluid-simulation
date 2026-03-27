@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -555,6 +554,8 @@ namespace SimulationLogic
 
             return density;
         }
+
+        public float GetDensity(Vector3 position) => GetDensity(new float2(position.x, position.y));
 
         #endregion
         #region Debug purpoused

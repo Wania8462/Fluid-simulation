@@ -382,7 +382,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rendering.RenderDensityMap
   resolution: 100
-  densityLimt: 7
+  densityLimt: 5
   mat: {fileID: 2100000, guid: 55e617f6c47ff214fb874da21f4b6dc3, type: 2}
   cells: []
 --- !u!1 &485211996
@@ -854,7 +854,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb3668f42e2cc2f498161e42f8d5480f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDataBuilder
-  renderType: 2
+  renderType: 1
   Offset: 0
   manager: {fileID: 1165800423}
   spawn: {fileID: 1165800424}

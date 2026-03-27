@@ -249,7 +249,7 @@ public class RenderDataBuilder : MonoBehaviour
             densities[i] = simulation.GetDensity(renderSquares.edges[i]);
         });
 
-        renderSquares.DrawMidpoints(densities);
+        renderSquares.DrawLerp(densities);
     }
 
     private void DrawDensityMap()

@@ -40,7 +40,10 @@ namespace Rendering
                 Debug.LogError($"RenderDensityMap: Length of densities != length of cells. Densities: {densities.Length}, centres: {cells.Length}");
 
             for (int i = 0; i < cells.Length; i++)
-                colorsBuffer[i] = GetColorVector(densities[i]);
+            {
+                if (densities[i] > 0) 
+                    colorsBuffer[i] = GetColorVector(densities[i]);
+            }
 
             for (var i = 0; i < matrices.Count; i += batchSize)
             {
