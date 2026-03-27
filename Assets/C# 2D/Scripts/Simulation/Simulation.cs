@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Unity.Mathematics;
 using UnityEngine;
@@ -68,6 +69,7 @@ namespace SimulationLogic
         private List<int>[] neighbours;
         private List<int>[] springsNeighbours;
         private List<int> bodyNeighbours;
+        private ThreadLocal<List<int>> densityNeighbours;
 
         // Miscellaneous
         private float2 realHalfBoundSize;
@@ -497,6 +499,9 @@ namespace SimulationLogic
             Parallel.For(0, springsNeighbours.Length, i => { springsNeighbours[i] = new List<int>(); });
             bodyNeighbours = new List<int>();
 
+            densityNeighbours?.Dispose();
+            densityNeighbours = new ThreadLocal<List<int>>(() => new List<int>());
+
             // In development
             body.densityPoints = spawn.InitializeBodyDensityPoints(body.densityResolution, body.radius);
         }
@@ -540,7 +545,9 @@ namespace SimulationLogic
 
         public float GetDensity(float2 position)
         {
-            var neighbours = particleSP.GetNeighbours(position);
+            densityNeighbours ??= new ThreadLocal<List<int>>(() => new List<int>());
+            var neighbours = densityNeighbours.Value;
+            particleSP.GetNeighbours(position, neighbours);
             var density = 0f;
 
             foreach (var n in neighbours)
