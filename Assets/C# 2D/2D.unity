@@ -313,6 +313,7 @@ GameObject:
   - component: {fileID: 452458856}
   - component: {fileID: 452458855}
   - component: {fileID: 452458857}
+  - component: {fileID: 452458858}
   m_Layer: 0
   m_Name: Rendering
   m_TagString: Untagged
@@ -368,6 +369,22 @@ MonoBehaviour:
   testMat: {fileID: 2100000, guid: e1c5589a30bb91c44951f1344ef0f86e, type: 2}
   testSquare: {fileID: 3275417067910763038, guid: 0827696f7574b9741ad6e9eb4503449a, type: 3}
   drawIndex: 32
+--- !u!114 &452458858
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 452458854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb43918e32eeb94ea883f52f7d2a462, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Rendering.RenderDensityMap
+  resolution: 100
+  densityLimt: 7
+  mat: {fileID: 2100000, guid: 55e617f6c47ff214fb874da21f4b6dc3, type: 2}
+  cells: []
 --- !u!1 &485211996
 GameObject:
   m_ObjectHideFlags: 0
@@ -837,12 +854,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb3668f42e2cc2f498161e42f8d5480f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDataBuilder
-  renderType: 1
+  renderType: 2
   Offset: 0
   manager: {fileID: 1165800423}
   spawn: {fileID: 1165800424}
   renderParticles: {fileID: 452458855}
   renderSquares: {fileID: 452458857}
+  renderDensityMap: {fileID: 452458858}
   trackParticle: -1
   particleDebugDisplay: 0
   bodyDebug: 0

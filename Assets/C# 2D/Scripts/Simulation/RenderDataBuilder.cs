@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Rendering;
 using SimulationLogic;
 using Unity.Mathematics;
@@ -17,7 +19,8 @@ public enum DebugDisplay
 public enum RenderType
 {
     Particles,
-    MarchingSquares
+    MarchingSquares,
+    DensityMap
 }
 
 public class RenderDataBuilder : MonoBehaviour
@@ -25,13 +28,14 @@ public class RenderDataBuilder : MonoBehaviour
     [Header("Render settings")]
     [SerializeField] private RenderType renderType;
     [SerializeField] private int Offset;
-    public int offset { get; private set;  }
+    public int offset { get; private set; }
 
     [Header("References")]
     [SerializeField] private SimulationManager manager;
     [SerializeField] private SpawnParticles spawn;
     [SerializeField] private RenderParticles renderParticles;
     [SerializeField] private RenderMarchingSquares renderSquares;
+    [SerializeField] private RenderDensityMap renderDensityMap;
 
     [Header("Debug settings")]
     [SerializeField] private int trackParticle = -1;
@@ -46,6 +50,7 @@ public class RenderDataBuilder : MonoBehaviour
     private float2[] renderBodyPositions;
 
     private float[] densities;
+    private float[] densitiesMap;
 
     // Debug buffers
     private List<int> greenParticles = new();
@@ -57,18 +62,14 @@ public class RenderDataBuilder : MonoBehaviour
         Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
 
         renderParticles.DeleteAllTypesOfParticles();
+        renderParticles.InitParticles(simulation._positions);
+        renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
 
-        if (renderType == RenderType.Particles)
-        {
-            renderParticles.InitParticles(simulation._positions);
-            renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
-        }
+        renderSquares.Init(spawn.GetBoundSize());
+        densities = new float[renderSquares.edges.Length];
 
-        else
-        {
-            renderSquares.Init(spawn.GetBoundSize());
-            densities = new float[renderSquares.edges.Length];
-        }
+        renderDensityMap.Init(spawn.GetBoundSize());
+        densitiesMap = new float[renderDensityMap.cells.Length];
     }
 
     public void Draw()
@@ -76,8 +77,11 @@ public class RenderDataBuilder : MonoBehaviour
         if (renderType == RenderType.Particles)
             DrawParticles();
 
-        else
+        else if (renderType == RenderType.MarchingSquares)
             DrawMarchingSquares();
+
+        else if (renderType == RenderType.DensityMap)
+            DrawDensityMap();
     }
 
     #region Particles
@@ -240,16 +244,31 @@ public class RenderDataBuilder : MonoBehaviour
 
     private void DrawMarchingSquares()
     {
-        if (densities.Length != renderSquares.edges.Length)
+        Parallel.For(0, densities.Length, i =>
         {
-            Debug.LogError("RenderDataBuilder: The length of densities doesn't equal length of edges");
-            return;
-        }
-            
-        for (int i = 0; i < densities.Length; i++)
             densities[i] = simulation.GetDensity(renderSquares.edges[i]);
-        
-        renderSquares.Draw(densities);
+        });
+
+        renderSquares.DrawMidpoints(densities);
+    }
+
+    private void DrawDensityMap()
+    {
+        int batchSize = 100;
+        int threadCount = (int)math.ceil((float)densitiesMap.Length / batchSize);
+
+        Parallel.For(0, threadCount, threadIndex =>
+        {
+            int start = threadIndex * batchSize;
+            int end = Math.Min(start + batchSize, densitiesMap.Length);
+
+            for (int i = start; i < end; i++)
+            {
+                densitiesMap[i] = simulation.GetDensity(renderDensityMap.cells[i]);
+            }
+        });
+
+        renderDensityMap.Draw(densitiesMap);
     }
 
     private void OnDestroy()

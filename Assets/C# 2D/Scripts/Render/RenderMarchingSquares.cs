@@ -24,7 +24,10 @@ namespace Rendering
         private float2[] centres;
         private float cellWidth, cellHeight;
 
+        private const int batchSize = 1023;
+        private const int submeshIndex = 0;
         private List<Matrix4x4> matrices;
+        private List<Matrix4x4>[] instancedMatrices;
 
         public void Init(float2 bounds)
         {
@@ -35,13 +38,24 @@ namespace Rendering
             }
 
             meshes = MeshGenerator.MarchingSquareVariations();
+            InitInstancedMatrices();
             GenerateEdges(bounds);
             GenerateCentres(bounds);
             GenerateMatrices();
         }
 
-        public void Draw(float[] densities)
+        public void DrawLerp(float[] densities)
         {
+
+        }
+
+        public void DrawMidpoints(float[] densities)
+        {
+            if (densities.Length != centres.Length)
+                Debug.LogError($"RenderMarchingSquares: Length of densities != length of centres. Densities: {densities.Length}, centres: {centres.Length}");
+
+            ClearInstancedMatrices();
+
             for (int y = 0; y < height - 1; y++)
             {
                 for (int x = 0; x < width - 1; x++)
@@ -56,7 +70,20 @@ namespace Rendering
                     if (densities[edgeIndex + width] >= 4) meshIndex |= 8;
 
                     if (meshIndex != 0)
-                        Graphics.DrawMesh(meshes[meshIndex], matrices[centreIndex], mat, 1);
+                        instancedMatrices[meshIndex].Add(matrices[centreIndex]);
+                }
+            }
+
+            for (int i = 1; i < meshes.Length; i++)
+            {
+                for (var j = 0; j < instancedMatrices[i].Count; j += batchSize)
+                {
+                    var temp = instancedMatrices[i].GetRange(j, Mathf.Min(instancedMatrices[i].Count - j, batchSize));
+                    Graphics.DrawMeshInstanced(
+                        meshes[i],
+                        submeshIndex,
+                        mat,
+                        temp);
                 }
             }
         }
@@ -66,6 +93,7 @@ namespace Rendering
             var topLeft = new float2(-bounds.x / 2, bounds.y / 2);
             var aspectRatio = bounds.x / bounds.y;
             var edgesList = new List<float2>();
+
             height = quality;
             width = (int)(quality * aspectRatio);
             cellWidth = bounds.x / (width - 1);
@@ -83,7 +111,6 @@ namespace Rendering
             }
 
             edges = edgesList.ToArray();
-            // DrawEdges();
         }
 
         private void GenerateCentres(float2 bounds)
@@ -102,8 +129,6 @@ namespace Rendering
             }
 
             centres = centresList.ToArray();
-            // DrawCentres();
-            // DrawSquare();
         }
 
         private void GenerateMatrices()
@@ -120,6 +145,34 @@ namespace Rendering
             }
         }
 
+        private void InitInstancedMatrices()
+        {
+            if (instancedMatrices != null)
+                ClearInstancedMatrices();
+
+            else
+            {
+                instancedMatrices = new List<Matrix4x4>[16];
+
+                for (int i = 0; i < instancedMatrices.Length; i++)
+                    instancedMatrices[i] = new();
+            }
+        }
+
+        private void ClearInstancedMatrices()
+        {
+            foreach (var list in instancedMatrices)
+                list.Clear();
+        }
+
+        public void DestroyMeshes()
+        {
+            if (meshes == null) return;
+            for (int i = 0; i < meshes.Length; i++)
+                Destroy(meshes[i]);
+        }
+
+        #region Debug
         private void DrawEdges()
         {
             testSquare.GetComponent<SpriteRenderer>().color = Color.white;
@@ -132,15 +185,6 @@ namespace Rendering
             testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
             foreach (var centre in centres)
                 Instantiate(testSquare, new Vector3(centre.x, centre.y), Quaternion.identity);
-        }
-
-        private void OnValidate()
-        {
-            // if (prevDrawIndex != drawIndex)
-            // {
-            //     prevDrawIndex = drawIndex;
-            //     DrawSquare();
-            // }
         }
 
         private void DrawSquare()
@@ -159,12 +203,6 @@ namespace Rendering
             testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset + width].x, edges[drawIndex + offset + width].y), Quaternion.identity));
             testObjects.Add(Instantiate(testSquare, new Vector3(edges[drawIndex + offset + width + 1].x, edges[drawIndex + offset + width + 1].y), Quaternion.identity));
         }
-
-        public void DestroyMeshes()
-        {
-            if (meshes == null) return;
-            for (int i = 0; i < meshes.Length; i++)
-                Destroy(meshes[i]);
-        }
+        #endregion
     }
 }

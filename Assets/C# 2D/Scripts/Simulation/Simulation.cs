@@ -142,7 +142,7 @@ namespace SimulationLogic
                 });
             });
 
-            // DrawDebugGrid(Color.green, particleSP);
+            DrawDebugGrid(Color.green, particleSP);
         }
 
         public void ExternalForces()
