@@ -47,7 +47,13 @@ public class Spawn2DParticles : MonoBehaviour
 
     public float[] InitializeNearDensities() => new float[particleSquareLength * particleSquareLength];
 
-    public float[] InitializeSprings() => new float[particleSquareLength * particleSquareLength];
+    public float[] InitializeSprings()
+    {
+        int particleCount = GetNumberOfParticles();
+        return new float[checked(particleCount * particleCount)];
+    }
+
+    public int GetSpringsLength() => checked(GetNumberOfParticles() * GetNumberOfParticles());
 
     public float[] InitializeBoundaryDensities() => new float[particleSquareLength * particleSquareLength * 50];
 

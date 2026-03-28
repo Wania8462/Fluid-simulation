@@ -2,6 +2,7 @@
 #pragma kernel ClearForceBuffers
 #pragma kernel DoubleDensityRelaxation
 #pragma kernel ApplyForceBuffers
+#pragma kernel ApplyForceBuffersToVelocities
 #pragma kernel ApplyViscosity
 #pragma kernel AdjustSprings
 #pragma kernel SpringDisplacements
@@ -44,6 +45,7 @@ const float nearStiffness;
 const float restDensity;
 
 const float springInteractionRadius;
+const float springRadius;
 const float springStiffness;
 const float springDeformationLimit;
 const float plasticity;
@@ -71,6 +73,11 @@ float2 ReadForceBuffer(uint index)
 {
     return float2((float)ForceBuffersX[index] / FloatScale, 
                   (float)ForceBuffersY[index] / FloatScale);
+}
+
+uint SpringIndex(uint i, uint j)
+{
+    return i * numParticles + j;
 }
 
 [numthreads(ThreadGroupSize,1,1)]
@@ -139,6 +146,15 @@ void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(ThreadGroupSize,1,1)]
+void ApplyForceBuffersToVelocities (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    Velocities[id.x] += ReadForceBuffer(id.x);
+}
+
+[numthreads(ThreadGroupSize,1,1)]
 void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
@@ -155,9 +171,9 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
         float inwardVelocity = dot(Velocities[id.x] - Velocities[i], r);
         if(inwardVelocity <= 0) continue;
 
-        float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r);
-        Velocities[id.x] -= impulse / 2;
-        Velocities[i] += impulse / 2;
+        float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
+        AtomicAddForceBuffer(id.x, -impulse);
+        AtomicAddForceBuffer(i, impulse);
     }
 }
 
@@ -166,6 +182,36 @@ void AdjustSprings (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
+
+    for (uint j = 0; j < numParticles; j++)
+    {
+        if (j <= id.x) continue;
+
+        uint springIndex = SpringIndex(id.x, j);
+        float mag = Distance(Positions[id.x], Positions[j]);
+
+        if (mag == 0) continue;
+
+        if (mag > springRadius)
+        {
+            Springs[springIndex] = 0;
+            continue;
+        }
+
+        float q = mag / springInteractionRadius;
+        float restLength = Springs[SpringIndex(id.x, j)];
+        
+        if (restLength == 0)
+            restLength = springRadius;
+
+        float deformation = springDeformationLimit * restLength;
+
+        if (mag > restLength + deformation)
+            Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
+
+        else if (mag < restLength + deformation)
+            Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
+    }
 }
 
 [numthreads(ThreadGroupSize,1,1)]
@@ -173,6 +219,29 @@ void SpringDisplacements (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles)
         return;
+
+    for (uint j = 0; j < numParticles; j++)
+    {
+        if (j <= id.x) continue;
+
+        float restLength = Springs[SpringIndex(id.x, j)];
+        if (restLength == 0) continue;
+
+        float mag = Distance(Positions[id.x], Positions[j]);
+        if (mag == 0) continue;
+
+        float2 r = UnitVector(Positions[id.x], Positions[j], mag);
+        float2 displacement = DisplacementBySpring(
+            dt,
+            springStiffness,
+            restLength,
+            springRadius,
+            mag,
+            r) * 0.5;
+
+        AtomicAddForceBuffer(id.x, -displacement);
+        AtomicAddForceBuffer(j, displacement);
+    }
 }
 
 [numthreads(ThreadGroupSize,1,1)]

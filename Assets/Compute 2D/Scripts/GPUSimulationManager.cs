@@ -1,9 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Threading;
-using System.Threading.Tasks;
-using NUnit.Framework.Interfaces;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -44,7 +40,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
 
-    [SerializeField] private RenderManager render;
+    [SerializeField] private ParticleRender render;
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ComputeShader compute;
 
@@ -72,13 +68,14 @@ public class GPUSimulationManager : MonoBehaviour
         { "ClearForceBuffers", 1 },
         { "DoubleDensityRelaxation", 2 },
         { "ApplyForceBuffers", 3 },
-        { "ApplyViscosity", 4 },
-        { "AdjustSprings", 5 },
-        { "SpringDisplacements", 6 },
-        { "ResolveBoundaries", 7 },
-        { "AttractToMouse", 8 },
-        { "AdvancePredictedPositions", 9 },
-        { "CalculateVelocity", 10 }
+        { "ApplyForceBuffersToVelocities", 4 },
+        { "ApplyViscosity", 5 },
+        { "AdjustSprings", 6 },
+        { "SpringDisplacements", 7 },
+        { "ResolveBoundaries", 8 },
+        { "AttractToMouse", 9 },
+        { "AdvancePredictedPositions", 10 },
+        { "CalculateVelocity", 11 }
     };
 
     public ThreadGroups threadGropus;
@@ -103,26 +100,36 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        render.Draw();
+        render.DrawParticles();
     }
 
     private void SimulationStep()
     {
         float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
         compute.SetFloat("dt", dt);
-        compute.SetVector("mousePosition", new Vector4(Input.mousePosition.x, Input.mousePosition.y));
 
         Dispatch(KernelIDs["ExternalForces"]);
-        // Dispatch(KernelIDs["ApplyViscosity"]);
+
+        Dispatch(KernelIDs["ClearForceBuffers"]);
+        Dispatch(KernelIDs["ApplyViscosity"]);
+        Dispatch(KernelIDs["ApplyForceBuffersToVelocities"]);
+
         Dispatch(KernelIDs["AdvancePredictedPositions"]);
-        // Dispatch(KernelIDs["AdjustSprings"]);
-        // Dispatch(KernelIDs["SpringDisplacements"]);
+
+        Dispatch(KernelIDs["AdjustSprings"]);
+        Dispatch(KernelIDs["ClearForceBuffers"]);
+        Dispatch(KernelIDs["SpringDisplacements"]);
+        Dispatch(KernelIDs["ApplyForceBuffers"]);
+
         Dispatch(KernelIDs["ClearForceBuffers"]);
         Dispatch(KernelIDs["DoubleDensityRelaxation"]);
         Dispatch(KernelIDs["ApplyForceBuffers"]);
 
-        // if (Input.GetMouseButton(0))
-        //     Dispatch(KernelIDs["AttractToMouse"]);
+        if (Input.GetMouseButton(0))
+        {
+            compute.SetVector("mousePosition", GetMousePos());
+            Dispatch(KernelIDs["AttractToMouse"]);
+        }
 
         Dispatch(KernelIDs["ResolveBoundaries"]);
         Dispatch(KernelIDs["CalculateVelocity"]);
@@ -147,12 +154,13 @@ public class GPUSimulationManager : MonoBehaviour
         SetBuffers();
         SetComputeSettings();
         SetInitialBufferData();
-        threadGropus = new ThreadGroups(KernelIDs["ExternalForces"], compute);
+        threadGropus = new ThreadGroups(compute, numParticles);
         Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
 
-        render.Setup();
+        render.Setup(this);
     }
 
+    #region Buffer helpers
     private void SetInitialBufferData()
     {
         buffers["Positions"].SetData(spawn.InitializePositions());
@@ -182,6 +190,7 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("restDensity", settings.restDensity);
 
         compute.SetFloat("springInteractionRadius", settings.springInteractionRadius);
+        compute.SetFloat("springRadius", settings.springRadius);
         compute.SetFloat("springStiffness", settings.springStiffness);
         compute.SetFloat("springDeformationLimit", settings.springDeformationLimit);
         compute.SetFloat("plasticity", settings.plasticity);
@@ -214,8 +223,7 @@ public class GPUSimulationManager : MonoBehaviour
         buffers["Velocities"] = new ComputeBuffer(numParticles, float2Size);
         buffers["Densities"] = new ComputeBuffer(numParticles, sizeof(float));
         buffers["NearDensities"] = new ComputeBuffer(numParticles, sizeof(float));
-        // Double the size if need more springs
-        buffers["Springs"] = new ComputeBuffer(numParticles * 50, sizeof(float));
+        buffers["Springs"] = new ComputeBuffer(spawn.GetSpringsLength(), sizeof(float));
 
         buffers["DebugFloat"] = new ComputeBuffer(debugLength, sizeof(float));
         buffers["DebugInt"] = new ComputeBuffer(debugLength, sizeof(int));
@@ -223,7 +231,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void Dispatch(int kernelID)
     {
-        compute.Dispatch(kernelID, threadGropus.x, threadGropus.y, threadGropus.y);
+        compute.Dispatch(kernelID, threadGropus.x, threadGropus.y, threadGropus.z);
     }
 
     private void ReleaseBuffers()
@@ -232,6 +240,18 @@ public class GPUSimulationManager : MonoBehaviour
             buffer.Value?.Release();
     }
 
+    private void OnDestroy()
+    {
+        ReleaseBuffers();
+    }
+    #endregion
+
+    private Vector4 GetMousePos() => new(
+        Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
+        Camera.main.ScreenToWorldPoint(Input.mousePosition).y
+    );
+
+    #region Debug
     private void GetDebugFloat()
     {
         AsyncGPUReadback.Request(
@@ -271,11 +291,7 @@ public class GPUSimulationManager : MonoBehaviour
             }
         );
     }
-
-    private void OnDestroy()
-    {
-        ReleaseBuffers();
-    }
+    #endregion
 }
 
 public class ThreadGroups
@@ -284,16 +300,16 @@ public class ThreadGroups
     public int y;
     public int z;
 
-    public ThreadGroups(int kernelID, ComputeShader compute)
+    public ThreadGroups(ComputeShader compute, int numParticles)
     {
-        GetThreadGroups(kernelID, compute);
+        GetThreadGroups(compute, numParticles);
     }
 
-    public void GetThreadGroups(int kernelID, ComputeShader compute)
+    public void GetThreadGroups(ComputeShader compute, int numParticles)
     {
         compute.GetKernelThreadGroupSizes(0, out uint xt, out uint yt, out uint zt);
-        x = (int)xt;
-        y = (int)yt;
-        z = (int)zt;
+        x = (int)math.ceil((float)numParticles / xt);
+        y = 1;
+        z = 1;
     }
 }

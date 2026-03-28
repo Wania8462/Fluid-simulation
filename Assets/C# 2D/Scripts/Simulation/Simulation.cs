@@ -108,7 +108,7 @@ namespace SimulationLogic
             });
 
             Watcher.ExecuteWithTimer("4. ExternalForces", ExternalForces);
-            // Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
+            Watcher.ExecuteWithTimer("5. ApplyViscosity", ApplyViscosity);
 
             Watcher.ExecuteWithTimer("6. Advance predicted pos", () =>
             {
@@ -235,9 +235,9 @@ namespace SimulationLogic
                 {
                     if (i >= j) continue;
                     var mag = FluidMath.Distance(_positions[i], _positions[j]);
-                    if (mag > springRadius || mag == 0) continue;
+                    if (mag > interactionRadius || mag == 0) continue;
 
-                    var q = mag / springRadius;
+                    var q = mag / interactionRadius;
                     var r = (_positions[j] - _positions[i]) / mag;
                     var inwardVelocity = math.dot(_velocities[i] - _velocities[j], r);
                     if (!(inwardVelocity > 0)) continue;

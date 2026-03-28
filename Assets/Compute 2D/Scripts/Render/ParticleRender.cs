@@ -5,8 +5,8 @@ public class ParticleRender : MonoBehaviour
 {
     [SerializeField] private int particleQuality;
     [SerializeField] private ComputeShader compute;
+    [SerializeField] private Material material;
     
-    private Material material;
     private Mesh mesh;
 
     private ComputeBuffer colorsBuffer;
@@ -20,9 +20,8 @@ public class ParticleRender : MonoBehaviour
     const int CalculateColorsKernelID = 0;
     const int float4Size = 16;
 
-    public void Setup(Material mat, GPUSimulationManager sim)
+    public void Setup(GPUSimulationManager sim)
     {
-        material = mat;
         mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, particleQuality) : mesh;
         commandBuf ??= new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
         commandData ??= new GraphicsBuffer.IndirectDrawIndexedArgs[commandCount];
@@ -37,7 +36,7 @@ public class ParticleRender : MonoBehaviour
             matProps = new MaterialPropertyBlock()
         };
 
-        theradGroups = new ThreadGroups(CalculateColorsKernelID, compute);
+        theradGroups = new ThreadGroups(compute, sim.numParticles);
         compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.buffers["Velocities"]);
 
         colorsBuffer?.Release();
