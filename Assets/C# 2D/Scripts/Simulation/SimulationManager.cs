@@ -147,13 +147,13 @@ namespace SimulationLogic
                     if (!twoSim)
                     {
                         field.SetValue(settings, float.Parse(command[1]));
-                        simulations[FirstSim].SetSettings(settings[FirstSim]);
+                        simulations[FirstSim].UpdateSettings(settings[FirstSim]);
                     }
 
                     else
                     {
                         field.SetValue(settings[1], float.Parse(command[1]));
-                        simulations[SecondSim].SetSettings(settings[SecondSim]);
+                        simulations[SecondSim].UpdateSettings(settings[SecondSim]);
                     }
                 }
 

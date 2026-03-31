@@ -234,10 +234,11 @@ MonoBehaviour:
     springDeformationLimit: 0
     plasticity: 0.05
     highViscosity: 0
-    lowViscosity: 3
+    lowViscosity: 1
   particleRadius: 0.5
-  targetFrameRate: 120
+  targetFrameRate: 180
   useRealDeltaTime: 0
+  maxParticlesPerCell: 256
   render: {fileID: 441569835}
   spawn: {fileID: 1001776192}
   compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}

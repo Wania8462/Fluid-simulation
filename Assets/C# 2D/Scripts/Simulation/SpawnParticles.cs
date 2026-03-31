@@ -41,6 +41,10 @@ namespace SimulationLogic
                 }
 
                 boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+
+                if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
+                    Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
+                    
                 return pos;
             }
 

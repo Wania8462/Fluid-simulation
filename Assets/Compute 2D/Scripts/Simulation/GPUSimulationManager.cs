@@ -57,6 +57,10 @@ public class GPUSimulationManager : MonoBehaviour
         { "Densities", null },
         { "NearDensities", null },
         { "Springs", null },
+        { "SpatialHashes", null },
+        { "SpatialHashesScratch", null },
+        { "SortRanges", null },
+        { "SortCounters", null },
         { "DebugFloat", null },
         { "DebugInt", null }
     };
@@ -75,14 +79,21 @@ public class GPUSimulationManager : MonoBehaviour
         { "ResolveBoundaries", 8 },
         { "AttractToMouse", 9 },
         { "AdvancePredictedPositions", 10 },
-        { "CalculateVelocity", 11 }
+        { "CalculateVelocity", 11 },
+        { "UpdateSpatialHash", 12 },
+        { "SortHashes", 13 },
+        { "CopySpatialHashes", 14 }
     };
 
     public ThreadGroups threadGropus;
     private const int float2Size = 8;
+    private const int int2Size = 8;
+    private const int int4Size = 16;
+    private const int sortCounterLength = 2;
     private const float fakeDT = 1 / 60f;
 
     private readonly int debugLength = 100;
+    private readonly uint[] sortCounterReadback = new uint[sortCounterLength];
 
     private void Start()
     {
@@ -171,6 +182,10 @@ public class GPUSimulationManager : MonoBehaviour
         buffers["Densities"].SetData(spawn.InitializeDensities());
         buffers["NearDensities"].SetData(spawn.InitializeNearDensities());
         buffers["Springs"].SetData(spawn.InitializeSprings());
+        buffers["SpatialHashes"].SetData(new int2[numParticles]);
+        buffers["SpatialHashesScratch"].SetData(new int2[numParticles]);
+        buffers["SortRanges"].SetData(new int4[numParticles * 2]);
+        buffers["SortCounters"].SetData(new uint[sortCounterLength]);
 
         buffers["DebugFloat"].SetData(new float[debugLength]);
         buffers["DebugInt"].SetData(new int[debugLength]);
@@ -201,6 +216,10 @@ public class GPUSimulationManager : MonoBehaviour
     private void SetComputeSettings()
     {
         compute.SetInt("numParticles", numParticles);
+        compute.SetInt("activeSortRangeCount", 0);
+        compute.SetInt("sortCurrentRangeBase", 0);
+        compute.SetInt("sortNextRangeBase", numParticles);
+        compute.SetInt("sortSourceIsSpatialHashes", 1);
         UpdateComputeSettings();
         float2 rhbs = spawn.GetRealHalfBoundSize(particleRadius);
         compute.SetVector("realHalfBoundSize", new Vector4(rhbs.x, rhbs.y));
@@ -224,6 +243,10 @@ public class GPUSimulationManager : MonoBehaviour
         buffers["Densities"] = new ComputeBuffer(numParticles, sizeof(float));
         buffers["NearDensities"] = new ComputeBuffer(numParticles, sizeof(float));
         buffers["Springs"] = new ComputeBuffer(spawn.GetSpringsLength(), sizeof(float));
+        buffers["SpatialHashes"] = new ComputeBuffer(numParticles, int2Size);
+        buffers["SpatialHashesScratch"] = new ComputeBuffer(numParticles, int2Size);
+        buffers["SortRanges"] = new ComputeBuffer(numParticles * 2, int4Size);
+        buffers["SortCounters"] = new ComputeBuffer(sortCounterLength, sizeof(uint));
 
         buffers["DebugFloat"] = new ComputeBuffer(debugLength, sizeof(float));
         buffers["DebugInt"] = new ComputeBuffer(debugLength, sizeof(int));
@@ -232,6 +255,51 @@ public class GPUSimulationManager : MonoBehaviour
     private void Dispatch(int kernelID)
     {
         compute.Dispatch(kernelID, threadGropus.x, threadGropus.y, threadGropus.z);
+    }
+
+    private void Dispatch(int kernelID, int groupsX)
+    {
+        compute.Dispatch(kernelID, groupsX, 1, 1);
+    }
+
+    // This is kept separate from SimulationStep because it requires CPU-side
+    // coordination between GPU partition passes to advance the quicksort ranges.
+    private void UpdateAndSortSpatialHashes()
+    {
+        if (numParticles < 2)
+            return;
+
+        Dispatch(KernelIDs["UpdateSpatialHash"]);
+
+        buffers["SortRanges"].SetData(new[] { new int4(0, numParticles, 1, 0) }, 0, 0, 1);
+
+        int activeRangeCount = 1;
+        int currentRangeBase = 0;
+        int nextRangeBase = numParticles;
+        bool sourceIsSpatialHashes = true;
+        uint[] clearedSortCounters = new uint[sortCounterLength];
+
+        while (true)
+        {
+            buffers["SortCounters"].SetData(clearedSortCounters);
+            compute.SetInt("activeSortRangeCount", activeRangeCount);
+            compute.SetInt("sortCurrentRangeBase", currentRangeBase);
+            compute.SetInt("sortNextRangeBase", nextRangeBase);
+            compute.SetInt("sortSourceIsSpatialHashes", sourceIsSpatialHashes ? 1 : 0);
+
+            Dispatch(KernelIDs["SortHashes"], activeRangeCount);
+            buffers["SortCounters"].GetData(sortCounterReadback);
+
+            if (sortCounterReadback[1] == 0)
+                break;
+
+            activeRangeCount = (int)sortCounterReadback[0];
+            (currentRangeBase, nextRangeBase) = (nextRangeBase, currentRangeBase);
+            sourceIsSpatialHashes = !sourceIsSpatialHashes;
+        }
+
+        if (sourceIsSpatialHashes)
+            Dispatch(KernelIDs["CopySpatialHashes"]);
     }
 
     private void ReleaseBuffers()
