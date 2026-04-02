@@ -102,9 +102,9 @@ public class RenderDataBuilder : MonoBehaviour
     {
         if (trackParticle == -1) return;
 
-        if (trackParticle >= simulation._positions.Length || trackParticle < 0)
+        if (trackParticle >= simulation._positions.Count || trackParticle < 0)
         {
-            Debug.LogError($"Simulation manager: tracked particle index is out of range. Number of particles: {simulation._positions.Length}");
+            Debug.LogError($"Simulation manager: tracked particle index is out of range. Number of particles: {simulation._positions.Count}");
             return;
         }
 

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Mathematics;
 using System;
+using SimulationLogic;
 
 namespace Rendering
 {
@@ -38,7 +39,7 @@ namespace Rendering
 #endif
 
         # region Fluid particles
-        public void InitParticles(float2[] positions)
+        public void InitParticles(FlexibleArray<float2> positions)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
@@ -56,36 +57,36 @@ namespace Rendering
             }
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, List<int> highlightGreen = null, List<int> highlightYellow = null)
+        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, List<int> highlightGreen = null, List<int> highlightYellow = null)
         {
             UpdateParticleBuffers(positions, velocities);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches();
+            DrawParticleBatches(positions.Count);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, List<int> highlightGreen = null, int highlightYellow = -1)
+        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, List<int> highlightGreen = null, int highlightYellow = -1)
         {
             UpdateParticleBuffers(positions, velocities);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches();
+            DrawParticleBatches(positions.Count);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, List<int> highlightYellow = null)
+        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, int highlightGreen = -1, List<int> highlightYellow = null)
         {
             UpdateParticleBuffers(positions, velocities);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches();
+            DrawParticleBatches(positions.Count);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int highlightGreen = -1, int highlightYellow = -1)
+        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, int highlightGreen = -1, int highlightYellow = -1)
         {
             UpdateParticleBuffers(positions, velocities);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches();
+            DrawParticleBatches(positions.Count);
         }
 
         public void DeleteParticles()
@@ -271,9 +272,9 @@ namespace Rendering
         #endregion
 
         #region Helpers
-        private void UpdateParticleBuffers(float2[] positions, float2[] velocities)
+        private void UpdateParticleBuffers(FlexibleArray<float2> positions, FlexibleArray<float2> velocities)
         {
-            Parallel.For(0, positions.Length, i =>
+            Parallel.For(0, positions.Count, i =>
             {
                 fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
                 fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
@@ -297,11 +298,11 @@ namespace Rendering
             fluidBuffer.colorsBuffer[highlightIndex] = color;
         }
 
-        private void DrawParticleBatches()
+        private void DrawParticleBatches(int numParticles)
         {
-            for (var i = 0; i < fluidBuffer.matrices.Count; i += batchSize)
+            for (var i = 0; i < numParticles; i += batchSize)
             {
-                var count = Mathf.Min(batchSize, fluidBuffer.matrices.Count - i);
+                var count = Mathf.Min(batchSize, numParticles - i);
                 fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
 
                 Graphics.DrawMeshInstanced(

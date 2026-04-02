@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -23,12 +24,12 @@ namespace SimulationLogic
 
         private int circleArraySize = -1;
 
-        public float2[] InitializePositions()
+        public FlexibleArray<float2> InitializePositions()
         {
             if (!spawnCircle)
             {
                 int len = particleSquareLength;
-                float2[] pos = new float2[len * len];
+                FlexibleArray<float2> pos = new(len * len);
                 jitterStrength = useJitter ? jitterStrength : 0;
 
                 for (int i = 0; i < len; i++)
@@ -52,7 +53,7 @@ namespace SimulationLogic
             {
                 int len = particleSquareLength;
                 float radius = len * spacing / 2;
-                List<float2> positions = new();
+                FlexibleArray<float2> positions = new();
                 float2 origin = new(0, 0);
                 jitterStrength = useJitter ? jitterStrength : 0;
 
@@ -74,17 +75,17 @@ namespace SimulationLogic
                     Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
             
                 circleArraySize = positions.Count;
-                return positions.ToArray();
+                return positions;
             }
         }
 
-        public float2[] InitializeBoundaryPositions()
+        public FlexibleArray<float2> InitializeBoundaryPositions()
         {
             var lenX = (int)(boundingBoxSize.x * borderDensity);
             var lenY = (int)(boundingBoxSize.y * borderDensity);
             var particlesPerLayer = lenX * 2 + lenY * 2;
             var totParticles = particlesPerLayer * layers;
-            var pos = new float2[totParticles];
+            var pos = new FlexibleArray<float2>(totParticles);
             var topLeft = new float2(-(boundingBoxSize.x / 2), boundingBoxSize.y / 2);
 
             for (int i = 0; i < layers; i++)
@@ -112,20 +113,20 @@ namespace SimulationLogic
             return pos;
         }
 
-        public float2[] InitializePreviousPositions() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitializePreviousPositions() => GetPropperSizedArray<float2>();
 
-        public float2[] InitializeVelocities() => GetPropperSizedArray<float2>();
-        public float2[] InitializeForcesBuffer() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitializeVelocities() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitializeForcesBuffer() => GetPropperSizedArray<float2>();
 
-        public float[] InitializeDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitializeDensities() => GetPropperSizedArray<float>();
 
-        public float[] InitializeNearDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitializeNearDensities() => GetPropperSizedArray<float>();
 
-        public float[] InitializeBoundaryDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitializeBoundaryDensities() => GetPropperSizedArray<float>();
 
-        public float2[] InitializeBodyDensityPoints(int resolution, float radius)
+        public FlexibleArray<float2> InitializeBodyDensityPoints(int resolution, float radius)
         {
-            float2[] res = new float2[resolution];
+            FlexibleArray<float2> res = new(resolution);
 
             for (int i = 0; i < resolution; i++)
             {
@@ -152,17 +153,17 @@ namespace SimulationLogic
             return new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
         }
 
-        private T[] GetPropperSizedArray<T>()
+        private FlexibleArray<T> GetPropperSizedArray<T>()
         {
             if (!spawnCircle)
-                return new T[particleSquareLength * particleSquareLength];
+                return new FlexibleArray<T>(particleSquareLength * particleSquareLength);
 
             else
             {
                 if (circleArraySize == -1)
                     InitializePositions();
 
-                return new T[circleArraySize];
+                return new FlexibleArray<T>(circleArraySize);
             }
         }
     }

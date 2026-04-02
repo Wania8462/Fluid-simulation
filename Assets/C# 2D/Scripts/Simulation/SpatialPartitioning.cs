@@ -42,12 +42,12 @@ namespace SimulationLogic
                 grid[i] = new List<int>();
         }
 
-        public void Init(float2[] positions)
+        public void Init(FlexibleArray<float2> positions)
         {
             foreach (var list in grid)
                 list.Clear();
 
-            for (var i = 0; i < positions.Length; i++)
+            for (var i = 0; i < positions.Count; i++)
                 grid[GetGridIndex(positions[i])].Add(i);
         }
 

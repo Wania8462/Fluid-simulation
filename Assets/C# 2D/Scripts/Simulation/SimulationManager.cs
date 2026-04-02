@@ -36,6 +36,8 @@ namespace SimulationLogic
         public float mouseAttractiveness;
         public float mouseRadius;
         public float collisionDamping;
+        public bool flow;
+        public int maxParticles = -1;
         public bool includeBody;
         public bool useParticlesAsBorder;
 
@@ -91,6 +93,7 @@ namespace SimulationLogic
         [SerializeField] private bool pause = true;
         [SerializeField] private bool realDeltaTime;
         [SerializeField] private int targetFrameRate;
+        public bool flow;
         [SerializeField] private bool twoSimulations;
         // Pretend that it only has public get and don't change outside
         [SerializeField] public SimulationSettings[] settings;

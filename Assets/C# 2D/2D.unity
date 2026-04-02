@@ -729,6 +729,7 @@ MonoBehaviour:
   pause: 1
   realDeltaTime: 0
   targetFrameRate: 120
+  flow: 0
   twoSimulations: 0
   settings:
   - interactionRadius: 6
@@ -736,6 +737,8 @@ MonoBehaviour:
     mouseAttractiveness: 0.5
     mouseRadius: 1000
     collisionDamping: 0.083
+    flow: 0
+    maxParticles: -1
     includeBody: 0
     useParticlesAsBorder: 0
     body:
@@ -777,6 +780,8 @@ MonoBehaviour:
     mouseAttractiveness: 1
     mouseRadius: 1000
     collisionDamping: 0
+    flow: 0
+    maxParticles: -1
     includeBody: 0
     useParticlesAsBorder: 0
     body:
@@ -854,7 +859,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb3668f42e2cc2f498161e42f8d5480f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDataBuilder
-  renderType: 2
+  renderType: 0
   Offset: 0
   manager: {fileID: 1165800423}
   spawn: {fileID: 1165800424}
