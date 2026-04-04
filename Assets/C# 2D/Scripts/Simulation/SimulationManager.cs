@@ -37,6 +37,7 @@ namespace SimulationLogic
         public float mouseRadius;
         public float collisionDamping;
         public bool flow;
+        public float spawnInterval;
         public int maxParticles = -1;
         public bool includeBody;
         public bool useParticlesAsBorder;
@@ -67,6 +68,8 @@ namespace SimulationLogic
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
+            flow = settings.flow;
+            spawnInterval = settings.spawnInterval;
             collisionDamping = settings.collisionDamping;
             useParticlesAsBorder = settings.useParticlesAsBorder;
 
@@ -174,15 +177,15 @@ namespace SimulationLogic
                     {
                         mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                         mousePos.x = mousePos.x < 0 ? mousePos.x + render.offset : mousePos.x - render.offset;
-                        simulation.SimulationStep(mousePos, dt);
+                        simulation.SimulationStep(mousePos, dt, Time.deltaTime);
                     }
                 }
 
                 else
                 {
                     mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
-                    Watcher.ExecuteWithTimer("1. Step", () => { simulations[FirstSim].SimulationStep(mousePos, dt); });
-                    // LogFrameData();
+                    Watcher.ExecuteWithTimer("1. Step", () => { simulations[FirstSim].SimulationStep(mousePos, dt, Time.deltaTime); });
+                    LogFrameData();
                 }
             }
 

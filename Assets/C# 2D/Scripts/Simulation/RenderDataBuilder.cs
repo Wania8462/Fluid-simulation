@@ -62,7 +62,13 @@ public class RenderDataBuilder : MonoBehaviour
         Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
 
         renderParticles.DeleteAllTypesOfParticles();
-        renderParticles.InitParticles(simulation._positions);
+
+        if (sim.flow)
+            renderParticles.InitParticles();
+
+        else
+            renderParticles.InitParticles(sim._positions);
+
         renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
 
         renderSquares.Init(spawn.GetBoundSize());

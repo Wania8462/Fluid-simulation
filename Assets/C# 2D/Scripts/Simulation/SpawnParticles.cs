@@ -17,6 +17,11 @@ namespace SimulationLogic
         [SerializeField] private float2 boundingBoxSizeOffset = new float2(160, 80);
         public float2 boundingBoxSize;
 
+        [Header("Flow settings")]
+        // pretend it has private set
+        public int spawnPerFlowRow; 
+        public float flowSpacing = 2;
+
         [Header("Border settings")]
         public float borderDensity;
         public int layers;

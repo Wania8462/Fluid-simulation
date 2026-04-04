@@ -39,12 +39,32 @@ namespace Rendering
 #endif
 
         # region Fluid particles
+        public void InitParticles()
+        {
+            fluidBuffer.matrices ??= new();
+            fluidBuffer.colorsBuffer ??= new();
+            fluidBuffer.mesh = fluidBuffer.mesh != null ? fluidBuffer.mesh : MeshGenerator.Circle(particleRadius, resolution);
+            fluidBuffer.mpb ??= new MaterialPropertyBlock();
+            fluidBuffer.mpb.SetVectorArray(colors, new Vector4[batchSize]);
+
+            for (int i = 0; i < 100000; i++)
+            {
+                fluidBuffer.matrices.Add(Matrix4x4.TRS(
+                    new(0, 0),
+                    Quaternion.identity,
+                    scale
+                ));
+                fluidBuffer.colorsBuffer.Add(new Vector4());
+            }
+        }
+
         public void InitParticles(FlexibleArray<float2> positions)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
             fluidBuffer.mesh = fluidBuffer.mesh != null ? fluidBuffer.mesh : MeshGenerator.Circle(particleRadius, resolution);
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
+            fluidBuffer.mpb.SetVectorArray(colors, new Vector4[batchSize]);
 
             foreach (var pos in positions)
             {
@@ -275,7 +295,7 @@ namespace Rendering
         private void UpdateParticleBuffers(FlexibleArray<float2> positions, FlexibleArray<float2> velocities)
         {
             Parallel.For(0, positions.Count, i =>
-            {
+            { 
                 fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
                 fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
             });
