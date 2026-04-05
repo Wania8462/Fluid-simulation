@@ -25,6 +25,9 @@ namespace Rendering
         private ParticlesBuffer fluidBuffer;
         private ParticlesBuffer borderBuffer;
         private ParticlesBuffer customBuffer;
+        
+        private readonly Vector4[] colorsBatch = new Vector4[batchSize];
+        private readonly Matrix4x4[] matricesBatch = new Matrix4x4[batchSize];
 
         private const int batchSize = 1023;
         private const float particleRadius = 0.5f;
@@ -143,11 +146,15 @@ namespace Rendering
         {
             for (var i = 0; i < borderBuffer.matrices.Count; i += batchSize)
             {
+                var count = Mathf.Min(batchSize, borderBuffer.matrices.Count - i);
+                borderBuffer.matrices.CopyTo(i, matricesBatch, 0, count);
+
                 Graphics.DrawMeshInstanced(
                     borderBuffer.mesh,
                     submeshIndex,
                     mat,
-                    borderBuffer.matrices.GetRange(i, Mathf.Min(batchSize, borderBuffer.matrices.Count - i)),
+                    matricesBatch,
+                    count,
                     borderBuffer.mpb
                 );
             }
@@ -323,13 +330,16 @@ namespace Rendering
             for (var i = 0; i < numParticles; i += batchSize)
             {
                 var count = Mathf.Min(batchSize, numParticles - i);
-                fluidBuffer.mpb.SetVectorArray(colors, fluidBuffer.colorsBuffer.GetRange(i, count));
+                fluidBuffer.colorsBuffer.CopyTo(i, colorsBatch, 0, count);
+                fluidBuffer.matrices.CopyTo(i, matricesBatch, 0, count);
+                fluidBuffer.mpb.SetVectorArray(colors, colorsBatch);
 
                 Graphics.DrawMeshInstanced(
                     fluidBuffer.mesh,
                     submeshIndex,
                     mat,
-                    fluidBuffer.matrices.GetRange(i, count),
+                    matricesBatch,
+                    count,
                     fluidBuffer.mpb
                 );
             }

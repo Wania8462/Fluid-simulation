@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -21,6 +20,7 @@ namespace SimulationLogic
         // pretend it has private set
         public int spawnPerFlowRow; 
         public float flowSpacing = 2;
+        public float spawnInterval;
 
         [Header("Border settings")]
         public float borderDensity;
@@ -29,7 +29,29 @@ namespace SimulationLogic
 
         private int circleArraySize = -1;
 
-        public FlexibleArray<float2> InitializePositions()
+        public List<int> InitParticleIDs()
+        {
+            var Ids = new List<int>();
+            var numPoints = InitPositions().Count;
+
+            for (int i = 0; i < numPoints; i++)
+                Ids.Add(i);
+
+            return Ids;
+        }
+
+        public Dictionary<int, int> InitIDToIndex()
+        {
+            var IDToIndex = new Dictionary<int, int>();
+            var numPoints = InitPositions().Count;
+
+            for (int i = 0; i < numPoints; i++)
+                IDToIndex.Add(i, i);
+
+            return IDToIndex;
+        }
+
+        public FlexibleArray<float2> InitPositions()
         {
             if (!spawnCircle)
             {
@@ -84,7 +106,7 @@ namespace SimulationLogic
             }
         }
 
-        public FlexibleArray<float2> InitializeBoundaryPositions()
+        public FlexibleArray<float2> InitBoundaryPositions()
         {
             var lenX = (int)(boundingBoxSize.x * borderDensity);
             var lenY = (int)(boundingBoxSize.y * borderDensity);
@@ -118,18 +140,18 @@ namespace SimulationLogic
             return pos;
         }
 
-        public FlexibleArray<float2> InitializePreviousPositions() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitPreviousPositions() => GetPropperSizedArray<float2>();
 
-        public FlexibleArray<float2> InitializeVelocities() => GetPropperSizedArray<float2>();
-        public FlexibleArray<float2> InitializeForcesBuffer() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitVelocities() => GetPropperSizedArray<float2>();
+        public FlexibleArray<float2> InitForcesBuffer() => GetPropperSizedArray<float2>();
 
-        public FlexibleArray<float> InitializeDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitDensities() => GetPropperSizedArray<float>();
 
-        public FlexibleArray<float> InitializeNearDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitNearDensities() => GetPropperSizedArray<float>();
 
-        public FlexibleArray<float> InitializeBoundaryDensities() => GetPropperSizedArray<float>();
+        public FlexibleArray<float> InitBoundaryDensities() => GetPropperSizedArray<float>();
 
-        public FlexibleArray<float2> InitializeBodyDensityPoints(int resolution, float radius)
+        public FlexibleArray<float2> InitBodyDensityPoints(int resolution, float radius)
         {
             FlexibleArray<float2> res = new(resolution);
 
@@ -166,7 +188,7 @@ namespace SimulationLogic
             else
             {
                 if (circleArraySize == -1)
-                    InitializePositions();
+                    InitPositions();
 
                 return new FlexibleArray<T>(circleArraySize);
             }

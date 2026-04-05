@@ -16,7 +16,7 @@ public class CallStats
 
     public int Count => calls.Count;
 
-    public double GetAverage() => calls.Average();
+    public double GetAverage() => (int)calls.Average();
     public double GetSum() => calls.Sum();
     public string GetStats() => $"Calls: {calls.Count}, Avg: {calls.Average()}";
 }
