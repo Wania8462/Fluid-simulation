@@ -1,10 +1,11 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Mathematics;
-using System;
-using SimulationLogic;
+using System.Diagnostics;
+using Debug = UnityEngine.Debug;
 
 namespace Rendering
 {
@@ -30,6 +31,7 @@ namespace Rendering
         private readonly Matrix4x4[] matricesBatch = new Matrix4x4[batchSize];
 
         private const int batchSize = 1023;
+        private const int parallelForBatchSize = 512;
         private const float particleRadius = 0.5f;
         private const int submeshIndex = 0;
         private readonly int colors = Shader.PropertyToID("_Color");
@@ -42,7 +44,7 @@ namespace Rendering
 #endif
 
         # region Fluid particles
-        public void InitParticles()
+        public void InitParticles(int maxNumParticles = 100_000)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
@@ -50,7 +52,7 @@ namespace Rendering
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
             fluidBuffer.mpb.SetVectorArray(colors, new Vector4[batchSize]);
 
-            for (int i = 0; i < 100000; i++)
+            for (int i = 0; i < maxNumParticles; i++)
             {
                 fluidBuffer.matrices.Add(Matrix4x4.TRS(
                     new(0, 0),
@@ -61,18 +63,19 @@ namespace Rendering
             }
         }
 
-        public void InitParticles(FlexibleArray<float2> positions)
+        public void InitParticles(float2[] positions, int count = -1)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
             fluidBuffer.mesh = fluidBuffer.mesh != null ? fluidBuffer.mesh : MeshGenerator.Circle(particleRadius, resolution);
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
             fluidBuffer.mpb.SetVectorArray(colors, new Vector4[batchSize]);
+            var length = count == -1 ? positions.Length : count;
 
-            foreach (var pos in positions)
+            for (int i = 0; i < length; i++)
             {
                 fluidBuffer.matrices.Add(Matrix4x4.TRS(
-                    new(pos.x, pos.y),
+                    new(positions[i].x, positions[i].y),
                     Quaternion.identity,
                     scale
                 ));
@@ -80,36 +83,60 @@ namespace Rendering
             }
         }
 
-        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, List<int> highlightGreen = null, List<int> highlightYellow = null)
+        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, List<int> highlightYellow = null)
         {
-            UpdateParticleBuffers(positions, velocities);
+            if (positions.Length != velocities.Length)
+                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
+
+            var length = positions.Length;
+            if (count != -1) length = count;
+
+            UpdateParticleBuffers(positions, velocities, length);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches(positions.Count);
+            DrawParticleBatches(length);
         }
 
-        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, List<int> highlightGreen = null, int highlightYellow = -1)
+        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, int highlightYellow = -1)
         {
-            UpdateParticleBuffers(positions, velocities);
+            if (positions.Length != velocities.Length)
+                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
+
+            var length = positions.Length;
+            if (count != -1) length = count;
+
+            UpdateParticleBuffers(positions, velocities, length);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches(positions.Count);
+            DrawParticleBatches(length);
         }
 
-        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, int highlightGreen = -1, List<int> highlightYellow = null)
+        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, List<int> highlightYellow = null)
         {
-            UpdateParticleBuffers(positions, velocities);
+            if (positions.Length != velocities.Length)
+                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
+
+            var length = positions.Length;
+            if (count != -1) length = count;
+
+            UpdateParticleBuffers(positions, velocities, length);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches(positions.Count);
+            DrawParticleBatches(length);
         }
 
-        public void DrawParticles(FlexibleArray<float2> positions, FlexibleArray<float2> velocities, int highlightGreen = -1, int highlightYellow = -1)
+        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, int highlightYellow = -1)
         {
-            UpdateParticleBuffers(positions, velocities);
+            if (positions.Length != velocities.Length)
+                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
+
+            var length = positions.Length;
+            if (count != -1) length = count;
+
+            UpdateParticleBuffers(positions, velocities, length);
             ApplyHighlight(highlightGreen, Color.green);
             ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches(positions.Count);
+            DrawParticleBatches(length);
         }
 
         public void DeleteParticles()
@@ -299,10 +326,20 @@ namespace Rendering
         #endregion
 
         #region Helpers
-        private void UpdateParticleBuffers(FlexibleArray<float2> positions, FlexibleArray<float2> velocities)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ParallelFor(int count, System.Action<int> body)
         {
-            Parallel.For(0, positions.Count, i =>
-            { 
+            Parallel.ForEach(Partitioner.Create(0, count, parallelForBatchSize), range =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                    body(i);
+            });
+        }
+
+        private void UpdateParticleBuffers(float2[] positions, float2[] velocities, int count)
+        {
+            ParallelFor(count, i =>
+            {
                 fluidBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
                 fluidBuffer.colorsBuffer[i] = GetColorVector(velocities[i]);
             });

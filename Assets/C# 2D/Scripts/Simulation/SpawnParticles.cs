@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using NUnit.Framework.Internal;
 using Unity.Mathematics;
+using UnityEditor.ShaderGraph.Internal;
 using UnityEngine;
 
 namespace SimulationLogic
@@ -18,7 +20,7 @@ namespace SimulationLogic
 
         [Header("Flow settings")]
         // pretend it has private set
-        public int spawnPerFlowRow; 
+        public int spawnPerFlowRow;
         public float flowSpacing = 2;
         public float spawnInterval;
 
@@ -29,34 +31,23 @@ namespace SimulationLogic
 
         private int circleArraySize = -1;
 
-        public List<int> InitParticleIDs()
+        public RefList<int> GetIDs()
         {
-            var Ids = new List<int>();
-            var numPoints = InitPositions().Count;
+            var numParticles = GetNumOfSpawnParticles();
+            var IDs = new RefList<int>();
 
-            for (int i = 0; i < numPoints; i++)
-                Ids.Add(i);
+            for (int i = 0; i < numParticles; i++)
+                IDs.Add(i);
 
-            return Ids;
+            return IDs;
         }
 
-        public Dictionary<int, int> InitIDToIndex()
-        {
-            var IDToIndex = new Dictionary<int, int>();
-            var numPoints = InitPositions().Count;
-
-            for (int i = 0; i < numPoints; i++)
-                IDToIndex.Add(i, i);
-
-            return IDToIndex;
-        }
-
-        public FlexibleArray<float2> InitPositions()
+        public RefList<float2> InitPositions()
         {
             if (!spawnCircle)
             {
                 int len = particleSquareLength;
-                FlexibleArray<float2> pos = new(len * len);
+                RefList<float2> pos = new(len * len);
                 jitterStrength = useJitter ? jitterStrength : 0;
 
                 for (int i = 0; i < len; i++)
@@ -72,7 +63,7 @@ namespace SimulationLogic
 
                 if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
                     Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
-                    
+
                 return pos;
             }
 
@@ -80,7 +71,7 @@ namespace SimulationLogic
             {
                 int len = particleSquareLength;
                 float radius = len * spacing / 2;
-                FlexibleArray<float2> positions = new();
+                RefList<float2> positions = new();
                 float2 origin = new(0, 0);
                 jitterStrength = useJitter ? jitterStrength : 0;
 
@@ -100,19 +91,19 @@ namespace SimulationLogic
 
                 if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
                     Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
-            
+
                 circleArraySize = positions.Count;
                 return positions;
             }
         }
 
-        public FlexibleArray<float2> InitBoundaryPositions()
+        public RefList<float2> InitBoundaryPositions()
         {
             var lenX = (int)(boundingBoxSize.x * borderDensity);
             var lenY = (int)(boundingBoxSize.y * borderDensity);
             var particlesPerLayer = lenX * 2 + lenY * 2;
             var totParticles = particlesPerLayer * layers;
-            var pos = new FlexibleArray<float2>(totParticles);
+            var pos = new RefList<float2>(totParticles);
             var topLeft = new float2(-(boundingBoxSize.x / 2), boundingBoxSize.y / 2);
 
             for (int i = 0; i < layers; i++)
@@ -140,20 +131,9 @@ namespace SimulationLogic
             return pos;
         }
 
-        public FlexibleArray<float2> InitPreviousPositions() => GetPropperSizedArray<float2>();
-
-        public FlexibleArray<float2> InitVelocities() => GetPropperSizedArray<float2>();
-        public FlexibleArray<float2> InitForcesBuffer() => GetPropperSizedArray<float2>();
-
-        public FlexibleArray<float> InitDensities() => GetPropperSizedArray<float>();
-
-        public FlexibleArray<float> InitNearDensities() => GetPropperSizedArray<float>();
-
-        public FlexibleArray<float> InitBoundaryDensities() => GetPropperSizedArray<float>();
-
-        public FlexibleArray<float2> InitBodyDensityPoints(int resolution, float radius)
+        public RefList<float2> InitBodyDensityPoints(int resolution, float radius)
         {
-            FlexibleArray<float2> res = new(resolution);
+            RefList<float2> res = new(resolution);
 
             for (int i = 0; i < resolution; i++)
             {
@@ -176,21 +156,35 @@ namespace SimulationLogic
         {
             if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
                 boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
-            
+
             return new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
         }
 
-        private FlexibleArray<T> GetPropperSizedArray<T>()
+        public int GetNumOfSpawnParticles()
         {
             if (!spawnCircle)
-                return new FlexibleArray<T>(particleSquareLength * particleSquareLength);
+                return particleSquareLength * particleSquareLength;
 
             else
             {
                 if (circleArraySize == -1)
                     InitPositions();
 
-                return new FlexibleArray<T>(circleArraySize);
+                return circleArraySize;
+            }
+        }
+
+        private RefList<T> GetPropperSizedArray<T>()
+        {
+            if (!spawnCircle)
+                return new RefList<T>(particleSquareLength * particleSquareLength);
+
+            else
+            {
+                if (circleArraySize == -1)
+                    InitPositions();
+
+                return new RefList<T>(circleArraySize);
             }
         }
     }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace SimulationLogic
 {
@@ -42,13 +41,13 @@ namespace SimulationLogic
                 grid[i] = new List<int>();
         }
 
-        public void Init(FlexibleArray<float2> positions)
+        public void Init(ReadOnlySpan<Particle> particles)
         {
             foreach (var list in grid)
                 list.Clear();
 
-            for (var i = 0; i < positions.Count; i++)
-                grid[GetGridIndex(positions[i])].Add(i);
+            foreach(var particle in particles)
+                grid[GetGridIndex(particle.position)].Add(particle.ID);
         }
 
         public List<int> GetNeighbours(float2 position)
@@ -71,6 +70,24 @@ namespace SimulationLogic
         }
 
         public void GetNeighbours(float2 position, List<int> list)
+        {
+            list.Clear();
+            var scaled = (position - offset) / length;
+            var (gridX, gridY) = ((int)scaled.x, (int)scaled.y);
+
+            foreach (var (offsetX, offsetY) in neighbours)
+            {
+                var nX = gridX + offsetX;
+                var nY = gridY + offsetY;
+                if (nX < 0 || nX >= columns || nY < 0 || nY >= rows) continue;
+
+                var index = nX + nY * columns;
+                list.AddRange(grid[index]);
+            }
+        }
+
+        // Returns 75 neighbours on average
+        public void GetNeighbours(float2 position, RefList<int> list)
         {
             list.Clear();
             var scaled = (position - offset) / length;
