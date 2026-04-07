@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace SimulationLogic
 {
@@ -25,15 +26,25 @@ namespace SimulationLogic
 
         public SpatialPartitioning(float2 bottomLeft, float2 topRight, float length)
         {
+            if (length <= 0)
+                Debug.LogError($"SpatialPartitioning: length must be > 0, got {length}");
+
             this.length = length;
             offset = bottomLeft;
             var width = topRight.x - bottomLeft.x;
             var height = topRight.y - bottomLeft.y;
+
+            if (width <= 0 || height <= 0)
+                Debug.LogWarning($"SpatialPartitioning: grid dimensions are non-positive (width={width}, height={height}), likely caused by a degenerate bounding box");
+
             columns = (int)(width / length);
             rows = (int)(height / length);
 
             if (width % length != 0) columns++;
             if (height % length != 0) rows++;
+
+            if (columns == 0 || rows == 0)
+                Debug.LogWarning($"SpatialPartitioning: grid has zero cells (columns={columns}, rows={rows}), neighbour queries will return nothing");
 
             grid = new List<int>[columns * rows];
 

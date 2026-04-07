@@ -4,7 +4,8 @@ using System.Collections.Generic;
 
 // WARNING: Indexer returns ref — do not hold onto a ref across any Add/Remove/Resize call, as resizing invalidates all refs.
 // WARNING: Remove(item) and RemoveAt(index) do not preserve order — the last element is swapped into the removed slot.
-public class RefList<T> : IEnumerable<T>
+// WARNING: IList<T>.Insert and IList<T>.RemoveAt DO preserve order (shift-based) to satisfy interface contract.
+public class RefList<T> : IRefList<T>
 {
     private T[] _items;
     private int _size;
@@ -29,12 +30,40 @@ public class RefList<T> : IEnumerable<T>
     {
         get
         {
-            if (index >= _size)
+            if ((uint)index >= (uint)_size)
                 throw new IndexOutOfRangeException();
 
             return ref _items[index];
         }
     }
+
+    T IReadOnlyList<T>.this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_size)
+                throw new IndexOutOfRangeException();
+            return _items[index];
+        }
+    }
+
+    T IList<T>.this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_size)
+                throw new IndexOutOfRangeException();
+            return _items[index];
+        }
+        set
+        {
+            if ((uint)index >= (uint)_size)
+                throw new IndexOutOfRangeException();
+            _items[index] = value;
+        }
+    }
+
+    bool ICollection<T>.IsReadOnly => false;
 
     public void Add()
     {
@@ -82,6 +111,29 @@ public class RefList<T> : IEnumerable<T>
         return ref _items[_size - 1];
     }
 
+    public bool Contains(T item)
+    {
+        for (int i = 0; i < _size; i++)
+            if (EqualityComparer<T>.Default.Equals(_items[i], item))
+                return true;
+
+        return false;
+    }
+
+    public int IndexOf(T item)
+    {
+        for (int i = 0; i < _size; i++)
+            if (EqualityComparer<T>.Default.Equals(_items[i], item))
+                return i;
+
+        return -1;
+    }
+
+    public void CopyTo(T[] array, int arrayIndex)
+    {
+        Array.Copy(_items, 0, array, arrayIndex, _size);
+    }
+
     public bool Remove(T item)
     {
         for (int i = 0; i < _size; i++)
@@ -114,6 +166,44 @@ public class RefList<T> : IEnumerable<T>
         _size--;
         _items[index] = _items[_size];
         _items[_size] = default!;
+    }
+
+    // Order-preserving insert to satisfy IList<T> contract.
+    void IList<T>.Insert(int index, T item)
+    {
+        if ((uint)index > (uint)_size)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        if (_size == _items.Length)
+            Resize(_items.Length * 2);
+
+        if (index < _size)
+            Array.Copy(_items, index, _items, index + 1, _size - index);
+
+        _items[index] = item;
+        _size++;
+    }
+
+    // Order-preserving removal to satisfy IList<T> contract.
+    void IList<T>.RemoveAt(int index)
+    {
+        if ((uint)index >= (uint)_size)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        _size--;
+        if (index < _size)
+            Array.Copy(_items, index + 1, _items, index, _size - index);
+        _items[_size] = default!;
+    }
+
+    public void Fill(T value)
+    {
+        Array.Fill(_items, value, 0, _size);
+    }
+
+    public void Fill(T value, int startIndex, int count)
+    {
+        Array.Fill(_items, value, startIndex, count);
     }
 
     public void Clear()

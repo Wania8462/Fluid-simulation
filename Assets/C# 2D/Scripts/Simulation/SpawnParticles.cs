@@ -61,8 +61,8 @@ namespace SimulationLogic
 
                 boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
 
-                if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
-                    Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
+                if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
+                    Debug.LogWarning($"Spawn particles: Bounding box size is {boundingBoxSize}");
 
                 return pos;
             }
@@ -89,8 +89,8 @@ namespace SimulationLogic
 
                 boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
 
-                if (boundingBoxSize.x == 0 || boundingBoxSize.x == 0)
-                    Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
+                if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
+                    Debug.LogWarning($"Spawn particles: Bounding box size is {boundingBoxSize}");
 
                 circleArraySize = positions.Count;
                 return positions;
@@ -157,7 +157,12 @@ namespace SimulationLogic
             if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
                 boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
 
-            return new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+            var result = new float2(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+
+            if (result.x <= 0 || result.y <= 0)
+                Debug.LogWarning($"SpawnParticles: GetRealHalfBoundSize result is non-positive ({result}) — radius ({radius}) may be too large for the bounding box ({boundingBoxSize})");
+
+            return result;
         }
 
         public int GetNumOfSpawnParticles()

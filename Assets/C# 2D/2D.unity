@@ -737,8 +737,8 @@ MonoBehaviour:
     mouseAttractiveness: 0.5
     mouseRadius: 1000
     collisionDamping: 0.083
-    flow: 0
-    maxParticles: -1
+    flow: 1
+    maxParticles: 5000
     includeBody: 0
     useParticlesAsBorder: 0
     body:
@@ -844,7 +844,7 @@ MonoBehaviour:
   boundingBoxSize:
     x: 0
     y: 0
-  spawnPerFlowRow: 200
+  spawnPerFlowRow: 100
   flowSpacing: 1
   spawnInterval: 0.1
   borderDensity: 1
@@ -869,7 +869,7 @@ MonoBehaviour:
   renderParticles: {fileID: 452458855}
   renderSquares: {fileID: 452458857}
   renderDensityMap: {fileID: 452458858}
-  trackParticle: 500
+  trackParticle: -1
   particleDebugDisplay: 1
   bodyDebug: 0
   bodyDebugDisplay: 0

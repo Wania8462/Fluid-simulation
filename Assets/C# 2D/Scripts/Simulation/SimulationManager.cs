@@ -140,32 +140,45 @@ namespace SimulationLogic
             if (Input.GetKeyDown(KeyCode.Return))
             {
                 var command = inputField.text.Split(' ');
-                var field = typeof(SimulationSettings).GetField(command[0]);
 
-                if (field != null)
+                if (command.Length < 2)
                 {
-                    if (!twoSim)
-                    {
-                        field.SetValue(settings, float.Parse(command[1]));
-                        simulations[FirstSim].UpdateSettings(settings[FirstSim]);
-                    }
-
-                    else
-                    {
-                        field.SetValue(settings[1], float.Parse(command[1]));
-                        simulations[SecondSim].UpdateSettings(settings[SecondSim]);
-                    }
+                    Debug.LogWarning("SimulationManager: command must have the form '<fieldName> <value>'");
                 }
-
                 else
-                    Debug.LogWarning($"No field with name {command[0]} is found");
+                {
+                    var field = typeof(SimulationSettings).GetField(command[0]);
+
+                    if (field != null)
+                    {
+                        if (!float.TryParse(command[1], out var value))
+                        {
+                            Debug.LogWarning($"SimulationManager: could not parse '{command[1]}' as a float");
+                        }
+                        else if (!twoSim)
+                        {
+                            field.SetValue(settings[FirstSim], value);
+                            simulations[FirstSim].UpdateSettings(settings[FirstSim]);
+                        }
+                        else
+                        {
+                            field.SetValue(settings[SecondSim], value);
+                            simulations[SecondSim].UpdateSettings(settings[SecondSim]);
+                        }
+                    }
+                    else
+                        Debug.LogWarning($"SimulationManager: no field with name '{command[0]}' found on SimulationSettings");
+                }
             }
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 var dt = realDeltaTime ? Time.deltaTime : fakeDT;
 
-                if (twoSim)
+                if (Camera.main == null)
+                    Debug.LogError("SimulationManager: Camera.main is null — cannot convert mouse position to world space");
+
+                else if (twoSim)
                 {
                     foreach (var simulation in simulations)
                     {
@@ -174,7 +187,6 @@ namespace SimulationLogic
                         simulation.SimulationStep(mousePos, dt);
                     }
                 }
-
                 else
                 {
                     mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);

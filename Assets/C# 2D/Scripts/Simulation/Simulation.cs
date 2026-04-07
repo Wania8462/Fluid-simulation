@@ -1,8 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +24,7 @@ namespace SimulationLogic
 
         public Particle()
         {
+            ID = -1;
             neighbours = new RefList<int>();
             springsNeighbours = new RefList<int>();
         }
@@ -80,7 +79,7 @@ namespace SimulationLogic
         // Fluid particles
         public int maxParticles { get; private set; }
         public Particle[] _particles { get; private set; }
-        public int[] _sparse { get; private set; }
+        public SparseArray _sparse { get; private set; }
         public int _count { get; private set; }
         private RefList<int> _freeIDs;
         private ConcurrentDictionary<(int, int), float> _springs;
@@ -106,6 +105,13 @@ namespace SimulationLogic
 
         public void SimulationStep(float2 mousePos, float deltatime)
         {
+            if (deltatime <= 0)
+            {
+                Debug.LogWarning($"Simulation: deltatime is {deltatime}, skipping step to avoid division by zero");
+                return;
+            }
+
+            CheckArraysLength();
             dt = deltatime;
 
             if (flow)
@@ -119,25 +125,8 @@ namespace SimulationLogic
                 }
             }
 
-            Watcher.ExecuteWithTimer("3. Init", () =>
-            {
-                particleSP.Init(_particles.AsSpan(0, _count));
-                bodySP.Init(_particles.AsSpan(0, _count));
-                springsSP.Init(_particles.AsSpan(0, _count));
-            });
-
-            Watcher.ExecuteWithTimer("4. GetNeighbours", () =>
-            {
-                Parallel.For(0, _count, i =>
-                {
-                    particleSP.GetNeighbours(_particles[i].position, _particles[i].neighbours);
-                });
-                Parallel.For(0, _count, i =>
-                {
-                    springsSP.GetNeighbours(_particles[i].position, _particles[i].springsNeighbours);
-                });
-                bodySP.GetNeighbours(body.position, bodyNeighbours);
-            });
+            Watcher.ExecuteWithTimer("3. Init", InitSpatialPartitioning);
+            Watcher.ExecuteWithTimer("4. GetNeighbours", SetNeighbours);
 
             Watcher.ExecuteWithTimer("5. ExternalForces", ExternalForces);
             Watcher.ExecuteWithTimer("6. ApplyViscosity", ApplyViscosity);
@@ -260,7 +249,7 @@ namespace SimulationLogic
 
         private void AdjustSprings()
         {
-            Parallel.For(0, _count, i => 
+            Parallel.For(0, _count, i =>
             {
                 var p = _particles[i];
                 foreach (var n in p.springsNeighbours)
@@ -275,19 +264,13 @@ namespace SimulationLogic
                             continue;
                         case > 1:
                             if (_springs.ContainsKey((p.ID, n)))
-                                _springs[(p.ID, n)] = float.MinValue;
+                                _springs.TryRemove((p.ID, n), out _);
                             continue;
                     }
 
                     if (!_springs.TryGetValue((p.ID, n), out var restLength))
                     {
                         _springs.TryAdd((p.ID, n), springRadius);
-                        restLength = springRadius;
-                    }
-
-                    else if (restLength == float.MinValue)
-                    {
-                        _springs[(p.ID, n)] = springRadius;
                         restLength = springRadius;
                     }
 
@@ -317,10 +300,20 @@ namespace SimulationLogic
                 var i = kvp.Key.Item1;
                 var j = kvp.Key.Item2;
 
+                if (i >= maxParticles || j >= maxParticles)
+                {
+                    Debug.LogWarning($"Simulation: spring references out-of-range particle IDs ({i}, {j}), skipping");
+                    return;
+                }
+
                 var p = _particles[_sparse[i]];
                 var n = _particles[_sparse[j]];
 
-                if (kvp.Value == float.MinValue) return;
+                if (p.ID != i || n.ID != j)
+                {
+                    Debug.LogWarning($"Simulation: stale spring entry ({i}, {j}) — particle IDs no longer match, spring will be skipped");
+                    return;
+                }
 
                 var mag = FluidMath.Distance(p.position, n.position);
                 if (mag == 0) return;
@@ -479,6 +472,38 @@ namespace SimulationLogic
             }
         }
 
+        private void InitSpatialPartitioning()
+        {
+            particleSP.Init(_particles.AsSpan(0, _count));
+            bodySP.Init(_particles.AsSpan(0, _count));
+            springsSP.Init(_particles.AsSpan(0, _count));
+        }
+
+        private void SetNeighbours()
+        {
+            // for (int i = 0; i < _count; i++)
+            Parallel.For(0, _count, i =>
+            {
+                particleSP.GetNeighbours(_particles[i].position, _particles[i].neighbours);
+            });
+            Parallel.For(0, _count, i =>
+            {
+                springsSP.GetNeighbours(_particles[i].position, _particles[i].springsNeighbours);
+            });
+            bodySP.GetNeighbours(body.position, bodyNeighbours);
+        }
+
+        private void ClearNeighbours()
+        {
+            foreach (var particle in _particles)
+            {
+                particle.neighbours.Clear();
+                particle.springsNeighbours.Clear();
+            }
+
+            bodyNeighbours.Clear();
+        }
+
         #endregion
         #region Flow
         private void SpawnFlowParticles()
@@ -509,24 +534,17 @@ namespace SimulationLogic
             realHalfBoundSize = spawn.GetRealHalfBoundSize(particleRadius);
             realHalfBoundSizeBody = spawn.GetRealHalfBoundSize(body.radius);
 
+            if (realHalfBoundSize.x <= 0 || realHalfBoundSize.y <= 0)
+                Debug.LogWarning($"Simulation: realHalfBoundSize is {realHalfBoundSize}, bounding box is degenerate — particles may escape or behave incorrectly");
+
             particleSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
-            springsSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, springInteractionRadius);
+            springsSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, springInteractionRadius + 0.5f);
             bodySP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, body.radius + particleRadius);
 
             bodyNeighbours = new List<int>();
 
             // Buffers
-            _springs = new ConcurrentDictionary<(int, int), float>();
-            _particles = new Particle[maxParticles];
-            _sparse = new int[maxParticles];
-            _freeIDs = new RefList<int>(maxParticles);
-            _count = 0;
-
-            for (int i = 0; i < maxParticles; i++)
-                _particles[i] = new Particle();
-
-            for (int i = maxParticles - 1; i >= 0; i--)
-                _freeIDs.Add(i);
+            EnsureArrays(maxParticles);
 
             if (!flow)
             {
@@ -547,13 +565,23 @@ namespace SimulationLogic
 
         public void UpdateSettings(SimulationSettings settings)
         {
+            if (settings.interactionRadius <= 0)
+                Debug.LogWarning($"Simulation: interactionRadius is {settings.interactionRadius}, will cause division by zero in density and viscosity calculations");
+
+            if (settings.springInteractionRadius <= 0)
+                Debug.LogWarning($"Simulation: springInteractionRadius is {settings.springInteractionRadius}, will cause division by zero in spring calculations");
+
             interactionRadius = settings.interactionRadius;
             gravity = settings.gravity;
             mouseAttractiveness = settings.mouseAttractiveness;
             mouseRadius = settings.mouseRadius;
             collisionDamp = settings.collisionDamping;
             flow = settings.flow;
-            maxParticles = settings.maxParticles == -1 ? spawn.InitPositions().Count : settings.maxParticles;
+
+            var newMax = GetMaxParticles(settings.maxParticles);
+            HandleParticleArrSize(newMax);
+            maxParticles = newMax;
+
             includeBody = settings.includeBody;
             useParticlesAsBorder = settings.useParticlesAsBorder;
 
@@ -579,6 +607,117 @@ namespace SimulationLogic
         }
         #endregion
         #region Helpers
+        private int GetMaxParticles(int newMax)
+        {
+            if (!flow)
+                return spawn.InitPositions().Count;
+
+            else
+            {
+                if (newMax == -1)
+                    return 1_000_000;
+
+                if (newMax < _count)
+                    Debug.LogWarning($"Simulation: new max particles is smaller than the number of current particles");
+
+                return newMax;
+            }
+        }
+
+        private void InitArrays(int len)
+        {
+            _count = 0;
+            _sparse = new SparseArray(len);
+            _particles = new Particle[len];
+            _freeIDs = new RefList<int>(len);
+            _springs = new();
+
+            _sparse.Fill(-1);
+            Array.Fill(_particles, new Particle());
+            for (int i = 0; i < len; i++)
+                _freeIDs.Add(i);
+        }
+
+        private void EnsureArrays(int len)
+        {
+            if (len <= 0)
+                Debug.LogWarning($"Simulation: EnsureArrays called with len={len}, arrays will be empty");
+
+            _springs ??= new();
+            _freeIDs ??= new RefList<int>();
+            bodyNeighbours = new();
+
+            if (_sparse == null)
+            {
+                _sparse = new SparseArray(len);
+                _sparse.Fill(-1);
+            }
+
+            if (_particles == null)
+            {
+                _particles = new Particle[len];
+                Array.Fill(_particles, new Particle());
+            }
+        }
+
+        private void HandleParticleArrSize(int newMax)
+        {
+            if (newMax == maxParticles)
+                return;
+
+            if (newMax < maxParticles)
+            {
+                Debug.LogError("Simulation can't set max number of particles to lower than before");
+                return;
+            }
+
+            if (newMax <= 0)
+            {
+                Debug.LogError($"Simulation: HandleParticleArrSize called with newMax={newMax}, aborting resize");
+                return;
+            }
+
+            EnsureArrays(newMax);
+            _springs.Clear();
+            ClearNeighbours();
+
+            Particle[] newParticles = new Particle[newMax];
+            SparseArray newSparse = new(newMax);
+
+            if (newMax > maxParticles)
+            {
+                Array.Copy(_particles, newParticles, maxParticles);
+                _sparse.CopyTo(newSparse, maxParticles);
+
+                for (int i = maxParticles; i < newMax; i++)
+                {
+                    newSparse[i] = -1;
+                    newParticles[i] = new Particle();
+                    _freeIDs.Add(i);
+                }
+            }
+
+            // else
+            // {
+            //     _freeIDs.Clear();
+            //     _count = _count > newMax ? newMax : _count;
+            //     Array.Copy(_particles, newParticles, newMax);
+            //     _sparse.CopyTo(newSparse, newMax);
+
+            //     for (int i = 0; i < newMax; i++)
+            //         newParticles[i].ID = i;
+
+            //     for (int i = 0; i < _count; i++)
+            //         newSparse[i] = i;
+
+            //     for (int i = _count; i < newMax; i++)
+            //         _freeIDs.Add(i);
+            // }
+
+            _particles = newParticles;
+            _sparse = newSparse;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ClearForceBuffers()
         {
@@ -615,18 +754,40 @@ namespace SimulationLogic
 
         private void RemoveParticle(int id)
         {
-            int i = _sparse[id];
-
-            if (i != _count - 1)
+            if (_count == 0)
             {
-                (_particles[_count - 1], _particles[i]) = (_particles[i], _particles[_count - 1]);
-                _sparse[_particles[i].ID] = i;
+                Debug.LogError("Simulation: RemoveParticle called when there are no particles");
+                return;
             }
 
-            ClearParticleExceptPos(_particles[_count - 1]);
+            if (id < 0 || id >= maxParticles)
+            {
+                Debug.LogError($"Simulation: RemoveParticle called with out-of-range id={id} (maxParticles={maxParticles})");
+                return;
+            }
 
-            _freeIDs.Add(id);
-            _count--;
+            try
+            {
+                int i = _sparse[id];
+
+                foreach (var key in _springs.Keys)
+                {
+                    if (key.Item1 == id || key.Item2 == id)
+                        _springs.TryRemove(key, out _);
+                }
+
+                (_particles[_count - 1], _particles[i]) = (_particles[i], _particles[_count - 1]);
+                _sparse[id] = -1;
+                _sparse[_particles[i].ID] = i;
+
+                _particles[_count - 1] = ClearParticleExceptPos(_particles[_count - 1]);
+                _freeIDs.Add(id);
+                _count--;
+            }
+            catch
+            {
+                Debug.LogWarning("Simulation: trying to delete particle that doesn't exist");
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -643,6 +804,12 @@ namespace SimulationLogic
 
         public float GetDensity(float2 position)
         {
+            if (particleSP == null)
+            {
+                Debug.LogError("Simulation: GetDensity called before SetScene — particleSP is not initialized");
+                return 0f;
+            }
+
             densityNeighbours ??= new ThreadLocal<List<int>>(() => new List<int>());
             var neighbours = densityNeighbours.Value;
             particleSP.GetNeighbours(position, neighbours);
@@ -661,6 +828,15 @@ namespace SimulationLogic
         }
 
         public float GetDensity(Vector3 position) => GetDensity(new float2(position.x, position.y));
+
+        private void CheckArraysLength()
+        {
+            if (maxParticles != _sparse.Length)
+                Debug.LogWarning($"Simulation: number of max particles doesn't equal the length of sparse. Max particles: {maxParticles}, sparse: {_sparse.Length}");
+
+            if (_count != maxParticles - _freeIDs.Count)
+                Debug.LogWarning($"Simulation: number of particles doesn't equal number of taken IDs. Num particles: {_count}, taken IDs: {maxParticles - _freeIDs.Count}");
+        }
         #endregion
         #region Debug purpoused
         public float2[] GetBodySPDimentions() => bodySP.GetNeighboursDimentions(body.position);

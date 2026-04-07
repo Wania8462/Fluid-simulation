@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using Rendering;
@@ -59,8 +60,25 @@ namespace SimulationLogic
         // WARNING: Needs to be called after Simulation's SetScene
         public void Init(Simulation sim)
         {
+            if (sim == null)
+            {
+                Debug.LogError("RenderDataBuilder: Init called with null simulation");
+                return;
+            }
+
+            if (manager == null) Debug.LogError("RenderDataBuilder: manager reference is not assigned");
+            if (spawn == null) Debug.LogError("RenderDataBuilder: spawn reference is not assigned");
+            if (renderParticles == null) Debug.LogError("RenderDataBuilder: renderParticles reference is not assigned");
+            if (renderSquares == null) Debug.LogError("RenderDataBuilder: renderSquares reference is not assigned");
+            if (renderDensityMap == null) Debug.LogError("RenderDataBuilder: renderDensityMap reference is not assigned");
+
             simulation = sim;
-            Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
+
+            if (Camera.main == null)
+                Debug.LogError("RenderDataBuilder: Camera.main is null — orthographic size will not be set");
+            else
+                Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
+
             renderPositions = new float2[sim.maxParticles];
             renderVelocities = new float2[sim.maxParticles];
 
@@ -75,7 +93,10 @@ namespace SimulationLogic
                 renderParticles.InitParticles(renderPositions);
             }
 
-            renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
+            if (manager != null && manager.settings != null && manager.settings.Length > 0)
+                renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
+            else
+                Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
 
             renderSquares.Init(spawn.GetBoundSize());
             densities = new float[renderSquares.edges.Length];
@@ -86,6 +107,18 @@ namespace SimulationLogic
 
         public void Draw()
         {
+            if (simulation == null)
+            {
+                Debug.LogError("RenderDataBuilder: Draw called before Init — simulation is null");
+                return;
+            }
+
+            if (simulation._count == 0)
+            {
+                // Debug.LogWarning("Render data builder: drawing 0 particles");
+                return;
+            }
+
             if (renderType == RenderType.Particles)
                 DrawParticles();
 
@@ -104,8 +137,17 @@ namespace SimulationLogic
             yellowParticles.Clear();
             HighlghtParticlesForDebug();
 
-            if (manager.settings[0].includeBody)
+            if (manager != null && manager.settings != null && manager.settings.Length > 0 && manager.settings[0].includeBody)
                 HighlighParticlesBodyForDebug();
+
+            if (simulation.maxParticles != renderPositions.Length)
+            {
+                if (simulation.maxParticles > renderPositions.Length)
+                    renderParticles.InitParticles(simulation.maxParticles - renderPositions.Length);
+
+                renderPositions = new float2[simulation.maxParticles];
+                renderVelocities = new float2[simulation.maxParticles];
+            }
 
             SetPositions(simulation._particles.AsSpan(0, simulation._count));
             SetVelocities(simulation._particles.AsSpan(0, simulation._count));
@@ -197,14 +239,14 @@ namespace SimulationLogic
             else if (bodyDebugDisplay == DebugDisplay.AllNeighbours)
                 greenParticles.AddRange(simulation.GetBodyNeighbours());
 
-            else if (particleDebugDisplay == DebugDisplay.Velocity)
+            else if (bodyDebugDisplay == DebugDisplay.Velocity)
             {
                 var lineThickness = 0.5f;
                 var predictedPos = simulation.body.position + simulation.body.velocity;
                 renderParticles.DrawLine(simulation.body.position, predictedPos, lineThickness, Color.white);
             }
 
-            else if (particleDebugDisplay == DebugDisplay.Force)
+            else if (bodyDebugDisplay == DebugDisplay.Force)
                 Debug.Log("Simulation manager: Body force isn't implemented");
         }
 
@@ -233,6 +275,12 @@ namespace SimulationLogic
 
             else if (Input.GetKeyDown(KeyCode.W))
             {
+                if (Camera.main == null)
+                {
+                    Debug.LogError("RenderDataBuilder: Camera.main is null — cannot select particle by mouse position");
+                    return;
+                }
+
                 var pos = new float2(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
                 var neighboursIndices = simulation.GetNeighbourParticles(pos);
 
@@ -298,20 +346,39 @@ namespace SimulationLogic
 
         private void SetPositions(Span<Particle> particles)
         {
+            if (particles.Length > renderPositions.Length)
+            {
+                Debug.LogWarning($"RenderDataBuilder: particles span ({particles.Length}) exceeds renderPositions buffer ({renderPositions.Length}), clamping");
+                particles = particles[..renderPositions.Length];
+            }
+
             for (int i = 0; i < particles.Length; i++)
                 renderPositions[i] = particles[i].position;
         }
 
         private void SetVelocities(Span<Particle> particles)
         {
+            if (particles.Length > renderVelocities.Length)
+            {
+                Debug.LogWarning($"RenderDataBuilder: particles span ({particles.Length}) exceeds renderVelocities buffer ({renderVelocities.Length}), clamping");
+                particles = particles[..renderVelocities.Length];
+            }
+
             for (int i = 0; i < particles.Length; i++)
                 renderVelocities[i] = particles[i].velocity;
         }
 
         private void OnDestroy()
         {
-            renderParticles.DestroyMeshes();
-            renderSquares.DestroyMeshes();
+            if (renderParticles == null)
+                Debug.LogWarning("RenderDataBuilder: renderParticles is null in OnDestroy — meshes may not be cleaned up");
+            else
+                renderParticles.DestroyMeshes();
+
+            if (renderSquares == null)
+                Debug.LogWarning("RenderDataBuilder: renderSquares is null in OnDestroy — meshes may not be cleaned up");
+            else
+                renderSquares.DestroyMeshes();
         }
     }
 }

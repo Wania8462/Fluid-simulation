@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 // Open-addressing hash map with ref indexer.
 // WARNING: Do not hold onto a ref across any Add/Remove call — resizing invalidates refs.
-public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>
+public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, IDictionary<TKey, TValue>
 {
     private struct Entry
     {
@@ -27,6 +27,7 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         _entries = new Entry[NextPow2(Math.Max(capacity, 4))];
     }
 
+    // ref indexer — public, allows in-place mutation
     public ref TValue this[TKey key]
     {
         get
@@ -37,6 +38,33 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
             return ref _entries[index].Value;
         }
     }
+
+    // IDictionary<TKey, TValue> indexer — get or add/update
+    TValue IDictionary<TKey, TValue>.this[TKey key]
+    {
+        get
+        {
+            int index = FindIndex(key);
+            if (index < 0)
+                throw new KeyNotFoundException($"Key not found: {key}");
+            return _entries[index].Value;
+        }
+        set
+        {
+            int index = FindIndex(key);
+            if (index >= 0)
+            {
+                _entries[index].Value = value;
+                return;
+            }
+            Add(key, value);
+        }
+    }
+
+    bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => false;
+
+    public ICollection<TKey> Keys => new KeyCollection(this);
+    public ICollection<TValue> Values => new ValueCollection(this);
 
     public void Add(TKey key, TValue value)
     {
@@ -76,6 +104,8 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         }
     }
 
+    void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item) => Add(item.Key, item.Value);
+
     public void Remove(TKey key)
     {
         int index = FindIndex(key);
@@ -87,6 +117,22 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         entry.Key = default!;
         entry.Value = default!;
         _count--;
+    }
+
+    bool IDictionary<TKey, TValue>.Remove(TKey key) => TryRemove(key);
+
+    bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item)
+    {
+        int index = FindIndex(item.Key);
+        if (index < 0 || !EqualityComparer<TValue>.Default.Equals(_entries[index].Value, item.Value))
+            return false;
+
+        ref var entry = ref _entries[index];
+        entry.Hash = Tombstone;
+        entry.Key = default!;
+        entry.Value = default!;
+        _count--;
+        return true;
     }
 
     public bool TryRemove(TKey key)
@@ -104,6 +150,12 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
 
     public bool ContainsKey(TKey key) => FindIndex(key) >= 0;
 
+    bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
+    {
+        int index = FindIndex(item.Key);
+        return index >= 0 && EqualityComparer<TValue>.Default.Equals(_entries[index].Value, item.Value);
+    }
+
     public bool TryGetValue(TKey key, out TValue value)
     {
         int index = FindIndex(key);
@@ -114,6 +166,14 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         }
         value = _entries[index].Value;
         return true;
+    }
+
+    void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+    {
+        int i = arrayIndex;
+        foreach (var entry in _entries)
+            if (entry.Hash != Empty && entry.Hash != Tombstone)
+                array[i++] = new KeyValuePair<TKey, TValue>(entry.Key, entry.Value);
     }
 
     // Returns ref to value, adding a default entry if key is missing.
@@ -213,5 +273,75 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         n--;
         n |= n >> 1; n |= n >> 2; n |= n >> 4; n |= n >> 8; n |= n >> 16;
         return n + 1;
+    }
+
+    private sealed class KeyCollection : ICollection<TKey>
+    {
+        private readonly RefDictionary<TKey, TValue> _dict;
+        public KeyCollection(RefDictionary<TKey, TValue> dict) => _dict = dict;
+
+        public int Count => _dict._count;
+        public bool IsReadOnly => true;
+        public bool Contains(TKey item) => _dict.ContainsKey(item);
+
+        public void CopyTo(TKey[] array, int arrayIndex)
+        {
+            int i = arrayIndex;
+            foreach (var entry in _dict._entries)
+                if (entry.Hash != Empty && entry.Hash != Tombstone)
+                    array[i++] = entry.Key;
+        }
+
+        public IEnumerator<TKey> GetEnumerator()
+        {
+            foreach (var entry in _dict._entries)
+                if (entry.Hash != Empty && entry.Hash != Tombstone)
+                    yield return entry.Key;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void Add(TKey item) => throw new NotSupportedException();
+        public void Clear() => throw new NotSupportedException();
+        public bool Remove(TKey item) => throw new NotSupportedException();
+    }
+
+    private sealed class ValueCollection : ICollection<TValue>
+    {
+        private readonly RefDictionary<TKey, TValue> _dict;
+        public ValueCollection(RefDictionary<TKey, TValue> dict) => _dict = dict;
+
+        public int Count => _dict._count;
+        public bool IsReadOnly => true;
+
+        public bool Contains(TValue item)
+        {
+            foreach (var entry in _dict._entries)
+                if (entry.Hash != Empty && entry.Hash != Tombstone &&
+                    EqualityComparer<TValue>.Default.Equals(entry.Value, item))
+                    return true;
+            return false;
+        }
+
+        public void CopyTo(TValue[] array, int arrayIndex)
+        {
+            int i = arrayIndex;
+            foreach (var entry in _dict._entries)
+                if (entry.Hash != Empty && entry.Hash != Tombstone)
+                    array[i++] = entry.Value;
+        }
+
+        public IEnumerator<TValue> GetEnumerator()
+        {
+            foreach (var entry in _dict._entries)
+                if (entry.Hash != Empty && entry.Hash != Tombstone)
+                    yield return entry.Value;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void Add(TValue item) => throw new NotSupportedException();
+        public void Clear() => throw new NotSupportedException();
+        public bool Remove(TValue item) => throw new NotSupportedException();
     }
 }
