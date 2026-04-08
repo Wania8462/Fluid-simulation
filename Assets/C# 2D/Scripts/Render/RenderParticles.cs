@@ -21,6 +21,7 @@ namespace Rendering
     {
         [SerializeField] private int resolution;
         [SerializeField] private int bodyResolution;
+        [SerializeField] private float redThreshold;
         [SerializeField] private Material mat;
 
         private ParticlesBuffer fluidBuffer;
@@ -322,6 +323,17 @@ namespace Rendering
             for (int i = 0; i < ends.Length; i++)
                 DrawLine(start, ends[i], width, Color.white);
         }
+
+        public void DrawRect(float2 topLeft, float2 bottomRight, float width, Color color)
+        {
+            var topRight = new float2(bottomRight.x, topLeft.y);
+            var bottomLeft  = new float2(topLeft.x,     bottomRight.y);
+
+            DrawLine(topLeft,    topRight,    width, color); // top
+            DrawLine(bottomLeft, bottomRight, width, color); // bottom
+            DrawLine(topLeft,    bottomLeft,  width, color); // left
+            DrawLine(topRight,   bottomRight, width, color); // right
+        }
 #endif
         #endregion
 
@@ -385,7 +397,7 @@ namespace Rendering
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 GetColorVector(Vector2 velocity)
         {
-            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f);
+            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / redThreshold);
             return new Vector4(color,
                 0,
                 1 - color,
@@ -395,7 +407,7 @@ namespace Rendering
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Color GetColor(Vector2 velocity)
         {
-            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / 40f);
+            var color = Mathf.Clamp01((Mathf.Abs(velocity.x) + Mathf.Abs(velocity.y)) / redThreshold);
             return new Color(color,
                 0,
                 1 - color);

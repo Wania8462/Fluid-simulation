@@ -90,14 +90,13 @@ namespace SimulationLogic
         [SerializeField] private bool pause = true;
         [SerializeField] private bool realDeltaTime;
         [SerializeField] private int targetFrameRate;
-        public bool flow;
         [SerializeField] private bool twoSimulations;
         // Pretend that it only has public get and don't change outside
         [SerializeField] public SimulationSettings[] settings;
         public bool twoSim { get; private set; }
 
         [Header("References")]
-        [SerializeField] private SpawnParticles spawn;
+        [SerializeField] private InitializeParticles spawn;
         [SerializeField] private RenderDataBuilder render;
         [SerializeField] private InputField inputField;
 

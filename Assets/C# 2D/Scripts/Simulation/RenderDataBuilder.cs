@@ -33,7 +33,7 @@ namespace SimulationLogic
 
         [Header("References")]
         [SerializeField] private SimulationManager manager;
-        [SerializeField] private SpawnParticles spawn;
+        [SerializeField] private InitializeParticles spawn;
         [SerializeField] private RenderParticles renderParticles;
         [SerializeField] private RenderMarchingSquares renderSquares;
         [SerializeField] private RenderDensityMap renderDensityMap;
@@ -60,30 +60,16 @@ namespace SimulationLogic
         // WARNING: Needs to be called after Simulation's SetScene
         public void Init(Simulation sim)
         {
-            if (sim == null)
-            {
-                Debug.LogError("RenderDataBuilder: Init called with null simulation");
+            if (CheckDependencies(sim))
                 return;
-            }
-
-            if (manager == null) Debug.LogError("RenderDataBuilder: manager reference is not assigned");
-            if (spawn == null) Debug.LogError("RenderDataBuilder: spawn reference is not assigned");
-            if (renderParticles == null) Debug.LogError("RenderDataBuilder: renderParticles reference is not assigned");
-            if (renderSquares == null) Debug.LogError("RenderDataBuilder: renderSquares reference is not assigned");
-            if (renderDensityMap == null) Debug.LogError("RenderDataBuilder: renderDensityMap reference is not assigned");
 
             simulation = sim;
-
-            if (Camera.main == null)
-                Debug.LogError("RenderDataBuilder: Camera.main is null — orthographic size will not be set");
-            else
-                Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
-
             renderPositions = new float2[sim.maxParticles];
             renderVelocities = new float2[sim.maxParticles];
 
             renderParticles.DeleteAllTypesOfParticles();
 
+            // Particles
             if (sim.flow)
                 renderParticles.InitParticles(sim.maxParticles);
 
@@ -94,15 +80,23 @@ namespace SimulationLogic
             }
 
             if (manager != null && manager.settings != null && manager.settings.Length > 0)
-                renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
+            {
+                if (simulation.includeBody)
+                    renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
+            }
             else
                 Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
 
+            // Marching squares
             renderSquares.Init(spawn.GetBoundSize());
             densities = new float[renderSquares.edges.Length];
 
+            // Density map
             renderDensityMap.Init(spawn.GetBoundSize());
             densitiesMap = new float[renderDensityMap.cells.Length];
+
+            // Debug
+            renderParticles.InitCustomParticle(new float2(0, -80), 20, Color.white);
         }
 
         public void Draw()
@@ -127,6 +121,12 @@ namespace SimulationLogic
 
             else if (renderType == RenderType.DensityMap)
                 DrawDensityMap();
+
+            // Debug
+            // renderParticles.DrawLine(new float2(-20, -200), new float2(-20, -100), 0.5f, Color.white);
+            // renderParticles.DrawLine(new float2(20, -200), new float2(20, -100), 0.5f, Color.white);
+            // renderParticles.DrawLine(new float2(-20, -100), new float2(20, -100), 0.5f, Color.white);
+            renderParticles.DrawCustomParticle(new float2(0, -80));
         }
 
         #region Particles
@@ -152,11 +152,14 @@ namespace SimulationLogic
             SetPositions(simulation._particles.AsSpan(0, simulation._count));
             SetVelocities(simulation._particles.AsSpan(0, simulation._count));
             renderParticles.DrawParticles(
-                renderPositions, 
-                renderVelocities, 
+                renderPositions,
+                renderVelocities,
                 simulation._count,
-                greenParticles, 
+                greenParticles,
                 yellowParticles);
+
+            if (simulation.includeBody)
+                renderParticles.DrawCustomParticle(simulation.body.position);
         }
 
         private void HighlghtParticlesForDebug()
@@ -366,6 +369,29 @@ namespace SimulationLogic
 
             for (int i = 0; i < particles.Length; i++)
                 renderVelocities[i] = particles[i].velocity;
+        }
+
+        private bool CheckDependencies(Simulation sim)
+        {
+            if (sim == null)
+            {
+                Debug.LogError("RenderDataBuilder: Init called with null simulation");
+                return true;
+            }
+
+            if (manager == null) Debug.LogError("RenderDataBuilder: manager reference is not assigned");
+            if (spawn == null) Debug.LogError("RenderDataBuilder: spawn reference is not assigned");
+            if (renderParticles == null) Debug.LogError("RenderDataBuilder: renderParticles reference is not assigned");
+            if (renderSquares == null) Debug.LogError("RenderDataBuilder: renderSquares reference is not assigned");
+            if (renderDensityMap == null) Debug.LogError("RenderDataBuilder: renderDensityMap reference is not assigned");
+
+
+            if (Camera.main == null)
+                Debug.LogError("RenderDataBuilder: Camera.main is null — orthographic size will not be set");
+            else
+                Camera.main.orthographicSize = manager.twoSim ? offset : Camera.main.orthographicSize;
+
+            return false;
         }
 
         private void OnDestroy()

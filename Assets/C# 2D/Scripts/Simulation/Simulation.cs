@@ -46,7 +46,7 @@ namespace SimulationLogic
         private float collisionDamp;
         public bool flow { get; private set; }
         private bool useParticlesAsBorder;
-        private bool includeBody;
+        public bool includeBody { get; private set; }
 
         // Bodies
         public Body body; // maybe change to prop later
@@ -68,7 +68,7 @@ namespace SimulationLogic
         private float lowViscosity;
 
         // References
-        private SpawnParticles spawn;
+        private InitializeParticles initParticles;
 
         // Spatial partitioning grids
         private SpatialPartitioning particleSP;
@@ -95,9 +95,9 @@ namespace SimulationLogic
         private float timer;
         private float dt;
 
-        public Simulation(SimulationSettings settings, SpawnParticles spawn)
+        public Simulation(SimulationSettings settings, InitializeParticles spawn)
         {
-            this.spawn = spawn;
+            this.initParticles = spawn;
             SetSettings(settings);
         }
 
@@ -118,9 +118,9 @@ namespace SimulationLogic
             {
                 timer += dt;
 
-                if (timer >= spawn.spawnInterval)
+                if (timer >= initParticles.spawnInterval)
                 {
-                    timer -= spawn.spawnInterval;
+                    timer -= initParticles.spawnInterval;
                     Watcher.ExecuteWithTimer("2. SpawnFlowParticles", SpawnFlowParticles);
                 }
             }
@@ -145,11 +145,11 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("10. DoubleDensityRelaxation", DoubleDensityRelaxation);
 
-            // if (includeBody)
-            // {
-            //     Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
-            //     // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
-            // }
+            if (includeBody)
+            {
+                Watcher.ExecuteWithTimer("10. Resolve collisions", ResolveCollisions);
+                // Watcher.ExecuteWithTimer("11. Upthrust", Upthrust);
+            }
 
             AttractToMouse(mousePos);
             Watcher.ExecuteWithTimer("11. Resolve boundaries", ResolveBoundaries);
@@ -335,7 +335,7 @@ namespace SimulationLogic
         {
             body.prevPosition = body.position;
             body.position += dt * body.velocity;
-            body.velocity.y += dt * -2;
+            body.velocity.y += dt * -20;
 
             var force = float2.zero;
             var collisionRad = body.radius + particleRadius;
@@ -346,14 +346,13 @@ namespace SimulationLogic
                 var dist = FluidMath.Distance(body.position, p.position);
                 if (!(dist <= collisionRad)) return;
 
-                // try using absolute value
                 var relativeVelocity = p.velocity - body.velocity;
                 var normalVector = FluidMath.UnitVector(body.position,
                     p.position,
                     dist);
                 var normalVelocity = math.dot(relativeVelocity, normalVector) * normalVector;
 
-                force += dt * normalVelocity;
+                force += dt * normalVelocity / 5;
             });
 
             // try interpreting "modify" differently
@@ -432,20 +431,106 @@ namespace SimulationLogic
                     pos.y += -sign * collisionDamp;
                     _particles[i].position = pos;
                 }
-
             }
+
+            CircleBarrier(new float2(0, -80), 20);
 
             // Bodies
             if (Math.Abs(body.position.x) >= realHalfBoundSizeBody.x)
             {
-                body.position.x = realHalfBoundSizeBody.x * Math.Sign(body.position.x);
-                body.velocity.x = 0;
+                var sign = Math.Sign(body.position.x);
+                body.position.x = realHalfBoundSizeBody.x * sign;
+                body.velocity.x += -sign * collisionDamp;
             }
 
             if (Math.Abs(body.position.y) >= realHalfBoundSizeBody.y)
             {
-                body.position.y = realHalfBoundSizeBody.y * Math.Sign(body.position.y);
-                body.velocity.y = 0;
+                var sign = Math.Sign(body.position.y);
+                body.position.y = realHalfBoundSizeBody.y * sign;
+                body.velocity.y += -sign * collisionDamp;
+            }
+        }
+
+        private void Barrier(float2 start, float2 end)
+        {
+            if (start.x != end.x && start.y != end.y)
+            {
+                Debug.LogError("Simulation: can't create bariers not on the axis");
+                return;
+            }
+
+            // Horizontal
+            if (start.y == end.y)
+            {
+                for (int i = 0; i < _count; i++)
+                {
+                    // Left-right
+                    if (start.x < end.x)
+                        if (_particles[i].position.x < start.x || _particles[i].position.x > end.x) continue;
+
+                    // Right-left
+                    if (start.x > end.x)
+                        if (_particles[i].position.x > start.x || _particles[i].position.x < end.x) continue;
+
+                    var dist = start.y - _particles[i].position.y;
+                    var prevDist = start.y - _particles[i].prevPosition.y;
+
+                    if (Math.Abs(dist) >= particleRadius && Math.Sign(dist) == Math.Sign(prevDist)) continue;
+
+                    var sign = Math.Sign(prevDist) != 0 ? Math.Sign(prevDist) : Math.Sign(dist);
+                    _particles[i].position.y = start.y + (-sign * particleRadius);
+                    _particles[i].position.y += -sign * collisionDamp;
+                }
+            }
+
+            // Vertical
+            else if (start.x == end.x)
+            {
+                for (int i = 0; i < _count; i++)
+                {
+                    // Top-down
+                    if (start.y > end.y)
+                        if (_particles[i].position.y > start.y || _particles[i].position.y < end.y) continue;
+
+                    // Down-top
+                    if (start.y < end.y)
+                        if (_particles[i].position.y < start.y || _particles[i].position.y > end.y) continue;
+
+                    var dist = start.x - _particles[i].position.x;
+                    var prevDist = start.x - _particles[i].prevPosition.x;
+
+                    if (Math.Abs(dist) >= particleRadius && Math.Sign(dist) == Math.Sign(prevDist)) continue;
+
+                    var sign = Math.Sign(prevDist) != 0 ? Math.Sign(prevDist) : Math.Sign(dist);
+                    _particles[i].position.x = start.x + (-sign * particleRadius);
+                    _particles[i].position.x += -sign * collisionDamp;
+                }
+            }
+        }
+
+        private void RectBarrier(float2 topLeft, float2 bottomRight)
+        {
+            Barrier(new float2(topLeft.x, topLeft.y), new float2(bottomRight.x, topLeft.y));    // top
+            Barrier(new float2(topLeft.x, bottomRight.y), new float2(bottomRight.x, bottomRight.y)); // bottom
+            Barrier(new float2(topLeft.x, bottomRight.y), new float2(topLeft.x, topLeft.y));    // left
+            Barrier(new float2(bottomRight.x, bottomRight.y), new float2(bottomRight.x, topLeft.y));    // right
+        }
+
+        private void CircleBarrier(float2 center, float circleRadius)
+        {
+            var collisionRadius = circleRadius + particleRadius;
+
+            for (int i = 0; i < _count; i++)
+            {
+                var dist = FluidMath.Distance(center, _particles[i].position);
+                var prevDist = FluidMath.Distance(center, _particles[i].prevPosition);
+
+                if (dist >= collisionRadius && prevDist >= collisionRadius) continue;
+
+                var refPos = dist > 0 ? _particles[i].position : _particles[i].prevPosition;
+                var outward = FluidMath.UnitVector(center, refPos);
+
+                _particles[i].position = center + outward * (collisionRadius + collisionDamp);
             }
         }
 
@@ -508,13 +593,13 @@ namespace SimulationLogic
         #region Flow
         private void SpawnFlowParticles()
         {
-            if (maxParticles < _count + spawn.spawnPerFlowRow) return;
+            if (maxParticles < _count + initParticles.spawnPerFlowRow) return;
 
-            float startPosX = -((spawn.spawnPerFlowRow - 1) * spawn.flowSpacing / 2f);
-            float posY = spawn.GetRealHalfBoundSize(particleRadius).y;
+            float startPosX = -((initParticles.spawnPerFlowRow - 1) * initParticles.flowSpacing / 2f);
+            float posY = initParticles.GetRealHalfBoundSize(particleRadius).y;
 
-            for (int i = 0; i < spawn.spawnPerFlowRow; i++)
-                AddParticle(new float2(startPosX + (i * spawn.flowSpacing), posY));
+            for (int i = 0; i < initParticles.spawnPerFlowRow; i++)
+                AddParticle(new float2(startPosX + (i * initParticles.flowSpacing), posY));
         }
 
         private void ResolveFlow()
@@ -531,8 +616,8 @@ namespace SimulationLogic
         public void SetScene()
         {
             // Precomputing values
-            realHalfBoundSize = spawn.GetRealHalfBoundSize(particleRadius);
-            realHalfBoundSizeBody = spawn.GetRealHalfBoundSize(body.radius);
+            realHalfBoundSize = initParticles.GetRealHalfBoundSize(particleRadius);
+            realHalfBoundSizeBody = initParticles.GetRealHalfBoundSize(body.radius);
 
             if (realHalfBoundSize.x <= 0 || realHalfBoundSize.y <= 0)
                 Debug.LogWarning($"Simulation: realHalfBoundSize is {realHalfBoundSize}, bounding box is degenerate — particles may escape or behave incorrectly");
@@ -548,7 +633,7 @@ namespace SimulationLogic
 
             if (!flow)
             {
-                var positions = spawn.InitPositions();
+                var positions = initParticles.InitPositions();
                 for (int i = 0; i < positions.Count; i++)
                     AddParticle(positions[i]);
             }
@@ -606,11 +691,11 @@ namespace SimulationLogic
             lowViscosity = settings.lowViscosity;
         }
         #endregion
-        #region Helpers
+        #region ParticleArraysHandler
         private int GetMaxParticles(int newMax)
         {
             if (!flow)
-                return spawn.InitPositions().Count;
+                return initParticles.InitPositions().Count;
 
             else
             {
@@ -718,20 +803,6 @@ namespace SimulationLogic
             _sparse = newSparse;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ClearForceBuffers()
-        {
-            for (int i = 0; i < _count; i++)
-                _particles[i].forceBuffer = new(0, 0);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ApplyForceBuffers()
-        {
-            for (int i = 0; i < _count; i++)
-                _particles[i].position += _particles[i].forceBuffer;
-        }
-
         private void AddParticle(float2 pos)
         {
             if (_count == maxParticles)
@@ -788,6 +859,21 @@ namespace SimulationLogic
             {
                 Debug.LogWarning("Simulation: trying to delete particle that doesn't exist");
             }
+        }
+        #endregion
+        #region Helpers
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ClearForceBuffers()
+        {
+            for (int i = 0; i < _count; i++)
+                _particles[i].forceBuffer = new(0, 0);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ApplyForceBuffers()
+        {
+            for (int i = 0; i < _count; i++)
+                _particles[i].position += _particles[i].forceBuffer;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

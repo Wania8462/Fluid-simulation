@@ -335,6 +335,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   resolution: 5
   bodyResolution: 10
+  redThreshold: 60
   mat: {fileID: 2100000, guid: 0901ec4ad63cccd47b61c2eb947f47a1, type: 2}
 --- !u!4 &452458856
 Transform:
@@ -729,7 +730,6 @@ MonoBehaviour:
   pause: 1
   realDeltaTime: 0
   targetFrameRate: 120
-  flow: 0
   twoSimulations: 0
   settings:
   - interactionRadius: 6
@@ -737,10 +737,11 @@ MonoBehaviour:
     mouseAttractiveness: 0.5
     mouseRadius: 1000
     collisionDamping: 0.083
-    flow: 1
+    flow: 0
     maxParticles: 5000
     includeBody: 0
     useParticlesAsBorder: 0
+    ceilingHeight: 0
     body:
       radius: 10
       position:
@@ -784,6 +785,7 @@ MonoBehaviour:
     maxParticles: -1
     includeBody: 0
     useParticlesAsBorder: 0
+    ceilingHeight: 0
     body:
       radius: 10
       position:
@@ -833,7 +835,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 50
+  particleSquareLength: 60
   spawnCircle: 0
   spacing: 2
   useJitter: 0
@@ -846,7 +848,7 @@ MonoBehaviour:
     y: 0
   spawnPerFlowRow: 100
   flowSpacing: 1
-  spawnInterval: 0.1
+  spawnInterval: 0.15
   borderDensity: 1
   layers: 1
   layerOffset: 1

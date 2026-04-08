@@ -1,17 +1,15 @@
 using System;
-using System.Collections.Generic;
-using NUnit.Framework.Internal;
 using Unity.Mathematics;
-using UnityEditor.ShaderGraph.Internal;
 using UnityEngine;
 
 namespace SimulationLogic
 {
-    public class SpawnParticles : MonoBehaviour
+    public class InitializeParticles : MonoBehaviour
     {
         [Header("Spawn settings")]
         [SerializeField] private int particleSquareLength = 50;
         [SerializeField] private bool spawnCircle;
+        [SerializeField] private float2 spawnOffset;
         [SerializeField] private float spacing = 2;
         [SerializeField] private bool useJitter = true;
         [SerializeField] private float jitterStrength = 0.2f;
@@ -54,8 +52,8 @@ namespace SimulationLogic
                 {
                     for (int j = 0; j < len; j++)
                     {
-                        pos[i * len + j] = new float2(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1,
-                                            j * spacing + (UnityEngine.Random.insideUnitSphere.y * jitterStrength) - len + 1);
+                        pos[i * len + j] = new float2(i * spacing + (UnityEngine.Random.insideUnitSphere.x * jitterStrength) - len + 1 + spawnOffset.x,
+                                            j * spacing + (UnityEngine.Random.insideUnitSphere.y * jitterStrength) - len + 1 + spawnOffset.y);
                     }
                 }
 
