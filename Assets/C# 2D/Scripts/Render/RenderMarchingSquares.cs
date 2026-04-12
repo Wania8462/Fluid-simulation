@@ -5,69 +5,69 @@ using UnityEngine;
 
 namespace Rendering
 {
+    internal readonly struct InterpolatedCell
+    {
+        public readonly Vector3 top;
+        public readonly Vector3 right;
+        public readonly Vector3 bottom;
+        public readonly Vector3 left;
+
+        public InterpolatedCell(Vector3 top, Vector3 right, Vector3 bottom, Vector3 left)
+        {
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
+            this.left = left;
+        }
+    }
+
+    internal readonly struct CellVertices
+    {
+        public readonly Vector3 topLeft;
+        public readonly Vector3 topRight;
+        public readonly Vector3 bottomRight;
+        public readonly Vector3 bottomLeft;
+
+        public CellVertices(Vector3 topLeft, Vector3 topRight, Vector3 bottomRight, Vector3 bottomLeft)
+        {
+            this.topLeft = topLeft;
+            this.topRight = topRight;
+            this.bottomRight = bottomRight;
+            this.bottomLeft = bottomLeft;
+        }
+
+        public Vector3 Centre => (topLeft + topRight + bottomLeft + bottomRight) * 0.25f;
+    }
+
+    internal readonly struct CellDensities
+    {
+        public readonly float topLeft;
+        public readonly float topRight;
+        public readonly float bottomRight;
+        public readonly float bottomLeft;
+
+        public CellDensities(float topLeft, float topRight, float bottomRight, float bottomLeft)
+        {
+            this.topLeft = topLeft;
+            this.topRight = topRight;
+            this.bottomRight = bottomRight;
+            this.bottomLeft = bottomLeft;
+        }
+
+        public float Centre => (topLeft + topRight + bottomRight + bottomLeft) * 0.25f;
+    }
+
     public class RenderMarchingSquares : MonoBehaviour
     {
-        private readonly struct InterpolatedCell
-        {
-            public readonly Vector3 top;
-            public readonly Vector3 right;
-            public readonly Vector3 bottom;
-            public readonly Vector3 left;
-
-            public InterpolatedCell(Vector3 top, Vector3 right, Vector3 bottom, Vector3 left)
-            {
-                this.top = top;
-                this.right = right;
-                this.bottom = bottom;
-                this.left = left;
-            }
-        }
-
-        private readonly struct CellVertices
-        {
-            public readonly Vector3 topLeft;
-            public readonly Vector3 topRight;
-            public readonly Vector3 bottomRight;
-            public readonly Vector3 bottomLeft;
-
-            public CellVertices(Vector3 topLeft, Vector3 topRight, Vector3 bottomRight, Vector3 bottomLeft)
-            {
-                this.topLeft = topLeft;
-                this.topRight = topRight;
-                this.bottomRight = bottomRight;
-                this.bottomLeft = bottomLeft;
-            }
-
-            public Vector3 Centre => (topLeft + topRight + bottomLeft + bottomRight) * 0.25f;
-        }
-
-        private readonly struct CellDensities
-        {
-            public readonly float topLeft;
-            public readonly float topRight;
-            public readonly float bottomRight;
-            public readonly float bottomLeft;
-
-            public CellDensities(float topLeft, float topRight, float bottomRight, float bottomLeft)
-            {
-                this.topLeft = topLeft;
-                this.topRight = topRight;
-                this.bottomRight = bottomRight;
-                this.bottomLeft = bottomLeft;
-            }
-
-            public float Centre => (topLeft + topRight + bottomRight + bottomLeft) * 0.25f;
-        }
-
         [SerializeField] private int quality;
         [SerializeField] private float threashold;
 
         [SerializeField] private Material mat;
         [SerializeField] private Material testMat;
-        [SerializeField] private GameObject testSquare;
-        [SerializeField] private int drawIndex;
-        private List<GameObject> testObjects = new();
-        private int prevDrawIndex;
+        // [Header("Debug")]
+        // [SerializeField] private GameObject testSquare;
+        // [SerializeField] private int drawIndex;
+        // private List<GameObject> testObjects = new();
 
         private Mesh[] meshes;
         public Vector3[] edges { get; private set; }
@@ -136,7 +136,7 @@ namespace Rendering
                     var cellVertices = GetCellVertices(edgeIndex);
                     var cellDensities = GetCellDensities(densities, edgeIndex);
                     var meshIndex = GetMeshIndex(cellDensities);
-                    
+
                     if (meshIndex == 0)
                         continue;
 
@@ -358,17 +358,17 @@ namespace Rendering
         }
 
         private static Vector3 GetVertex(int index, CellVertices cellVertices, InterpolatedCell interpolatedCell) => index switch
-            {
-                0 => cellVertices.topLeft,
-                1 => cellVertices.topRight,
-                2 => cellVertices.bottomLeft,
-                3 => cellVertices.bottomRight,
-                4 => interpolatedCell.top,
-                5 => interpolatedCell.right,
-                6 => interpolatedCell.bottom,
-                7 => interpolatedCell.left,
-                _ => Vector3.zero
-            };
+        {
+            0 => cellVertices.topLeft,
+            1 => cellVertices.topRight,
+            2 => cellVertices.bottomLeft,
+            3 => cellVertices.bottomRight,
+            4 => interpolatedCell.top,
+            5 => interpolatedCell.right,
+            6 => interpolatedCell.bottom,
+            7 => interpolatedCell.left,
+            _ => Vector3.zero
+        };
 
         private CellVertices GetCellVertices(int edgeIndex) => new(
             edges[edgeIndex],
@@ -414,36 +414,36 @@ namespace Rendering
         #endregion
 
         #region Debug
-        private void DrawEdges()
-        {
-            testSquare.GetComponent<SpriteRenderer>().color = Color.white;
-            foreach (var edge in edges)
-                Instantiate(testSquare, edge, Quaternion.identity);
-        }
+        // private void DrawEdges()
+        // {
+        //     testSquare.GetComponent<SpriteRenderer>().color = Color.white;
+        //     foreach (var edge in edges)
+        //         Instantiate(testSquare, edge, Quaternion.identity);
+        // }
 
-        private void DrawCentres()
-        {
-            testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
-            foreach (var centre in centres)
-                Instantiate(testSquare, new Vector3(centre.x, centre.y), Quaternion.identity);
-        }
+        // private void DrawCentres()
+        // {
+        //     testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
+        //     foreach (var centre in centres)
+        //         Instantiate(testSquare, new Vector3(centre.x, centre.y), Quaternion.identity);
+        // }
 
-        private void DrawSquare()
-        {
-            foreach (var testObject in testObjects)
-                Destroy(testObject);
+        // private void DrawSquare()
+        // {
+        //     foreach (var testObject in testObjects)
+        //         Destroy(testObject);
 
-            var offset = Mathf.FloorToInt((float)drawIndex / (width - 1));
-            Debug.Log($"Draw Index: {drawIndex}, width: {width - 1}, offset: {offset}");
-            testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
-            testObjects.Add(Instantiate(testSquare, new Vector3(centres[drawIndex].x, centres[drawIndex].y), Quaternion.identity));
-            testSquare.GetComponent<SpriteRenderer>().color = Color.white;
+        //     var offset = Mathf.FloorToInt((float)drawIndex / (width - 1));
+        //     Debug.Log($"Draw Index: {drawIndex}, width: {width - 1}, offset: {offset}");
+        //     testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
+        //     testObjects.Add(Instantiate(testSquare, new Vector3(centres[drawIndex].x, centres[drawIndex].y), Quaternion.identity));
+        //     testSquare.GetComponent<SpriteRenderer>().color = Color.white;
 
-            testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset], Quaternion.identity));
-            testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + 1], Quaternion.identity));
-            testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width], Quaternion.identity));
-            testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width + 1], Quaternion.identity));
-        }
+        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset], Quaternion.identity));
+        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + 1], Quaternion.identity));
+        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width], Quaternion.identity));
+        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width + 1], Quaternion.identity));
+        // }
         #endregion
     }
 }

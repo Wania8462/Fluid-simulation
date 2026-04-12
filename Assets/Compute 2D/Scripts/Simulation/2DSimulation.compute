@@ -10,12 +10,8 @@
 #pragma kernel AttractToMouse
 #pragma kernel AdvancePredictedPositions
 #pragma kernel CalculateVelocity
-#pragma kernel UpdateSpatialHash
-#pragma kernel SortHashes
-#pragma kernel CopySpatialHashes
 
 #include "./FluidMath.hlsl"
-#include "./SpatialPartitioning.hlsl"
 
 // try 64
 static const int ThreadGroupSize = 256;
@@ -30,11 +26,6 @@ RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> NearDensities;
 RWStructuredBuffer<float> Springs;
-
-RWStructuredBuffer<int2> SpatialHashes;
-RWStructuredBuffer<int2> SpatialHashesScratch;
-RWStructuredBuffer<int4> SortRanges;
-RWStructuredBuffer<uint> SortCounters;
 
 RWStructuredBuffer<float> DebugFloat;
 RWStructuredBuffer<int> DebugInt;
@@ -64,18 +55,6 @@ const float particleRadius;
 const float2 mousePosition;
 const float dt;
 
-const uint activeSortRangeCount;
-const uint sortCurrentRangeBase;
-const uint sortNextRangeBase;
-const int sortSourceIsSpatialHashes;
-
-groupshared uint LessCount;
-groupshared uint EqualCount;
-groupshared uint GreaterCount;
-groupshared uint LessWriteIndex;
-groupshared uint EqualWriteIndex;
-groupshared uint GreaterWriteIndex;
-
 void SetForceBuffer(uint index, float2 value)
 {
     ForceBuffersX[index] = (int)(value.x * FloatScale);
@@ -92,35 +71,6 @@ float2 ReadForceBuffer(uint index)
 {
     return float2((float)ForceBuffersX[index] / FloatScale, 
                   (float)ForceBuffersY[index] / FloatScale);
-}
-
-int2 ReadSpatialHash(uint index)
-{
-    return sortSourceIsSpatialHashes != 0
-        ? SpatialHashes[index]
-        : SpatialHashesScratch[index];
-}
-
-void WriteSpatialHash(uint index, int2 value)
-{
-    if (sortSourceIsSpatialHashes != 0)
-        SpatialHashesScratch[index] = value;
-
-    else
-        SpatialHashes[index] = value;
-}
-
-void EnqueueSortRange(int startIndex, int endIndex, int needsSort)
-{
-    uint nextRangeIndex;
-    InterlockedAdd(SortCounters[0], 1, nextRangeIndex);
-    SortRanges[sortNextRangeBase + nextRangeIndex] = int4(startIndex, endIndex, needsSort, 0);
-
-    if (needsSort != 0)
-    {
-        uint ignored;
-        InterlockedAdd(SortCounters[1], 1, ignored);
-    }
 }
 
 uint SpringIndex(uint i, uint j)
@@ -343,133 +293,4 @@ void CalculateVelocity (uint3 id : SV_DispatchThreadID)
         return;
 
     Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
-}
-
-[numthreads(ThreadGroupSize,1,1)]
-void UpdateSpatialHash (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles)
-        return;
-
-    SpatialHashes[id.x].x = id.x;
-    SpatialHashes[id.x].y = GetHashFromPosition(Positions[id.x], interactionRadius);
-}
-
-[numthreads(ThreadGroupSize,1,1)]
-void SortHashes (uint3 groupId : SV_GroupID, uint3 threadId : SV_GroupThreadID)
-{
-    if (groupId.x >= activeSortRangeCount)
-        return;
-
-    uint startIndex = SortRanges[sortCurrentRangeBase + groupId.x].x;
-    uint endIndex = SortRanges[sortCurrentRangeBase + groupId.x].y;
-    uint shouldSort = SortRanges[sortCurrentRangeBase + groupId.x].z;
-    uint rangeLength = endIndex - startIndex;
-
-    if (rangeLength <= 1 || shouldSort == 0)
-    {
-        for (uint index = startIndex + threadId.x; index < endIndex; index += ThreadGroupSize)
-            WriteSpatialHash(index, ReadSpatialHash(index));
-
-        GroupMemoryBarrierWithGroupSync();
-
-        if (threadId.x == 0)
-            EnqueueSortRange(startIndex, endIndex, 0);
-
-        return;
-    }
-
-    int pivot = ReadSpatialHash(startIndex + (rangeLength >> 1)).x;
-    uint localLessCount = 0;
-    uint localEqualCount = 0;
-    uint localGreaterCount = 0;
-
-    for (uint index = startIndex + threadId.x; index < endIndex; index += ThreadGroupSize)
-    {
-        int key = ReadSpatialHash(index).x;
-
-        if (key < pivot)
-            localLessCount++;
-
-        else if (key > pivot)
-            localGreaterCount++;
-
-        else
-            localEqualCount++;
-    }
-
-    if (threadId.x == 0)
-    {
-        LessCount = 0;
-        EqualCount = 0;
-        GreaterCount = 0;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    uint ignored;
-    InterlockedAdd(LessCount, localLessCount, ignored);
-    InterlockedAdd(EqualCount, localEqualCount, ignored);
-    InterlockedAdd(GreaterCount, localGreaterCount, ignored);
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (threadId.x == 0)
-    {
-        LessWriteIndex = startIndex;
-        EqualWriteIndex = startIndex + LessCount;
-        GreaterWriteIndex = startIndex + LessCount + EqualCount;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    for (uint index = startIndex + threadId.x; index < endIndex; index += ThreadGroupSize)
-    {
-        int2 value = ReadSpatialHash(index);
-        uint writeIndex;
-
-        if (value.x < pivot)
-        {
-            InterlockedAdd(LessWriteIndex, 1, writeIndex);
-            WriteSpatialHash(writeIndex, value);
-        }
-
-        else if (value.x > pivot)
-        {
-            InterlockedAdd(GreaterWriteIndex, 1, writeIndex);
-            WriteSpatialHash(writeIndex, value);
-        }
-
-        else
-        {
-            InterlockedAdd(EqualWriteIndex, 1, writeIndex);
-            WriteSpatialHash(writeIndex, value);
-        }
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (threadId.x == 0)
-    {
-        uint equalStart = startIndex + LessCount;
-        uint greaterStart = equalStart + EqualCount;
-
-        if (LessCount > 0)
-            EnqueueSortRange(startIndex, equalStart, LessCount > 1 ? 1 : 0);
-
-        if (EqualCount > 0)
-            EnqueueSortRange(equalStart, greaterStart, 0);
-
-        if (GreaterCount > 0)
-            EnqueueSortRange(greaterStart, endIndex, GreaterCount > 1 ? 1 : 0);
-    }
-}
-
-[numthreads(ThreadGroupSize,1,1)]
-void CopySpatialHashes (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles)
-        return;
-
-    SpatialHashes[id.x] = SpatialHashesScratch[id.x];
 }

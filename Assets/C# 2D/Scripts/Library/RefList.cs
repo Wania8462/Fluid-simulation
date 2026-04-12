@@ -212,6 +212,12 @@ public class RefList<T> : IRefList<T>
         _size = 0;
     }
 
+    public Span<T> AsSpan() => _items.AsSpan(0, _size);
+
+    public Span<T> AsSpan(int start) => _items.AsSpan(start, _size - start);
+
+    public Span<T> AsSpan(int start, int length) => _items.AsSpan(start, length);
+
     public void EnsureCapacity(int capacity)
     {
         if (capacity > _items.Length)

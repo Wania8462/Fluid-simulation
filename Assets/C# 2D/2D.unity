@@ -740,8 +740,7 @@ MonoBehaviour:
     flow: 0
     maxParticles: 5000
     includeBody: 0
-    useParticlesAsBorder: 0
-    ceilingHeight: 0
+    useParticlesAsBorder: 1
     body:
       radius: 10
       position:
@@ -775,7 +774,7 @@ MonoBehaviour:
     springDeformationLimit: 0
     plasticity: 0.05
     highViscosity: 0
-    lowViscosity: 0
+    lowViscosity: 0.1
   - interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 1
@@ -785,7 +784,6 @@ MonoBehaviour:
     maxParticles: -1
     includeBody: 0
     useParticlesAsBorder: 0
-    ceilingHeight: 0
     body:
       radius: 10
       position:
@@ -835,13 +833,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3457bd351ddc5348852d04e12b0cf21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSquareLength: 60
+  particleSquareLength: 50
   spawnCircle: 0
+  spawnOffset:
+    x: 0
+    y: 0
   spacing: 2
   useJitter: 0
   jitterStrength: 0.2
   boundingBoxSizeOffset:
-    x: 160
+    x: 180
     y: 80
   boundingBoxSize:
     x: 0

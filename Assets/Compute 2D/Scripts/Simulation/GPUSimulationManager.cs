@@ -57,10 +57,6 @@ public class GPUSimulationManager : MonoBehaviour
         { "Densities", null },
         { "NearDensities", null },
         { "Springs", null },
-        { "SpatialHashes", null },
-        { "SpatialHashesScratch", null },
-        { "SortRanges", null },
-        { "SortCounters", null },
         { "DebugFloat", null },
         { "DebugInt", null }
     };
@@ -79,10 +75,7 @@ public class GPUSimulationManager : MonoBehaviour
         { "ResolveBoundaries", 8 },
         { "AttractToMouse", 9 },
         { "AdvancePredictedPositions", 10 },
-        { "CalculateVelocity", 11 },
-        { "UpdateSpatialHash", 12 },
-        { "SortHashes", 13 },
-        { "CopySpatialHashes", 14 }
+        { "CalculateVelocity", 11 }
     };
 
     public ThreadGroups threadGropus;
@@ -93,7 +86,6 @@ public class GPUSimulationManager : MonoBehaviour
     private const float fakeDT = 1 / 60f;
 
     private readonly int debugLength = 100;
-    private readonly uint[] sortCounterReadback = new uint[sortCounterLength];
 
     private void Start()
     {
@@ -260,46 +252,6 @@ public class GPUSimulationManager : MonoBehaviour
     private void Dispatch(int kernelID, int groupsX)
     {
         compute.Dispatch(kernelID, groupsX, 1, 1);
-    }
-
-    // This is kept separate from SimulationStep because it requires CPU-side
-    // coordination between GPU partition passes to advance the quicksort ranges.
-    private void UpdateAndSortSpatialHashes()
-    {
-        if (numParticles < 2)
-            return;
-
-        Dispatch(KernelIDs["UpdateSpatialHash"]);
-
-        buffers["SortRanges"].SetData(new[] { new int4(0, numParticles, 1, 0) }, 0, 0, 1);
-
-        int activeRangeCount = 1;
-        int currentRangeBase = 0;
-        int nextRangeBase = numParticles;
-        bool sourceIsSpatialHashes = true;
-        uint[] clearedSortCounters = new uint[sortCounterLength];
-
-        while (true)
-        {
-            buffers["SortCounters"].SetData(clearedSortCounters);
-            compute.SetInt("activeSortRangeCount", activeRangeCount);
-            compute.SetInt("sortCurrentRangeBase", currentRangeBase);
-            compute.SetInt("sortNextRangeBase", nextRangeBase);
-            compute.SetInt("sortSourceIsSpatialHashes", sourceIsSpatialHashes ? 1 : 0);
-
-            Dispatch(KernelIDs["SortHashes"], activeRangeCount);
-            buffers["SortCounters"].GetData(sortCounterReadback);
-
-            if (sortCounterReadback[1] == 0)
-                break;
-
-            activeRangeCount = (int)sortCounterReadback[0];
-            (currentRangeBase, nextRangeBase) = (nextRangeBase, currentRangeBase);
-            sourceIsSpatialHashes = !sourceIsSpatialHashes;
-        }
-
-        if (sourceIsSpatialHashes)
-            Dispatch(KernelIDs["CopySpatialHashes"]);
     }
 
     private void ReleaseBuffers()

@@ -61,6 +61,15 @@ namespace SimulationLogic
                 grid[GetGridIndex(particle.position)].Add(particle.ID);
         }
 
+        public void Init(ReadOnlySpan<BorderParticle> particles)
+        {
+            foreach (var list in grid)
+                list.Clear();
+
+            for (int i = 0; i < particles.Length; i++)
+                grid[GetGridIndex(particles[i].position)].Add(i);
+        }
+
         public List<int> GetNeighbours(float2 position)
         {
             List<int> result = new();

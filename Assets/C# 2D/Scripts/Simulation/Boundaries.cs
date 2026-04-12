@@ -11,13 +11,17 @@ namespace SimulationLogic
         private int _count;
         private float particleRadius;
         private float collisionDamp;
+        private Body body;
+        private float2 realHalfBoundSizeBody;
 
-        public Boundaries(Particle[] particles, int count, float particleRadius, float collisionDamp)
+        public Boundaries(Particle[] particles, int count, float particleRadius, float collisionDamp, ref Body body, float2 realHalfBoundSizeBody)
         {
             _particles = particles;
             _count = count;
             this.particleRadius = particleRadius;
             this.collisionDamp = collisionDamp;
+            this.body = body;
+            this.realHalfBoundSizeBody = realHalfBoundSizeBody;
         }
 
         public void ResolveBoundaries(float2 realHalfBoundSize)
@@ -43,7 +47,18 @@ namespace SimulationLogic
                 }
             }
 
-            CircleBarrier(new float2(0, -80), 20);
+            // Bodies
+            if (Math.Abs(body.position.x) >= realHalfBoundSizeBody.x)
+            {
+                body.position.x = realHalfBoundSizeBody.x * Math.Sign(body.position.x);
+                body.velocity.x = 0;
+            }
+
+            if (Math.Abs(body.position.y) >= realHalfBoundSizeBody.y)
+            {
+                body.position.y = realHalfBoundSizeBody.y * Math.Sign(body.position.y);
+                body.velocity.y = 0;
+            }
         }
 
         private void LineBarrier(float2 start, float2 end)

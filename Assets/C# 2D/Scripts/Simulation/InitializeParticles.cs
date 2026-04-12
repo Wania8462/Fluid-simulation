@@ -95,7 +95,7 @@ namespace SimulationLogic
             }
         }
 
-        public RefList<float2> InitBoundaryPositions()
+        public RefList<float2> InitBorderPositions()
         {
             var lenX = (int)(boundingBoxSize.x * borderDensity);
             var lenY = (int)(boundingBoxSize.y * borderDensity);

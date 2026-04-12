@@ -4,8 +4,6 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Mathematics;
-using System.Diagnostics;
-using Debug = UnityEngine.Debug;
 
 namespace Rendering
 {

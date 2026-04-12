@@ -68,10 +68,39 @@ namespace SimulationLogic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float QuadraticSpikyKernel(float relativeDistance) => (1 - relativeDistance) * (1 - relativeDistance);
+        public static float QuadraticSpikyKernel(float relativeDistance, float volume) => (1 - relativeDistance) * (1 - relativeDistance) / volume;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float CubicSpikyKernel(float relativeDistance) => Pow3(1 - relativeDistance);
+        public static float CubicSpikyKernel(float relativeDistance, float volume) => Pow3(1 - relativeDistance) / volume;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float QuadraticSpikyKernelDerivative(float relativeDistance)
+        {
+            if (relativeDistance == 0)
+                Debug.LogError("FluidMath: trying to get derivative at undefined x");
+
+            if (relativeDistance > 0)
+                return 2 * relativeDistance - 2;
+
+            else
+                return 2 * relativeDistance + 2;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float CubicSpikyKernelDerivative(float distance, float interactionRadius)
+        {
+            float relativeDistance = Mathf.Abs(distance) / interactionRadius;
+            return -3f / interactionRadius * (1f - relativeDistance) * (1f - relativeDistance) * Mathf.Sign(distance);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float2 GradW(float2 initialPosition, float2 finalPosition, float distance, float interactionRadius)
+        {
+            float relativeDistance = distance / interactionRadius;
+            float2 unitVector = UnitVector(initialPosition, finalPosition, distance);
+            float derivative = QuadraticSpikyKernelDerivative(relativeDistance) / interactionRadius;
+            return derivative * unitVector;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Distance(float2 p1, float2 p2) => Mathf.Sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));

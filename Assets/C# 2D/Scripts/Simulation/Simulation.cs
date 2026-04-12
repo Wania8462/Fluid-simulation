@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -17,21 +18,36 @@ namespace SimulationLogic
         public float2 prevPosition;
         public float2 velocity;
         public float2 forceBuffer;
+        public float mass;
         public float density;
         public float nearDensity;
         public RefList<int> neighbours;
         public RefList<int> springsNeighbours;
+        public RefList<int> borderNeighbours;
 
         public Particle()
         {
             ID = -1;
             neighbours = new RefList<int>();
             springsNeighbours = new RefList<int>();
+            borderNeighbours = new RefList<int>();
         }
 
         public Particle(float2 position) : this()
         {
             this.position = position;
+        }
+    }
+
+    public class BorderParticle
+    {
+        public float2 position;
+        public float mass;
+
+        public BorderParticle(float2 position, float mass)
+        {
+            this.position = position;
+            this.mass = mass;
         }
     }
 
@@ -45,7 +61,7 @@ namespace SimulationLogic
         private float mouseRadius;
         private float collisionDamp;
         public bool flow { get; private set; }
-        private bool useParticlesAsBorder;
+        public bool useParticlesAsBorder { get; private set; }
         public bool includeBody { get; private set; }
 
         // Bodies
@@ -57,6 +73,7 @@ namespace SimulationLogic
         private float nearStiffness;
         private float borderStiffness;
         private float restDensity;
+        private float fluidParticleMass;
 
         // Springs
         private float springInteractionRadius;
@@ -75,24 +92,32 @@ namespace SimulationLogic
         private SpatialPartitioning particleSP;
         private SpatialPartitioning springsSP;
         private SpatialPartitioning bodySP;
+        private SpatialPartitioning borderSP;
 
         // Buffers
         // Fluid particles
         public int maxParticles { get; private set; }
         public Particle[] _particles { get; private set; }
         public SparseArray _sparse { get; private set; }
-        public int _count { get; private set; }
+        public int count { get; private set; }
         private RefList<int> _freeIDs;
         private ConcurrentDictionary<(int, int), float> _springs;
+        // Border particles
+        public RefList<BorderParticle> _borderParticles { get; private set; }
+        private float gamma1;
+        private float gamma2;
 
         // Spatial partitioning buffers
         private List<int> bodyNeighbours;
         private ThreadLocal<List<int>> densityNeighbours;
 
         // Miscellaneous
-        private float2 realHalfBoundSize;
+        public float2 realHalfBoundSize; // temporarily public
         private float2 realHalfBoundSizeBody;
+        private float quadraticSpikyKernelVolume;
+        private float cubicSpikyKernelVolume;
         private const float particleRadius = 0.5f;
+        private const float particleDiameter = 0.5f;
         private float timer;
         private float dt;
 
@@ -111,6 +136,18 @@ namespace SimulationLogic
                 Debug.LogWarning($"Simulation: deltatime is {deltatime}, skipping step to avoid division by zero");
                 return;
             }
+
+            // var density = 0f;
+            // for (int i = 0; i < count; i++)
+            // {
+            //     var mag = FluidMath.Distance(float2.zero, _particles[i].position);
+            //         if (mag > interactionRadius) continue;
+            //         var q = mag / interactionRadius;
+
+            //         density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+            // }
+
+            // Debug.Log($"Density: {density}");
 
             CheckArraysLength();
             dt = deltatime;
@@ -134,7 +171,7 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("7. Advance predicted pos", () =>
             {
-                for (int i = 0; i < _count; i++)
+                for (int i = 0; i < count; i++)
                 {
                     _particles[i].prevPosition = _particles[i].position;
                     _particles[i].position += dt * _particles[i].velocity;
@@ -157,7 +194,7 @@ namespace SimulationLogic
 
             Watcher.ExecuteWithTimer("12. Calculate velocity", () =>
             {
-                for (int i = 0; i < _count; i++)
+                for (int i = 0; i < count; i++)
                     _particles[i].velocity = (_particles[i].position - _particles[i].prevPosition) / dt;
             });
 
@@ -169,7 +206,7 @@ namespace SimulationLogic
 
         private void ExternalForces()
         {
-            for (int i = 0; i < _count; i++)
+            for (int i = 0; i < count; i++)
                 _particles[i].velocity.y += dt * gravity;
         }
 
@@ -177,7 +214,7 @@ namespace SimulationLogic
         {
             ClearForceBuffers();
 
-            Parallel.For(0, _count, i =>
+            Parallel.For(0, count, i =>
             {
                 var p = _particles[i];
                 p.density = 0;
@@ -190,8 +227,18 @@ namespace SimulationLogic
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    p.density += FluidMath.QuadraticSpikyKernel(q);
-                    p.nearDensity += FluidMath.CubicSpikyKernel(q);
+                    p.density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                    p.nearDensity += FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
+                }
+
+                foreach (var n in p.borderNeighbours)
+                {
+                    var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                    if (mag == 0 || mag > interactionRadius) continue;
+                    var q = mag / interactionRadius;
+
+                    p.density += _borderParticles[n].mass / p.mass * FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                    p.nearDensity += _borderParticles[n].mass / p.mass * FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
                 }
 
                 var pressure = stiffness * (p.density - restDensity);
@@ -214,6 +261,30 @@ namespace SimulationLogic
                     _particles[_sparse[n]].forceBuffer += displacement / 2; // try lock to see if anything chnages
                     p.forceBuffer -= displacement / 2;
                 }
+
+                float safeDensity = math.max(p.density, restDensity * 0.1f);
+                float2 borderPressure = float2.zero;
+                float2 borderNearPressure = float2.zero;
+                foreach (var n in p.borderNeighbours)
+                {
+                    var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                    if (mag == 0 || mag > interactionRadius) continue;
+
+                    float2 gradW = FluidMath.GradW(p.position, _borderParticles[n].position, mag, interactionRadius);
+                    float massRatio = _borderParticles[n].mass / p.mass;
+
+                    borderPressure += massRatio * gradW;
+                    borderNearPressure += massRatio * (1f - (mag * interactionRadius)) * gradW;
+                }
+
+                float2 displacementBorder = -gamma2 * dt * dt * (
+                    pressure * (2f / (safeDensity * safeDensity)) * borderPressure +
+                    nearPressure * (2f / (safeDensity * safeDensity)) * borderNearPressure
+                );
+                p.forceBuffer += dt * dt * displacementBorder;
+
+                if (float.IsNaN(p.position.x) || float.IsNaN(p.position.y))
+                    Debug.LogError("Simulation a position is NaN");
             });
 
             ApplyForceBuffers();
@@ -221,7 +292,7 @@ namespace SimulationLogic
 
         private void ApplyViscosity()
         {
-            Parallel.For(0, _count, i =>
+            Parallel.For(0, count, i =>
             {
                 var p = _particles[i];
                 foreach (var n in p.neighbours)
@@ -250,7 +321,7 @@ namespace SimulationLogic
 
         private void AdjustSprings()
         {
-            Parallel.For(0, _count, i =>
+            Parallel.For(0, count, i =>
             {
                 var p = _particles[i];
                 foreach (var n in p.springsNeighbours)
@@ -415,7 +486,7 @@ namespace SimulationLogic
         {
             if (Input.GetMouseButton(0))
             {
-                Parallel.For(0, _count, i =>
+                Parallel.For(0, count, i =>
                 {
                     var pos = _particles[i].position;
                     var dist = FluidMath.Distance(pos, mousePos);
@@ -436,23 +507,28 @@ namespace SimulationLogic
 
         private void InitSpatialPartitioning()
         {
-            particleSP.Init(_particles.AsSpan(0, _count));
-            bodySP.Init(_particles.AsSpan(0, _count));
-            springsSP.Init(_particles.AsSpan(0, _count));
+            particleSP.Init(_particles.AsSpan(0, count));
+            bodySP.Init(_particles.AsSpan(0, count));
+            springsSP.Init(_particles.AsSpan(0, count));
+            // Don't need to Init border particles as they don't move
         }
 
         private void SetNeighbours()
         {
-            // for (int i = 0; i < _count; i++)
-            Parallel.For(0, _count, i =>
+            // Try using regular for and batching
+            Parallel.For(0, count, i =>
             {
                 particleSP.GetNeighbours(_particles[i].position, _particles[i].neighbours);
             });
-            Parallel.For(0, _count, i =>
+            Parallel.For(0, count, i =>
             {
                 springsSP.GetNeighbours(_particles[i].position, _particles[i].springsNeighbours);
             });
             bodySP.GetNeighbours(body.position, bodyNeighbours);
+            Parallel.For(0, count, i =>
+            {
+                borderSP.GetNeighbours(_particles[i].position, _particles[i].borderNeighbours);
+            });
         }
 
         private void ClearNeighbours()
@@ -470,7 +546,7 @@ namespace SimulationLogic
         #region Flow
         private void SpawnFlowParticles()
         {
-            if (maxParticles < _count + initParticles.spawnPerFlowRow) return;
+            if (maxParticles < count + initParticles.spawnPerFlowRow) return;
 
             float startPosX = -((initParticles.spawnPerFlowRow - 1) * initParticles.flowSpacing / 2f);
             float posY = initParticles.GetRealHalfBoundSize(particleRadius).y;
@@ -481,7 +557,7 @@ namespace SimulationLogic
 
         private void ResolveFlow()
         {
-            for (int i = _count - 1; i >= 0; i--)
+            for (int i = count - 1; i >= 0; i--)
             {
                 if (_particles[i].position.y < -(realHalfBoundSize.y - 0.1f))
                     RemoveParticle(_particles[i].ID);
@@ -494,6 +570,9 @@ namespace SimulationLogic
             // Precomputing values
             realHalfBoundSize = initParticles.GetRealHalfBoundSize(particleRadius);
             realHalfBoundSizeBody = initParticles.GetRealHalfBoundSize(body.radius);
+            quadraticSpikyKernelVolume = math.PI * (interactionRadius * interactionRadius) / 6;
+            cubicSpikyKernelVolume = math.PI * (interactionRadius * interactionRadius) / 10;
+            fluidParticleMass = restDensity * particleDiameter * particleDiameter;
 
             if (realHalfBoundSize.x <= 0 || realHalfBoundSize.y <= 0)
                 Debug.LogWarning($"Simulation: realHalfBoundSize is {realHalfBoundSize}, bounding box is degenerate — particles may escape or behave incorrectly");
@@ -501,6 +580,7 @@ namespace SimulationLogic
             particleSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
             springsSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, springInteractionRadius + 0.5f);
             bodySP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, body.radius + particleRadius);
+            borderSP = new SpatialPartitioning(-realHalfBoundSize, realHalfBoundSize, interactionRadius);
 
             bodyNeighbours = new List<int>();
 
@@ -517,7 +597,109 @@ namespace SimulationLogic
             densityNeighbours?.Dispose();
             densityNeighbours = new ThreadLocal<List<int>>(() => new List<int>());
 
-            boundaries = new Boundaries(_particles, _count, particleRadius, collisionDamp);
+            boundaries = new Boundaries(_particles, count, particleRadius, collisionDamp, ref body, realHalfBoundSizeBody);
+
+            if (useParticlesAsBorder)
+            {
+                _borderParticles = new();
+                var borderPositions = initParticles.InitBorderPositions();
+                for (int i = 0; i < borderPositions.Count; i++)
+                    _borderParticles.Add(new(borderPositions[i], 1));
+
+                borderSP.Init(_borderParticles.AsSpan());
+                ComputeGamma1();
+                ComputeGamma2();
+                ComputeBorderMasses();
+            }
+        }
+
+        private void ComputeGamma1()
+        {
+            float spacing = particleDiameter;
+            int kernleLength = (int)(interactionRadius / spacing);
+
+            var testPos = new float2(0, 0);
+            float sumFull = 0;
+
+            for (int gx = -kernleLength; gx <= kernleLength; gx++)
+            {
+                for (int gy = -kernleLength; gy <= kernleLength; gy++)
+                {
+                    var neighborPos = new float2(gx * spacing, gy * spacing);
+                    var dist = FluidMath.Distance(testPos, neighborPos);
+                    if (dist > interactionRadius || dist == 0) continue;
+
+                    float q = dist / interactionRadius;
+                    sumFull += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                }
+            }
+
+            testPos.y = spacing;
+            float sumFluid = 0;
+            float sumBoundary = 0;
+
+            for (int gx = -kernleLength; gx <= kernleLength; gx++)
+            {
+                for (int gy = 0; gy <= kernleLength; gy++)
+                {
+                    var neighborPos = new float2(gx * spacing, gy * spacing);
+                    var dist = FluidMath.Distance(testPos, neighborPos);
+                    if (dist > interactionRadius || dist == 0) continue;
+
+                    float q = dist / interactionRadius;
+                    float w = FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+
+                    if (gy == 0)     // row 0 = boundary
+                        sumBoundary += w;
+                    else             // rows 1+ = fluid
+                        sumFluid += w;
+                }
+            }
+            gamma1 = (sumFull - sumFluid) / sumBoundary;
+        }
+
+        private void ComputeGamma2()
+        {
+            float spacing = particleDiameter;
+            float2 testPos = new(0, spacing);
+            int kernleLength = (int)(interactionRadius / spacing);
+
+            float2 sumFluidGradW = float2.zero;
+            float2 sumBoundaryGradW = float2.zero;
+
+            for (int gx = -kernleLength; gx <= kernleLength; gx++)
+            {
+                for (int gy = 0; gy <= kernleLength; gy++)
+                {
+                    var neighborPos = new float2(gx * spacing, gy * spacing);
+                    var dist = FluidMath.Distance(testPos, neighborPos);
+                    if (dist > interactionRadius || dist == 0) continue;
+
+                    if (gy == 0)     // row 0 = boundary
+                        sumBoundaryGradW += FluidMath.GradW(testPos, neighborPos, dist, interactionRadius);
+                    else             // rows 1+ = fluid
+                        sumFluidGradW += FluidMath.GradW(testPos, neighborPos, dist, interactionRadius);
+                }
+            }
+            gamma2 = -math.dot(sumFluidGradW, sumBoundaryGradW) / math.dot(sumBoundaryGradW, sumBoundaryGradW);
+        }
+
+        private void ComputeBorderMasses()
+        {
+            for (int i = 0; i < _borderParticles.Count; i++)
+            {
+                var neighbours = borderSP.GetNeighbours(_borderParticles[i].position);
+                float sum = 0;
+
+                foreach (var n in neighbours)
+                {
+                    var dist = FluidMath.Distance(_borderParticles[i].position, _borderParticles[n].position);
+                    if (dist > interactionRadius) continue;
+                    sum += FluidMath.QuadraticSpikyKernel(dist / interactionRadius, quadraticSpikyKernelVolume);
+                }
+
+                _borderParticles[i].mass = restDensity * gamma1 / sum;
+            }
         }
 
         public void SetSettings(SimulationSettings settings)
@@ -580,7 +762,7 @@ namespace SimulationLogic
                 if (newMax == -1)
                     return 1_000_000;
 
-                if (newMax < _count)
+                if (newMax < count)
                     Debug.LogWarning($"Simulation: new max particles is smaller than the number of current particles");
 
                 return newMax;
@@ -589,7 +771,7 @@ namespace SimulationLogic
 
         private void InitArrays(int len)
         {
-            _count = 0;
+            count = 0;
             _sparse = new SparseArray(len);
             _particles = new Particle[len];
             _freeIDs = new RefList<int>(len);
@@ -683,27 +865,28 @@ namespace SimulationLogic
 
         private void AddParticle(float2 pos)
         {
-            if (_count == maxParticles)
+            if (count == maxParticles)
             {
-                Debug.LogWarning("Simulation: adding when max number of particles reached");
+                Debug.LogError("Simulation: adding when max number of particles reached");
                 return;
             }
 
             var id = _freeIDs.Last();
             _freeIDs.RemoveLast();
 
-            var p = _particles[_count];
+            var p = _particles[count];
             p.ID = id;
             p.position = pos;
             p.prevPosition = pos;
+            p.mass = fluidParticleMass;
 
-            _sparse[id] = _count;
-            _count++;
+            _sparse[id] = count;
+            count++;
         }
 
         private void RemoveParticle(int id)
         {
-            if (_count == 0)
+            if (count == 0)
             {
                 Debug.LogError("Simulation: RemoveParticle called when there are no particles");
                 return;
@@ -725,17 +908,17 @@ namespace SimulationLogic
                         _springs.TryRemove(key, out _);
                 }
 
-                (_particles[_count - 1], _particles[i]) = (_particles[i], _particles[_count - 1]);
+                (_particles[count - 1], _particles[i]) = (_particles[i], _particles[count - 1]);
                 _sparse[id] = -1;
                 _sparse[_particles[i].ID] = i;
 
-                _particles[_count - 1] = ClearParticleExceptPos(_particles[_count - 1]);
+                _particles[count - 1] = ClearParticleExceptPos(_particles[count - 1]);
                 _freeIDs.Add(id);
-                _count--;
+                count--;
             }
             catch
             {
-                Debug.LogWarning("Simulation: trying to delete particle that doesn't exist");
+                Debug.LogError("Simulation: trying to delete particle that doesn't exist");
             }
         }
         #endregion
@@ -743,14 +926,14 @@ namespace SimulationLogic
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ClearForceBuffers()
         {
-            for (int i = 0; i < _count; i++)
+            for (int i = 0; i < count; i++)
                 _particles[i].forceBuffer = new(0, 0);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ApplyForceBuffers()
         {
-            for (int i = 0; i < _count; i++)
+            for (int i = 0; i < count; i++)
                 _particles[i].position += _particles[i].forceBuffer;
         }
 
@@ -759,6 +942,7 @@ namespace SimulationLogic
         {
             particle.velocity = float2.zero;
             particle.forceBuffer = float2.zero;
+            particle.mass = 0f;
             particle.density = 0f;
             particle.nearDensity = 0f;
             particle.neighbours.Clear();
@@ -785,7 +969,7 @@ namespace SimulationLogic
                 if (mag == 0 || mag > interactionRadius) continue;
                 var q = mag / interactionRadius;
 
-                density += FluidMath.QuadraticSpikyKernel(q);
+                density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
             }
 
             return density;
@@ -798,8 +982,8 @@ namespace SimulationLogic
             if (maxParticles != _sparse.Length)
                 Debug.LogWarning($"Simulation: number of max particles doesn't equal the length of sparse. Max particles: {maxParticles}, sparse: {_sparse.Length}");
 
-            if (_count != maxParticles - _freeIDs.Count)
-                Debug.LogWarning($"Simulation: number of particles doesn't equal number of taken IDs. Num particles: {_count}, taken IDs: {maxParticles - _freeIDs.Count}");
+            if (count != maxParticles - _freeIDs.Count)
+                Debug.LogWarning($"Simulation: number of particles doesn't equal number of taken IDs. Num particles: {count}, taken IDs: {maxParticles - _freeIDs.Count}");
         }
         #endregion
         #region Debug purpoused
@@ -903,7 +1087,6 @@ namespace SimulationLogic
                 Debug.DrawLine(start, end, color);
             }
         }
-
         #endregion
     }
 }

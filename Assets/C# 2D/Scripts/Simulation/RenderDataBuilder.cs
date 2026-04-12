@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Rendering;
 using Unity.Mathematics;
@@ -48,6 +49,7 @@ namespace SimulationLogic
 
         private float2[] renderPositions;
         private float2[] renderVelocities;
+        private float2[] renderBorderPositions;
         // private float2[] renderBodyPositions;
 
         private float[] densities;
@@ -66,6 +68,7 @@ namespace SimulationLogic
             simulation = sim;
             renderPositions = new float2[sim.maxParticles];
             renderVelocities = new float2[sim.maxParticles];
+            renderBorderPositions = new float2[sim._borderParticles.Count];
 
             renderParticles.DeleteAllTypesOfParticles();
 
@@ -84,8 +87,15 @@ namespace SimulationLogic
                 if (simulation.includeBody)
                     renderParticles.InitCustomParticle(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
             }
+
             else
                 Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
+
+            if (simulation.useParticlesAsBorder)
+            {
+                SetBorderPositions(simulation._borderParticles.AsSpan());
+                renderParticles.InitBorderParticles(renderBorderPositions);
+            }
 
             // Marching squares
             renderSquares.Init(spawn.GetBoundSize());
@@ -107,7 +117,7 @@ namespace SimulationLogic
                 return;
             }
 
-            if (simulation._count == 0)
+            if (simulation.count == 0)
             {
                 // Debug.LogWarning("Render data builder: drawing 0 particles");
                 return;
@@ -126,7 +136,8 @@ namespace SimulationLogic
             // renderParticles.DrawLine(new float2(-20, -200), new float2(-20, -100), 0.5f, Color.white);
             // renderParticles.DrawLine(new float2(20, -200), new float2(20, -100), 0.5f, Color.white);
             // renderParticles.DrawLine(new float2(-20, -100), new float2(20, -100), 0.5f, Color.white);
-            renderParticles.DrawCustomParticle(new float2(0, -80));
+            // renderParticles.DrawCustomParticle(new float2(0, -80));
+            renderParticles.DrawRect(new(-simulation.realHalfBoundSize.x - 0.5f, simulation.realHalfBoundSize.y + 0.5f), new(simulation.realHalfBoundSize.x + 0.5f, -simulation.realHalfBoundSize.y - 0.5f), 0.2f, Color.white);
         }
 
         #region Particles
@@ -149,26 +160,30 @@ namespace SimulationLogic
                 renderVelocities = new float2[simulation.maxParticles];
             }
 
-            SetPositions(simulation._particles.AsSpan(0, simulation._count));
-            SetVelocities(simulation._particles.AsSpan(0, simulation._count));
+            SetPositions(simulation._particles.AsSpan(0, simulation.count));
+            SetVelocities(simulation._particles.AsSpan(0, simulation.count));
+
             renderParticles.DrawParticles(
                 renderPositions,
                 renderVelocities,
-                simulation._count,
+                simulation.count,
                 greenParticles,
                 yellowParticles);
 
             if (simulation.includeBody)
                 renderParticles.DrawCustomParticle(simulation.body.position);
+
+            if (simulation.useParticlesAsBorder)
+                renderParticles.DrawBorderParticles();
         }
 
         private void HighlghtParticlesForDebug()
         {
             if (trackParticle == -1) return;
 
-            if (trackParticle >= simulation._count || trackParticle < 0)
+            if (trackParticle >= simulation.count || trackParticle < 0)
             {
-                Debug.LogError($"Render data builder: tracked particle index is out of range. Number of particles: {simulation._count}");
+                Debug.LogError($"Render data builder: tracked particle index is out of range. Number of particles: {simulation.count}");
                 return;
             }
 
@@ -369,6 +384,18 @@ namespace SimulationLogic
 
             for (int i = 0; i < particles.Length; i++)
                 renderVelocities[i] = particles[i].velocity;
+        }
+
+        private void SetBorderPositions(Span<BorderParticle> particles)
+        {
+            if (particles.Length > renderBorderPositions.Length)
+            {
+                Debug.LogWarning($"RenderDataBuilder: particles span ({particles.Length}) exceeds renderVelocities buffer ({renderBorderPositions.Length}), clamping");
+                particles = particles[..renderBorderPositions.Length];
+            }
+
+            for (int i = 0; i < particles.Length; i++)
+                renderBorderPositions[i] = particles[i].position;
         }
 
         private bool CheckDependencies(Simulation sim)
