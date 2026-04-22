@@ -124,7 +124,6 @@ namespace SimulationLogic
             }
         }
 
-#if UNITY_EDITOR
         public float2[] GetNeighboursDimentions(float2 position)
         {
             var result = new float2[4];
@@ -138,7 +137,6 @@ namespace SimulationLogic
 
             return result;
         }
-#endif
 
         private int GetGridIndex(float2 pos)
         {

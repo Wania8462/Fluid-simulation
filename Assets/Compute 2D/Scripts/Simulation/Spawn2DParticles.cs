@@ -11,7 +11,7 @@ public class Spawn2DParticles : MonoBehaviour
     [SerializeField] private bool useJitter = true;
     [SerializeField] private float jitterStrength = 0.2f;
     [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
-    public float2 boundingBoxSize;
+    private float2 boundingBoxSize;
 
     public int GetNumberOfParticles() => particleSquareLength * particleSquareLength;
 
@@ -53,28 +53,19 @@ public class Spawn2DParticles : MonoBehaviour
         return new float[checked(particleCount * particleCount)];
     }
 
-    public int GetSpringsLength() => checked(GetNumberOfParticles() * GetNumberOfParticles());
-
-    public float[] InitializeBoundaryDensities() => new float[particleSquareLength * particleSquareLength * 50];
-
-    public float2[] InitializeBodyDensityPoints(int resolution, float radius)
-    {
-        float2[] res = new float2[resolution];
-
-        for (int i = 0; i < resolution; i++)
-        {
-            res[i] = new float2((float)(radius * Math.Cos(Math.PI * (i - 1) / resolution / 2)),
-                                (float)(radius * Math.Sin(Math.PI * (i - 1) / resolution / 2)));
-        }
-
-        return res;
-    }
-
     public float2 GetRealHalfBoundSize(float radius)
     {
         if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
             boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
-            
+
         return new(boundingBoxSize.x / 2 - radius, boundingBoxSize.y / 2 - radius);
+    }
+
+    public float2 GetBoundingBoxSize()
+    {
+        if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
+            boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+
+        return boundingBoxSize;
     }
 }

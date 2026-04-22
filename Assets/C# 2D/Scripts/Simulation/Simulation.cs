@@ -5,7 +5,6 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -231,15 +230,15 @@ namespace SimulationLogic
                     p.nearDensity += FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
                 }
 
-                foreach (var n in p.borderNeighbours)
-                {
-                    var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
-                    if (mag == 0 || mag > interactionRadius) continue;
-                    var q = mag / interactionRadius;
+                // foreach (var n in p.borderNeighbours)
+                // {
+                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                //     if (mag == 0 || mag > interactionRadius) continue;
+                //     var q = mag / interactionRadius;
 
-                    p.density += _borderParticles[n].mass / p.mass * FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
-                    p.nearDensity += _borderParticles[n].mass / p.mass * FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
-                }
+                //     p.density += _borderParticles[n].mass / p.mass * FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                //     p.nearDensity += _borderParticles[n].mass / p.mass * FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
+                // }
 
                 var pressure = stiffness * (p.density - restDensity);
                 var nearPressure = nearStiffness * p.nearDensity;
@@ -262,29 +261,29 @@ namespace SimulationLogic
                     p.forceBuffer -= displacement / 2;
                 }
 
-                float safeDensity = math.max(p.density, restDensity * 0.1f);
-                float2 borderPressure = float2.zero;
-                float2 borderNearPressure = float2.zero;
-                foreach (var n in p.borderNeighbours)
-                {
-                    var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
-                    if (mag == 0 || mag > interactionRadius) continue;
+                // float safeDensity = math.max(p.density, restDensity * 0.1f);
+                // float2 borderPressure = float2.zero;
+                // float2 borderNearPressure = float2.zero;
+                // foreach (var n in p.borderNeighbours)
+                // {
+                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                //     if (mag == 0 || mag > interactionRadius) continue;
 
-                    float2 gradW = FluidMath.GradW(p.position, _borderParticles[n].position, mag, interactionRadius);
-                    float massRatio = _borderParticles[n].mass / p.mass;
+                //     float2 gradW = FluidMath.GradW(p.position, _borderParticles[n].position, mag, interactionRadius);
+                //     float massRatio = _borderParticles[n].mass / p.mass;
 
-                    borderPressure += massRatio * gradW;
-                    borderNearPressure += massRatio * (1f - (mag * interactionRadius)) * gradW;
-                }
+                //     borderPressure += massRatio * gradW;
+                //     borderNearPressure += massRatio * (1f - (mag * interactionRadius)) * gradW;
+                // }
 
-                float2 displacementBorder = -gamma2 * dt * dt * (
-                    pressure * (2f / (safeDensity * safeDensity)) * borderPressure +
-                    nearPressure * (2f / (safeDensity * safeDensity)) * borderNearPressure
-                );
-                p.forceBuffer += dt * dt * displacementBorder;
+                // float2 displacementBorder = -gamma2 * dt * dt * (
+                //     pressure * (2f / (safeDensity * safeDensity)) * borderPressure +
+                //     nearPressure * (2f / (safeDensity * safeDensity)) * borderNearPressure
+                // );
+                // p.forceBuffer += dt * dt * displacementBorder;
 
-                if (float.IsNaN(p.position.x) || float.IsNaN(p.position.y))
-                    Debug.LogError("Simulation a position is NaN");
+                // if (float.IsNaN(p.position.x) || float.IsNaN(p.position.y))
+                //     Debug.LogError("Simulation a position is NaN");
             });
 
             ApplyForceBuffers();

@@ -11,10 +11,14 @@
 #pragma kernel AdvancePredictedPositions
 #pragma kernel CalculateVelocity
 
+#pragma kernel ClearGrid
+#pragma kernel ClearNeighbours
+#pragma kernel InitSpatialPartitoning
+#pragma kernel SetNeighbours
+
 #include "./FluidMath.hlsl"
 
-// try 64
-static const int ThreadGroupSize = 256;
+static const int ThreadGroupSize = 64;
 static const float2 ZeroImpulse = float2(0, 0);
 static const int FloatScale = 1000000;
 
@@ -27,21 +31,30 @@ RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> NearDensities;
 RWStructuredBuffer<float> Springs;
 
+RWTexture2D<int> Grid;
+RWTexture2D<int> Neighbours;
+RWStructuredBuffer<int> CellsLength;
+RWStructuredBuffer<int> NeighboursLength;
+
 RWStructuredBuffer<float> DebugFloat;
 RWStructuredBuffer<int> DebugInt;
 
+// General settings
 const uint numParticles;
+const float particleRadius;
 const float interactionRadius;
 const float interactionRadiusSq;
+
 const float gravity;
 const float mouseAttractiveness;
 const float mouseRadius;
-const float collisionDamp;
 
+// Density settins
 const float stiffness;
 const float nearStiffness;
 const float restDensity;
 
+// Springs settings
 const float springInteractionRadius;
 const float springRadius;
 const float springStiffness;
@@ -50,10 +63,21 @@ const float plasticity;
 const float highViscosity;
 const float lowViscosity;
 
+// Border settings
+const float collisionDamp;
 const float2 realHalfBoundSize;
-const float particleRadius;
+
+// Changing variables
 const float2 mousePosition;
 const float dt;
+
+// Spartial partitoning
+const uint numCells;
+const int maxParticlesPerCell;
+const float2 offset;
+const float length;
+const int columns;
+const int rows;
 
 void SetForceBuffer(uint index, float2 value)
 {
@@ -105,31 +129,31 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     Densities[id.x] = 0;
     NearDensities[id.x] = 0;
 
-    for (uint i = 0; i < numParticles; i++)
+    for (int i = 0; i < NeighboursLength[id.x]; i++)
     {
-        float mag = DistanceSq(Positions[id.x], Positions[i]);
-        if (mag == 0 || mag > interactionRadiusSq) continue;
-        mag = sqrt(mag);
-
-        float q = mag / interactionRadius;
-        Densities[id.x] += QuadraticSpikyKernel(q);
-        NearDensities[id.x] += CubicSpikyKernel(q);
-    }
-
-    float pressure = stiffness * (Densities[id.x] - restDensity);
-    float nearPressure = nearStiffness * NearDensities[id.x];
-
-    for (uint j = 0; j < numParticles; j++)
-    {
-        float mag = DistanceSq(Positions[id.x], Positions[j]);
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
         
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[j], mag);
+        Densities[id.x] += QuadraticSpikyKernel(q);
+        NearDensities[id.x] += CubicSpikyKernel(q);
+    }
+    
+    float pressure = stiffness * (Densities[id.x] - restDensity);
+    float nearPressure = nearStiffness * NearDensities[id.x];
+    
+    for (int j = 0; j < NeighboursLength[id.x]; j++)
+    {
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        mag = sqrt(mag);
+        
+        float q = mag / interactionRadius;
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]], mag);
         float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
-        AtomicAddForceBuffer(j, displacement);
+        AtomicAddForceBuffer(Neighbours[uint2(id.x, j)], displacement);
         AtomicAddForceBuffer(id.x, -displacement);
     }
 }
@@ -293,4 +317,86 @@ void CalculateVelocity (uint3 id : SV_DispatchThreadID)
         return;
 
     Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
+}
+
+static const int2 offsets2D[9] =
+{
+	int2(-1, 1),
+	int2(0, 1),
+	int2(1, 1),
+	int2(-1, 0),
+	int2(0, 0),
+	int2(1, 0),
+	int2(-1, -1),
+	int2(0, -1),
+	int2(1, -1),
+};
+
+uint2 GetCellPosition(float2 position)
+{
+    float2 scaled = (position - offset) / length;
+    return uint2((int)clamp(scaled.x, 0, columns - 1),
+                 (int)clamp(scaled.y, 0, rows - 1));
+}
+
+uint GetCellIndex(float2 position)
+{
+    uint2 cellPosition = GetCellPosition(position);
+    return cellPosition.x + cellPosition.y * columns;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ClearGrid (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numCells)
+        return;
+
+    CellsLength[id.x] = 0;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void ClearNeighbours (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    NeighboursLength[id.x] = 0;
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void InitSpatialPartitoning (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    uint cellIndex = GetCellIndex(Positions[id.x]);
+
+    if (CellsLength[cellIndex] < maxParticlesPerCell)
+    {
+        Grid[uint2(cellIndex, CellsLength[cellIndex])] = id.x;
+        CellsLength[cellIndex]++;
+    }
+}
+
+[numthreads(ThreadGroupSize,1,1)]
+void SetNeighbours (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles)
+        return;
+
+    uint2 cellPosition = GetCellPosition(Positions[id.x]);
+    uint cellIndex = cellPosition.x + cellPosition.y * columns;
+
+    for (int i = 0; i < 9; i++)
+    {
+        // possible negative value in uint
+        uint2 neighbourPos = cellPosition + offsets2D[i];
+        uint neighbourIndex = neighbourPos.x + neighbourPos.y * columns;
+
+        for (int j = 0; j < CellsLength[neighbourIndex]; j++)
+        {
+            Neighbours[uint2(id.x, NeighboursLength[id.x])] = Grid[uint2(neighbourIndex, j)];
+            NeighboursLength[id.x]++;
+        }
+    }
 }

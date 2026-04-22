@@ -68,10 +68,10 @@ namespace SimulationLogic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float QuadraticSpikyKernel(float relativeDistance, float volume) => (1 - relativeDistance) * (1 - relativeDistance) / volume;
+        public static float QuadraticSpikyKernel(float relativeDistance, float volume) => (1 - relativeDistance) * (1 - relativeDistance);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float CubicSpikyKernel(float relativeDistance, float volume) => Pow3(1 - relativeDistance) / volume;
+        public static float CubicSpikyKernel(float relativeDistance, float volume) => Pow3(1 - relativeDistance);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float QuadraticSpikyKernelDerivative(float relativeDistance)

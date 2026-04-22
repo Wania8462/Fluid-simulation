@@ -14,34 +14,23 @@ public class ParticleRender : MonoBehaviour
     private GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
     private RenderParams rp;
 
-    private ThreadGroups theradGroups;
+    private int3 theradGroups;
 
-    const int commandCount = 1;
     const int CalculateColorsKernelID = 0;
-    const int float4Size = 16;
 
     public void Setup(GPUSimulationManager sim)
     {
         mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, particleQuality) : mesh;
-        commandBuf ??= new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
-        commandData ??= new GraphicsBuffer.IndirectDrawIndexedArgs[commandCount];
-
-        commandData[0].indexCountPerInstance = mesh.GetIndexCount(0);
-        commandData[0].instanceCount = (uint)sim.numParticles;
+        commandBuf ??= ComputeHelper.CreateCommandBuffer();
+        commandData ??= ComputeHelper.CreateCommandData(mesh, sim.numParticles);
         commandBuf.SetData(commandData);
+        rp = ComputeHelper.CreateRenderParams(material);
 
-        rp = new(material)
-        {
-            worldBounds = new Bounds(Vector3.zero, 10000 * Vector3.one),
-            matProps = new MaterialPropertyBlock()
-        };
-
-        theradGroups = new ThreadGroups(compute, sim.numParticles);
+        theradGroups = compute.GetThreadGroups(0, sim.numParticles);
         compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.buffers["Velocities"]);
 
         colorsBuffer?.Release();
-        colorsBuffer = new ComputeBuffer(sim.numParticles, float4Size);
-        colorsBuffer.SetData(GetDefaultColors(sim.numParticles));
+        colorsBuffer = ComputeHelper.CreateStructuredBufferWithData(GetDefaultColors(sim.numParticles));
         compute.SetBuffer(CalculateColorsKernelID, "Colors", colorsBuffer);
 
         rp.matProps.SetBuffer("Positions", sim.buffers["Positions"]);
@@ -50,8 +39,8 @@ public class ParticleRender : MonoBehaviour
 
     public void DrawParticles()
     {
-        compute.Dispatch(CalculateColorsKernelID, theradGroups.x, theradGroups.y, theradGroups.z);
-        Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount);
+        compute.Dispatch(CalculateColorsKernelID, theradGroups);
+        Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
     }
 
     private float4[] GetDefaultColors(int length)

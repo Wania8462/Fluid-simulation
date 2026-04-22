@@ -35,12 +35,11 @@ namespace Rendering
         private const int submeshIndex = 0;
         private readonly int colors = Shader.PropertyToID("_Color");
         private readonly Vector3 scale = Vector3.one;
-#if UNITY_EDITOR
+
         private readonly List<Matrix4x4> identityMatrixList = new();
         private Material topMatertial;
         private MaterialPropertyBlock lineMpb;
         private Mesh lineMesh;
-#endif
 
         # region Fluid particles
         public void InitParticles(int maxNumParticles = 100_000)
@@ -283,11 +282,10 @@ namespace Rendering
 
         // If needs to be on prod, optimise
         #region Debug
-#if UNITY_EDITOR
         void Awake()
         {
             identityMatrixList.Add(Matrix4x4.identity);
-            topMatertial = new(mat) { renderQueue = 100_000 };
+            topMatertial = new(mat) { renderQueue = 4000 };
             lineMpb = new();
             lineMpb.SetColor(colors, new Color(1, 1, 1, 1));
             lineMesh = MeshGenerator.Line(new float2(0, 0), new float2(1, 0), 1f);
@@ -332,7 +330,6 @@ namespace Rendering
             DrawLine(topLeft,    bottomLeft,  width, color); // left
             DrawLine(topRight,   bottomRight, width, color); // right
         }
-#endif
         #endregion
 
         #region Helpers

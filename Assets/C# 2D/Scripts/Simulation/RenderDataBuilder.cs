@@ -111,6 +111,7 @@ namespace SimulationLogic
 
         public void Draw()
         {
+            renderParticles.DrawLine(new(-1000, 0), new(1000, 100), 100, Color.white);
             if (simulation == null)
             {
                 Debug.LogError("RenderDataBuilder: Draw called before Init — simulation is null");
@@ -137,7 +138,7 @@ namespace SimulationLogic
             // renderParticles.DrawLine(new float2(20, -200), new float2(20, -100), 0.5f, Color.white);
             // renderParticles.DrawLine(new float2(-20, -100), new float2(20, -100), 0.5f, Color.white);
             // renderParticles.DrawCustomParticle(new float2(0, -80));
-            renderParticles.DrawRect(new(-simulation.realHalfBoundSize.x - 0.5f, simulation.realHalfBoundSize.y + 0.5f), new(simulation.realHalfBoundSize.x + 0.5f, -simulation.realHalfBoundSize.y - 0.5f), 0.2f, Color.white);
+            // renderParticles.DrawRect(new(-simulation.realHalfBoundSize.x - 0.5f, simulation.realHalfBoundSize.y + 0.5f), new(simulation.realHalfBoundSize.x + 0.5f, -simulation.realHalfBoundSize.y - 0.5f), 0.2f, Color.white);
         }
 
         #region Particles

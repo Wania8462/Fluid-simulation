@@ -86,6 +86,7 @@ namespace SimulationLogic
 
     public class SimulationManager : MonoBehaviour
     {
+        [SerializeField] private Text text;
         [Header("Manager settings")]
         [SerializeField] private bool pause = true;
         [SerializeField] private bool realDeltaTime;
@@ -110,6 +111,7 @@ namespace SimulationLogic
 
         private void Start()
         {
+            text.text = targetFrameRate.ToString();
             Application.targetFrameRate = targetFrameRate;
             Debug.Log(@"Controls: Pause/resume: space, Restart: R, Attract particles to mouse: left hold ↓
             Move body to mouse: right click
@@ -202,13 +204,19 @@ namespace SimulationLogic
             if (twoSim)
             {
                 Debug.LogError("Simulation manager: 2 simulations aren't supported");
+#if UNITY_EDITOR
                 UnityEditor.EditorApplication.isPlaying = false;
+#endif
+                return;
             }
 
             if (settings == null || settings.Length == 0)
             {
                 Debug.LogError("Simulation manager: There are no settings");
+#if UNITY_EDITOR
                 UnityEditor.EditorApplication.isPlaying = false; // Avoids error spamming
+#endif
+                return;
             }
 
             if (!twoSim)

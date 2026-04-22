@@ -1,3 +1,6 @@
 ﻿<Solution>
+  <Project Path="Library.csproj" />
+  <Project Path="C#2DSimulation.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="C#2DRender.csproj" />
 </Solution>

@@ -34,35 +34,23 @@ public struct SimulationSettings
 
 public class GPUSimulationManager : MonoBehaviour
 {
+    [Header("Simulation settings")]
     [SerializeField] private bool paused;
     [SerializeField] private SimulationSettings settings;
+    [SerializeField] private int maxParticlesPerCell;
     [SerializeField] public float particleRadius;
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
 
-    [SerializeField] private ParticleRender render;
-    [SerializeField] private Spawn2DParticles spawn;
+    [Header("References")]
     [SerializeField] private ComputeShader compute;
+    [SerializeField] private Spawn2DParticles spawn;
+    [SerializeField] private ParticleRender render;
+    private SPValues SP;
 
     [HideInInspector] public int numParticles;
 
-    public readonly Dictionary<string, ComputeBuffer> buffers =
-    new()
-    {
-        { "Positions", null },
-        { "PrevPositions", null },
-        { "ForceBuffersX", null },
-        { "ForceBuffersY", null },
-        { "Velocities", null },
-        { "Densities", null },
-        { "NearDensities", null },
-        { "Springs", null },
-        { "DebugFloat", null },
-        { "DebugInt", null }
-    };
-
-    private readonly Dictionary<string, int> KernelIDs =
-    new()
+    private readonly Dictionary<string, int> KernelIDs = new()
     {
         { "ExternalForces", 0 },
         { "ClearForceBuffers", 1 },
@@ -75,14 +63,40 @@ public class GPUSimulationManager : MonoBehaviour
         { "ResolveBoundaries", 8 },
         { "AttractToMouse", 9 },
         { "AdvancePredictedPositions", 10 },
-        { "CalculateVelocity", 11 }
+        { "CalculateVelocity", 11 },
+
+        { "ClearGrid", 12 },
+        { "ClearNeighbours", 13 },
+        { "InitSpatialPartitoning", 14 },
+        { "SetNeighbours", 15 }
     };
 
-    public ThreadGroups threadGropus;
+    public readonly Dictionary<string, ComputeBuffer> buffers = new()
+    {
+        { "Positions", null },
+        { "PrevPositions", null },
+        { "ForceBuffersX", null },
+        { "ForceBuffersY", null },
+        { "Velocities", null },
+        { "Densities", null },
+        { "NearDensities", null },
+        { "Springs", null },
+
+        { "CellsLength", null },
+        { "NeighboursLength", null },
+
+        { "DebugFloat", null },
+        { "DebugInt", null }
+    };
+
+    public readonly Dictionary<string, RenderTexture> textures = new()
+    {
+        { "Grid", null },
+        { "Neighbours", null },
+    };
+
+    public int3 threadGropus;
     private const int float2Size = 8;
-    private const int int2Size = 8;
-    private const int int4Size = 16;
-    private const int sortCounterLength = 2;
     private const float fakeDT = 1 / 60f;
 
     private readonly int debugLength = 100;
@@ -111,31 +125,38 @@ public class GPUSimulationManager : MonoBehaviour
         float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
         compute.SetFloat("dt", dt);
 
-        Dispatch(KernelIDs["ExternalForces"]);
+        // todo change it
+        int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns, SP.rows);
+        compute.Dispatch(KernelIDs["ClearGrid"], groups);
+        compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
+        compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
+        compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
 
-        Dispatch(KernelIDs["ClearForceBuffers"]);
-        Dispatch(KernelIDs["ApplyViscosity"]);
-        Dispatch(KernelIDs["ApplyForceBuffersToVelocities"]);
+        compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
 
-        Dispatch(KernelIDs["AdvancePredictedPositions"]);
+        compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
+        compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
 
-        Dispatch(KernelIDs["AdjustSprings"]);
-        Dispatch(KernelIDs["ClearForceBuffers"]);
-        Dispatch(KernelIDs["SpringDisplacements"]);
-        Dispatch(KernelIDs["ApplyForceBuffers"]);
+        compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
 
-        Dispatch(KernelIDs["ClearForceBuffers"]);
-        Dispatch(KernelIDs["DoubleDensityRelaxation"]);
-        Dispatch(KernelIDs["ApplyForceBuffers"]);
+        compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
+        compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
+        compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+
+        compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
+        compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
 
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
-            Dispatch(KernelIDs["AttractToMouse"]);
+            compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
         }
 
-        Dispatch(KernelIDs["ResolveBoundaries"]);
-        Dispatch(KernelIDs["CalculateVelocity"]);
+        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+        compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
     }
 
     private void OnValidate()
@@ -150,39 +171,24 @@ public class GPUSimulationManager : MonoBehaviour
     private void Setup()
     {
         Application.targetFrameRate = targetFrameRate;
+        float2 boundingBoxSize = spawn.GetBoundingBoxSize();
+        SP = new(
+            new(-boundingBoxSize.x, -boundingBoxSize.y),
+            new(boundingBoxSize.x, boundingBoxSize.y),
+            settings.interactionRadius);
         numParticles = spawn.GetNumberOfParticles();
 
         ReleaseBuffers();
         CreateBuffers();
         SetBuffers();
         SetComputeSettings();
-        SetInitialBufferData();
-        threadGropus = new ThreadGroups(compute, numParticles);
+        threadGropus = compute.GetThreadGroups(0, numParticles);
         Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
 
         render.Setup(this);
     }
 
     #region Buffer helpers
-    private void SetInitialBufferData()
-    {
-        buffers["Positions"].SetData(spawn.InitializePositions());
-        buffers["PrevPositions"].SetData(spawn.InitializePreviousPositions());
-        buffers["ForceBuffersX"].SetData(spawn.InitializeForceBuffers());
-        buffers["ForceBuffersY"].SetData(spawn.InitializeForceBuffers());
-        buffers["Velocities"].SetData(spawn.InitializeVelocities());
-        buffers["Densities"].SetData(spawn.InitializeDensities());
-        buffers["NearDensities"].SetData(spawn.InitializeNearDensities());
-        buffers["Springs"].SetData(spawn.InitializeSprings());
-        buffers["SpatialHashes"].SetData(new int2[numParticles]);
-        buffers["SpatialHashesScratch"].SetData(new int2[numParticles]);
-        buffers["SortRanges"].SetData(new int4[numParticles * 2]);
-        buffers["SortCounters"].SetData(new uint[sortCounterLength]);
-
-        buffers["DebugFloat"].SetData(new float[debugLength]);
-        buffers["DebugInt"].SetData(new int[debugLength]);
-    }
-
     private void UpdateComputeSettings()
     {
         compute.SetFloat("interactionRadius", settings.interactionRadius);
@@ -208,14 +214,18 @@ public class GPUSimulationManager : MonoBehaviour
     private void SetComputeSettings()
     {
         compute.SetInt("numParticles", numParticles);
-        compute.SetInt("activeSortRangeCount", 0);
-        compute.SetInt("sortCurrentRangeBase", 0);
-        compute.SetInt("sortNextRangeBase", numParticles);
-        compute.SetInt("sortSourceIsSpatialHashes", 1);
         UpdateComputeSettings();
+
         float2 rhbs = spawn.GetRealHalfBoundSize(particleRadius);
         compute.SetVector("realHalfBoundSize", new Vector4(rhbs.x, rhbs.y));
         compute.SetFloat("particleRadius", particleRadius);
+
+        compute.SetInt("numCells", SP.columns * SP.rows);
+        compute.SetInt("maxParticlesPerCell", maxParticlesPerCell);
+        compute.SetVector("offset", new(SP.offset.x, SP.offset.y));
+        compute.SetFloat("length", SP.length);
+        compute.SetInt("columns", SP.columns);
+        compute.SetInt("rows", SP.rows);
     }
 
     private void SetBuffers()
@@ -223,41 +233,42 @@ public class GPUSimulationManager : MonoBehaviour
         foreach (var kernel in KernelIDs)
             foreach (var buffer in buffers)
                 compute.SetBuffer(kernel.Value, buffer.Key, buffer.Value);
+
+        foreach (var kernel in KernelIDs)
+            foreach (var texture in textures)
+                compute.SetTexture(kernel.Value, texture.Key, texture.Value);
     }
 
     private void CreateBuffers()
     {
-        buffers["Positions"] = new ComputeBuffer(numParticles, float2Size);
-        buffers["PrevPositions"] = new ComputeBuffer(numParticles, float2Size);
-        buffers["ForceBuffersX"] = new ComputeBuffer(numParticles, sizeof(int));
-        buffers["ForceBuffersY"] = new ComputeBuffer(numParticles, sizeof(int));
-        buffers["Velocities"] = new ComputeBuffer(numParticles, float2Size);
-        buffers["Densities"] = new ComputeBuffer(numParticles, sizeof(float));
-        buffers["NearDensities"] = new ComputeBuffer(numParticles, sizeof(float));
-        buffers["Springs"] = new ComputeBuffer(spawn.GetSpringsLength(), sizeof(float));
-        buffers["SpatialHashes"] = new ComputeBuffer(numParticles, int2Size);
-        buffers["SpatialHashesScratch"] = new ComputeBuffer(numParticles, int2Size);
-        buffers["SortRanges"] = new ComputeBuffer(numParticles * 2, int4Size);
-        buffers["SortCounters"] = new ComputeBuffer(sortCounterLength, sizeof(uint));
+        if (numParticles == 0)
+            Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
 
-        buffers["DebugFloat"] = new ComputeBuffer(debugLength, sizeof(float));
-        buffers["DebugInt"] = new ComputeBuffer(debugLength, sizeof(int));
-    }
+        buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
+        buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
+        buffers["ForceBuffersX"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
+        buffers["ForceBuffersY"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
+        buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
+        buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializeSprings());
 
-    private void Dispatch(int kernelID)
-    {
-        compute.Dispatch(kernelID, threadGropus.x, threadGropus.y, threadGropus.z);
-    }
+        textures["Grid"] = ComputeHelper.CreateRenderTexture(SP.columns * SP.rows, maxParticlesPerCell);
+        textures["Neighbours"] = ComputeHelper.CreateRenderTexture(numParticles, maxParticlesPerCell * 9);
+        buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(SP.columns * SP.rows);
+        buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
 
-    private void Dispatch(int kernelID, int groupsX)
-    {
-        compute.Dispatch(kernelID, groupsX, 1, 1);
+        buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
+        buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
     }
 
     private void ReleaseBuffers()
     {
         foreach (var buffer in buffers)
             buffer.Value?.Release();
+
+        foreach (var texture in textures)
+            texture.Value?.Release();
     }
 
     private void OnDestroy()
@@ -314,22 +325,33 @@ public class GPUSimulationManager : MonoBehaviour
     #endregion
 }
 
-public class ThreadGroups
+public class SPValues
 {
-    public int x;
-    public int y;
-    public int z;
+    public float2 offset;
+    public float length;
+    public int columns;
+    public int rows;
 
-    public ThreadGroups(ComputeShader compute, int numParticles)
+    public SPValues(float2 bottomLeft, float2 topRight, float length)
     {
-        GetThreadGroups(compute, numParticles);
-    }
+        if (length <= 0)
+            Debug.LogError($"SPValues: length must be > 0, got {length}");
 
-    public void GetThreadGroups(ComputeShader compute, int numParticles)
-    {
-        compute.GetKernelThreadGroupSizes(0, out uint xt, out uint yt, out uint zt);
-        x = (int)math.ceil((float)numParticles / xt);
-        y = 1;
-        z = 1;
+        this.length = length;
+        offset = bottomLeft;
+        var width = topRight.x - bottomLeft.x;
+        var height = topRight.y - bottomLeft.y;
+
+        if (width <= 0 || height <= 0)
+            Debug.LogWarning($"SPValues: grid dimensions are non-positive (width={width}, height={height}), likely caused by a degenerate bounding box");
+
+        columns = (int)(width / length);
+        rows = (int)(height / length);
+
+        if (width % length != 0) columns++;
+        if (height % length != 0) rows++;
+
+        if (columns == 0 || rows == 0)
+            Debug.LogWarning($"SPValues: grid has zero cells (columns={columns}, rows={rows}), neighbour queries will return nothing");
     }
 }

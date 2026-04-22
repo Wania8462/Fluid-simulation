@@ -8,12 +8,12 @@ namespace SimulationLogic
     {
         [Header("Spawn settings")]
         [SerializeField] private int particleSquareLength = 50;
-        [SerializeField] private bool spawnCircle;
-        [SerializeField] private float2 spawnOffset;
+        [SerializeField] private bool spawnCircle = false;
+        [SerializeField] private float2 spawnOffset = float2.zero;
         [SerializeField] private float spacing = 2;
         [SerializeField] private bool useJitter = true;
         [SerializeField] private float jitterStrength = 0.2f;
-        [SerializeField] private float2 boundingBoxSizeOffset = new float2(160, 80);
+        [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
         public float2 boundingBoxSize;
 
         [Header("Flow settings")]
