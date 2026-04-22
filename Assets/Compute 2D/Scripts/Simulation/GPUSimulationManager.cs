@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -34,6 +35,7 @@ public struct SimulationSettings
 
 public class GPUSimulationManager : MonoBehaviour
 {
+    public GameObject sprite;
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
     [SerializeField] private SimulationSettings settings;
@@ -108,6 +110,8 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void Update()
     {
+        SP.Draw(Color.green);
+
         if (Input.GetKeyDown(KeyCode.R))
             Setup();
 
@@ -126,37 +130,58 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("dt", dt);
 
         // todo change it
+        Debug.Log("1");
         int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns, SP.rows);
         compute.Dispatch(KernelIDs["ClearGrid"], groups);
+        Debug.Log("2");
+        // ComputeHelper.LogBuffer<int>(buffers["NeighboursLength"], 100);
+        // AsyncGPUReadback.WaitAllRequests();
         compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
+        Debug.Log("3");
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
+        Debug.Log("4");
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+        Debug.Log("5");
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
+        Debug.Log("6");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        Debug.Log("7");
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
+        Debug.Log("8");
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
+        Debug.Log("9");
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
+        Debug.Log("10");
 
         compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
+        Debug.Log("11");
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        Debug.Log("12");
         compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
+        Debug.Log("13");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+        Debug.Log("15");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        Debug.Log("16");
         compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
+        Debug.Log("17");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
 
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
+            Debug.Log("18");
         }
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+        Debug.Log("19");
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
+        Debug.Log("20");
     }
 
     private void OnValidate()
@@ -173,9 +198,11 @@ public class GPUSimulationManager : MonoBehaviour
         Application.targetFrameRate = targetFrameRate;
         float2 boundingBoxSize = spawn.GetBoundingBoxSize();
         SP = new(
-            new(-boundingBoxSize.x, -boundingBoxSize.y),
-            new(boundingBoxSize.x, boundingBoxSize.y),
+            new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
+            new(boundingBoxSize.x / 2, boundingBoxSize.y / 2),
             settings.interactionRadius);
+        Instantiate(sprite, new Vector3(-boundingBoxSize.x, -boundingBoxSize.y), quaternion.identity);
+        Instantiate(sprite, new Vector3(boundingBoxSize.x, boundingBoxSize.y), quaternion.identity);
         numParticles = spawn.GetNumberOfParticles();
 
         ReleaseBuffers();
@@ -281,48 +308,6 @@ public class GPUSimulationManager : MonoBehaviour
         Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
         Camera.main.ScreenToWorldPoint(Input.mousePosition).y
     );
-
-    #region Debug
-    private void GetDebugFloat()
-    {
-        AsyncGPUReadback.Request(
-            buffers["DebugFloat"],
-            request =>
-            {
-                if (!request.hasError)
-                {
-                    var data = request.GetData<float>();
-                    Debug.Log($"Add 2: Value init: ({data[0]}, {data[1]})");
-                    Debug.Log($"Read 6: Scaled read value: ({data[4]}, {data[5]})");
-                }
-
-                else
-                    Debug.Log("GPU simulation: Debug error");
-            }
-        );
-    }
-
-    private void GetDebugInt()
-    {
-        AsyncGPUReadback.Request(
-            buffers["DebugInt"],
-            request =>
-            {
-                if (!request.hasError)
-                {
-                    var data = request.GetData<int>();
-                    Debug.Log($"Add 1: Force buffer init: ({data[0]}, {data[1]})");
-                    Debug.Log($"Add 3: Value scaled: ({data[2]}, {data[3]})");
-                    Debug.Log($"Add 4: Add result ({data[4]}, {data[5]})");
-                    Debug.Log($"Read 5: Read value: ({data[6]}, {data[7]})");
-                }
-
-                else
-                    Debug.Log("GPU simulation: Debug error");
-            }
-        );
-    }
-    #endregion
 }
 
 public class SPValues
@@ -353,5 +338,22 @@ public class SPValues
 
         if (columns == 0 || rows == 0)
             Debug.LogWarning($"SPValues: grid has zero cells (columns={columns}, rows={rows}), neighbour queries will return nothing");
+    }
+
+    public void Draw(Color color)
+    {
+        for (var i = 0; i <= columns; i++)
+        {
+            Vector3 start = new(offset.x + (length * i), -offset.y, 0);
+            Vector3 end = new(offset.x + (length * i), offset.y, 0);
+            Debug.DrawLine(start, end, color);
+        }
+
+        for (var i = 0; i <= rows; i++)
+        {
+            Vector3 start = new(-offset.x, offset.y + (length * i), 0);
+            Vector3 end = new(offset.x, offset.y + (length * i), 0);
+            Debug.DrawLine(start, end, color);
+        }
     }
 }

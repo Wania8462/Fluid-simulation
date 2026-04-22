@@ -1,5 +1,8 @@
+using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public static class ComputeHelper
 {
@@ -91,5 +94,136 @@ public static class ComputeHelper
     public static int GetStride<T>()
     {
         return System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
+    }
+
+    public static void LogTexture<T>(RenderTexture texture, int index) where T : struct
+    {
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError) { Debug.Log("GPU sim manager: couldn't get the texture"); return; }
+            var data = request.GetData<T>();
+            Debug.Log(data[index]);
+        });
+    }
+
+    public static void LogTexture<T>(RenderTexture texture, List<int> indices) where T : struct
+    {
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the texture");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            foreach (var i in indices)
+                Debug.Log(data[i]);
+        });
+    }
+
+    public static T GetTexture<T>(RenderTexture texture, int index) where T : struct
+    {
+        T result = default;
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the texture");
+                return;
+            }
+
+            result = request.GetData<T>()[index];
+        });
+        
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
+    public static T[] GetTexture<T>(RenderTexture texture, List<int> indices) where T : struct
+    {
+        T[] result = new T[indices.Count];
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the texture");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            result = indices.Select(i => data[i]).ToArray();
+        });
+
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
+    public static void LogBuffer<T>(ComputeBuffer buffer, int index) where T : struct
+    {
+        AsyncGPUReadback.Request(buffer, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the buffer");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            Debug.Log(data[index]);
+        });
+    }
+
+    public static void LogBuffer<T>(ComputeBuffer buffer, List<int> indices) where T : struct
+    {
+        AsyncGPUReadback.Request(buffer, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the buffer");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            foreach (var i in indices)
+                Debug.Log(data[i]);
+        });
+    }
+
+    public static T GetBuffer<T>(ComputeBuffer buffer, int index) where T : struct
+    {
+        T result = default;
+        AsyncGPUReadback.Request(buffer, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the buffer");
+                return;
+            }
+
+            result = request.GetData<T>()[index];
+        });
+
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
+    public static T[] GetBuffer<T>(RenderTexture texture, List<int> indices) where T : struct
+    {
+        T[] result = new T[indices.Count];
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the buffer");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            result = indices.Select(i => data[i]).ToArray();
+        });
+
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
     }
 }
