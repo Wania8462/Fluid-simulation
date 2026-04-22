@@ -79,8 +79,9 @@ Desktop.ini
 .dotnet/
 .dotnet-cli/
 
-# Plastic SCM workspace files
+# Plastic SCM
 .plastic/
+ignore.conf
 
 # IDE
 .vscode/
