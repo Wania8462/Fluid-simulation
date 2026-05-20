@@ -389,8 +389,8 @@ void SetNeighbours (uint3 id : SV_DispatchThreadID)
 
     for (int i = 0; i < 9; i++)
     {
-        // possible negative value in uint
         uint2 neighbourPos = cellPosition + offsets2D[i];
+        if (neighbourPos.x == 0xFFFFFFFF || neighbourPos.y == 0xFFFFFFFF) continue;
         uint neighbourIndex = neighbourPos.x + neighbourPos.y * columns;
 
         for (int j = 0; j < CellsLength[neighbourIndex]; j++)

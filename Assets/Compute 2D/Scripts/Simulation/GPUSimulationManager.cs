@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 using Unity.Mathematics;
 using UnityEngine;
@@ -130,58 +131,38 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("dt", dt);
 
         // todo change it
-        Debug.Log("1");
         int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns, SP.rows);
         compute.Dispatch(KernelIDs["ClearGrid"], groups);
-        Debug.Log("2");
-        // ComputeHelper.LogBuffer<int>(buffers["NeighboursLength"], 100);
-        // AsyncGPUReadback.WaitAllRequests();
         compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
-        Debug.Log("3");
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
-        Debug.Log("4");
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
-        Debug.Log("5");
+        // TempNighboursTest();
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
-        Debug.Log("6");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("7");
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
-        Debug.Log("8");
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
-        Debug.Log("9");
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
-        Debug.Log("10");
 
         compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
-        Debug.Log("11");
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("12");
         compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
-        Debug.Log("13");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
-        Debug.Log("15");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("16");
         compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
-        Debug.Log("17");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
 
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
-            Debug.Log("18");
         }
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
-        Debug.Log("19");
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-        Debug.Log("20");
     }
 
     private void OnValidate()
@@ -280,8 +261,8 @@ public class GPUSimulationManager : MonoBehaviour
         buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
         buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializeSprings());
 
-        textures["Grid"] = ComputeHelper.CreateRenderTexture(SP.columns * SP.rows, maxParticlesPerCell);
-        textures["Neighbours"] = ComputeHelper.CreateRenderTexture(numParticles, maxParticlesPerCell * 9);
+        textures["Grid"] = ComputeHelper.CreateRenderTexture(SP.columns * SP.rows, maxParticlesPerCell, RenderTextureFormat.ARGBFloat);
+        textures["Neighbours"] = ComputeHelper.CreateRenderTexture(numParticles, maxParticlesPerCell * 9, RenderTextureFormat.ARGBFloat);
         buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(SP.columns * SP.rows);
         buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
 
@@ -308,6 +289,88 @@ public class GPUSimulationManager : MonoBehaviour
         Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
         Camera.main.ScreenToWorldPoint(Input.mousePosition).y
     );
+
+    readonly int2[] offsets2D = new int2[]
+    {
+        new(-1, 1),
+        new(0, 1),
+        new(1, 1),
+        new(-1, 0),
+        new(0, 0),
+        new(1, 0),
+        new(-1, -1),
+        new(0, -1),
+        new(1, -1),
+    };
+
+    private void TempNighboursTest()
+    {
+        float2[] positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
+        int[,] grid = ComputeHelper.GetTextureAs2DArr<int>(textures["Grid"]);
+        int[,] neighbours = ComputeHelper.GetTextureAs2DArr<int>(textures["Neighbours"]);
+        int[] cellsLength = ComputeHelper.GetBuffer<int>(buffers["CellsLength"]);
+        int[] neighboursLength = ComputeHelper.GetBuffer<int>(buffers["NeighboursLength"]);
+
+        // Init SP
+        for (int i = 0; i < neighboursLength.Length; i++)
+        {
+            int cellIndex = GetCellIndex(positions[i]);
+
+            if (cellsLength[cellIndex] < maxParticlesPerCell)
+            {
+                grid[cellIndex, cellsLength[cellIndex]] = i;
+                cellsLength[cellIndex]++;
+            }
+        }
+
+        // Set neighbours
+        for (int i = 0; i < neighboursLength.Length; i++)
+        {
+            int2 cellPosition = GetCellPosition(positions[i]);
+            int cellIndex = cellPosition.x + cellPosition.y * SP.columns;
+
+            for (int j = 0; j < 9; j++)
+            {
+                int2 neighbourPos = cellPosition + offsets2D[j];
+                if (neighbourPos.x < 0 || neighbourPos.y < 0) continue;
+                int neighbourIndex = neighbourPos.x + neighbourPos.y * SP.columns;
+
+                for (int k = 0; k < cellsLength[neighbourIndex]; k++)
+                {
+                    neighbours[i, neighboursLength[i]] = grid[neighbourIndex, k];
+                    neighboursLength[i]++;
+                }
+            }
+        }
+
+        StringBuilder sb = new("Neighbours: ");
+        for (int i = 0; i < neighboursLength[100]; i++)
+            sb.Append($"{neighbours[100, i]}, ");
+
+        sb.Remove(sb.Length - 3, sb.Length - 1);
+        Debug.Log(sb);
+        sb.Clear();
+
+        sb.Append("Positions: ");
+        for (int i = 0; i < neighboursLength[100]; i++)
+            sb.Append($"{positions[neighbours[100, i]]}, ");
+
+        sb.Remove(sb.Length - 2, sb.Length);
+        Debug.Log(sb);
+    }
+
+    int2 GetCellPosition(float2 position)
+    {
+        float2 scaled = (position - SP.offset) / SP.length;
+        return new int2((int)Mathf.Clamp(scaled.x, 0, SP.columns - 1),
+                     (int)Mathf.Clamp(scaled.y, 0, SP.rows - 1));
+    }
+
+    int GetCellIndex(float2 position)
+    {
+        int2 cellPosition = GetCellPosition(position);
+        return cellPosition.x + cellPosition.y * SP.columns;
+    }
 }
 
 public class SPValues
