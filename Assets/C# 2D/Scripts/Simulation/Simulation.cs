@@ -10,35 +10,42 @@ using Debug = UnityEngine.Debug;
 
 namespace SimulationLogic
 {
-    public class Particle
+    public struct Particle
     {
-        public int ID;
+        // Hot fields first — accessed every frame, fit in 2 cache lines (32 bytes)
         public float2 position;
         public float2 prevPosition;
         public float2 velocity;
         public float2 forceBuffer;
-        public float mass;
+        // Warm fields — read during density/spring passes
         public float density;
         public float nearDensity;
+        public float mass;
+        public int ID;
+        // Reference-type fields (heap pointers — not part of inline hot data)
         public RefList<int> neighbours;
         public RefList<int> springsNeighbours;
         public RefList<int> borderNeighbours;
 
-        public Particle()
+        public Particle(float2 position)
         {
+            this.position = position;
+            prevPosition = float2.zero;
+            velocity = float2.zero;
+            forceBuffer = float2.zero;
+            density = 0;
+            nearDensity = 0;
+            mass = 0;
             ID = -1;
             neighbours = new RefList<int>();
             springsNeighbours = new RefList<int>();
             borderNeighbours = new RefList<int>();
         }
 
-        public Particle(float2 position) : this()
-        {
-            this.position = position;
-        }
+        public static Particle Create() => new Particle(float2.zero);
     }
 
-    public class BorderParticle
+    public struct BorderParticle
     {
         public float2 position;
         public float mass;
@@ -136,18 +143,6 @@ namespace SimulationLogic
                 return;
             }
 
-            // var density = 0f;
-            // for (int i = 0; i < count; i++)
-            // {
-            //     var mag = FluidMath.Distance(float2.zero, _particles[i].position);
-            //         if (mag > interactionRadius) continue;
-            //         var q = mag / interactionRadius;
-
-            //         density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
-            // }
-
-            // Debug.Log($"Density: {density}");
-
             CheckArraysLength();
             dt = deltatime;
 
@@ -215,41 +210,36 @@ namespace SimulationLogic
 
             Parallel.For(0, count, i =>
             {
-                var p = _particles[i];
-                p.density = 0;
-                p.nearDensity = 0;
+                // Can't use ref locals in lambdas — accumulate into locals, write back after.
+                float density = 0;
+                float nearDensity = 0;
+                float2 forceBuffer = float2.zero;
+                var pos = _particles[i].position;
 
-                foreach (var n in p.neighbours)
+                foreach (var n in _particles[i].neighbours)
                 {
                     // try distance squared
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    var mag = FluidMath.Distance(pos, _particles[_sparse[n]].position);
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    p.density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
-                    p.nearDensity += FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
+                    density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                    nearDensity += FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
                 }
 
-                // foreach (var n in p.borderNeighbours)
-                // {
-                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
-                //     if (mag == 0 || mag > interactionRadius) continue;
-                //     var q = mag / interactionRadius;
+                _particles[i].density = density;
+                _particles[i].nearDensity = nearDensity;
 
-                //     p.density += _borderParticles[n].mass / p.mass * FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
-                //     p.nearDensity += _borderParticles[n].mass / p.mass * FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
-                // }
+                var pressure = stiffness * (density - restDensity);
+                var nearPressure = nearStiffness * nearDensity;
 
-                var pressure = stiffness * (p.density - restDensity);
-                var nearPressure = nearStiffness * p.nearDensity;
-
-                foreach (var n in p.neighbours)
+                foreach (var n in _particles[i].neighbours)
                 {
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    var mag = FluidMath.Distance(pos, _particles[_sparse[n]].position);
                     if (mag == 0 || mag > interactionRadius) continue;
                     var q = mag / interactionRadius;
 
-                    var r = FluidMath.UnitVector(p.position, _particles[_sparse[n]].position, mag);
+                    var r = FluidMath.UnitVector(pos, _particles[_sparse[n]].position, mag);
                     var displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,
@@ -258,32 +248,10 @@ namespace SimulationLogic
                         r);
 
                     _particles[_sparse[n]].forceBuffer += displacement / 2; // try lock to see if anything chnages
-                    p.forceBuffer -= displacement / 2;
+                    forceBuffer -= displacement / 2;
                 }
 
-                // float safeDensity = math.max(p.density, restDensity * 0.1f);
-                // float2 borderPressure = float2.zero;
-                // float2 borderNearPressure = float2.zero;
-                // foreach (var n in p.borderNeighbours)
-                // {
-                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
-                //     if (mag == 0 || mag > interactionRadius) continue;
-
-                //     float2 gradW = FluidMath.GradW(p.position, _borderParticles[n].position, mag, interactionRadius);
-                //     float massRatio = _borderParticles[n].mass / p.mass;
-
-                //     borderPressure += massRatio * gradW;
-                //     borderNearPressure += massRatio * (1f - (mag * interactionRadius)) * gradW;
-                // }
-
-                // float2 displacementBorder = -gamma2 * dt * dt * (
-                //     pressure * (2f / (safeDensity * safeDensity)) * borderPressure +
-                //     nearPressure * (2f / (safeDensity * safeDensity)) * borderNearPressure
-                // );
-                // p.forceBuffer += dt * dt * displacementBorder;
-
-                // if (float.IsNaN(p.position.x) || float.IsNaN(p.position.y))
-                //     Debug.LogError("Simulation a position is NaN");
+                _particles[i].forceBuffer += forceBuffer;
             });
 
             ApplyForceBuffers();
@@ -293,16 +261,22 @@ namespace SimulationLogic
         {
             Parallel.For(0, count, i =>
             {
-                var p = _particles[i];
-                foreach (var n in p.neighbours)
+                // Can't use ref locals in lambdas — accumulate velocity delta locally.
+                float2 velocityDelta = float2.zero;
+                var pos = _particles[i].position;
+                var vel = _particles[i].velocity;
+                var id = _particles[i].ID;
+
+                foreach (var n in _particles[i].neighbours)
                 {
-                    if (p.ID >= n) continue;
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    if (id >= n) continue;
+                    var nIdx = _sparse[n];
+                    var mag = FluidMath.Distance(pos, _particles[nIdx].position);
                     if (mag > interactionRadius || mag == 0) continue;
 
                     var q = mag / interactionRadius;
-                    var r = FluidMath.UnitVector(p.position, _particles[_sparse[n]].position, mag);
-                    var inwardVelocity = math.dot(p.velocity - _particles[_sparse[n]].velocity, r);
+                    var r = FluidMath.UnitVector(pos, _particles[nIdx].position, mag);
+                    var inwardVelocity = math.dot(vel - _particles[nIdx].velocity, r);
                     if (!(inwardVelocity > 0)) continue;
 
                     var impulse = FluidMath.ViscosityImpulse(dt,
@@ -312,9 +286,11 @@ namespace SimulationLogic
                         inwardVelocity,
                         r);
 
-                    p.velocity -= impulse / 2;
-                    _particles[_sparse[n]].velocity += impulse / 2;
+                    velocityDelta -= impulse / 2;
+                    _particles[nIdx].velocity += impulse / 2;
                 }
+
+                _particles[i].velocity += velocityDelta;
             });
         }
 
@@ -377,19 +353,21 @@ namespace SimulationLogic
                     return;
                 }
 
-                var p = _particles[_sparse[i]];
-                var n = _particles[_sparse[j]];
+                var pIdx = _sparse[i];
+                var nIdx = _sparse[j];
 
-                if (p.ID != i || n.ID != j)
+                if (_particles[pIdx].ID != i || _particles[nIdx].ID != j)
                 {
                     Debug.LogWarning($"Simulation: stale spring entry ({i}, {j}) — particle IDs no longer match, spring will be skipped");
                     return;
                 }
 
-                var mag = FluidMath.Distance(p.position, n.position);
+                var pPos = _particles[pIdx].position;
+                var nPos = _particles[nIdx].position;
+                var mag = FluidMath.Distance(pPos, nPos);
                 if (mag == 0) return;
 
-                var r = FluidMath.UnitVector(p.position, n.position, mag);
+                var r = FluidMath.UnitVector(pPos, nPos, mag);
                 var displacement = FluidMath.DisplacementBySpring(dt,
                     springStiffness,
                     kvp.Value,
@@ -397,8 +375,8 @@ namespace SimulationLogic
                     mag,
                     r);
 
-                p.position -= displacement / 2;
-                n.position += displacement / 2;
+                _particles[pIdx].position -= displacement / 2;
+                _particles[nIdx].position += displacement / 2;
             });
         }
 
@@ -432,26 +410,23 @@ namespace SimulationLogic
 
             Parallel.ForEach(bodyNeighbours, n =>
             {
-                var p = _particles[_sparse[n]];
-                var dist = FluidMath.Distance(body.position, p.position);
+                var idx = _sparse[n];
+                var pos = _particles[idx].position;
+                var dist = FluidMath.Distance(body.position, pos);
                 if (!(dist <= collisionRad)) return;
 
-                var relativeVelocity = p.velocity - body.velocity;
-                var normalVector = FluidMath.UnitVector(body.position,
-                    p.position,
-                    dist);
+                var relativeVelocity = _particles[idx].velocity - body.velocity;
+                var normalVector = FluidMath.UnitVector(body.position, pos, dist);
                 var normalVelocity = math.dot(relativeVelocity, normalVector) * normalVector;
 
                 // try adding
-                p.position -= dt * normalVelocity;
+                pos -= dt * normalVelocity;
 
-                dist = FluidMath.Distance(body.position, p.position);
+                dist = FluidMath.Distance(body.position, pos);
                 if (!(dist < collisionRad)) return;
 
-                var unitVector = FluidMath.UnitVector(body.position,
-                    p.position,
-                    dist);
-                p.position = body.position + unitVector * collisionRad;
+                var unitVector = FluidMath.UnitVector(body.position, pos, dist);
+                _particles[idx].position = body.position + unitVector * collisionRad;
             });
         }
 
@@ -777,7 +752,8 @@ namespace SimulationLogic
             _springs = new();
 
             _sparse.Fill(-1);
-            Array.Fill(_particles, new Particle());
+            for (int i = 0; i < len; i++)
+                _particles[i] = Particle.Create();
             for (int i = 0; i < len; i++)
                 _freeIDs.Add(i);
         }
@@ -800,7 +776,8 @@ namespace SimulationLogic
             if (_particles == null)
             {
                 _particles = new Particle[len];
-                Array.Fill(_particles, new Particle());
+                for (int i = 0; i < len; i++)
+                    _particles[i] = Particle.Create();
             }
         }
 
@@ -836,27 +813,10 @@ namespace SimulationLogic
                 for (int i = maxParticles; i < newMax; i++)
                 {
                     newSparse[i] = -1;
-                    newParticles[i] = new Particle();
+                    newParticles[i] = Particle.Create();
                     _freeIDs.Add(i);
                 }
             }
-
-            // else
-            // {
-            //     _freeIDs.Clear();
-            //     _count = _count > newMax ? newMax : _count;
-            //     Array.Copy(_particles, newParticles, newMax);
-            //     _sparse.CopyTo(newSparse, newMax);
-
-            //     for (int i = 0; i < newMax; i++)
-            //         newParticles[i].ID = i;
-
-            //     for (int i = 0; i < _count; i++)
-            //         newSparse[i] = i;
-
-            //     for (int i = _count; i < newMax; i++)
-            //         _freeIDs.Add(i);
-            // }
 
             _particles = newParticles;
             _sparse = newSparse;
@@ -873,7 +833,7 @@ namespace SimulationLogic
             var id = _freeIDs.Last();
             _freeIDs.RemoveLast();
 
-            var p = _particles[count];
+            ref var p = ref _particles[count];
             p.ID = id;
             p.position = pos;
             p.prevPosition = pos;
@@ -1089,3 +1049,49 @@ namespace SimulationLogic
         #endregion
     }
 }
+
+            // var density = 0f;
+            // for (int i = 0; i < count; i++)
+            // {
+            //     var mag = FluidMath.Distance(float2.zero, _particles[i].position);
+            //         if (mag > interactionRadius) continue;
+            //         var q = mag / interactionRadius;
+
+            //         density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+            // }
+
+            // Debug.Log($"Density: {density}");
+
+                // foreach (var n in p.borderNeighbours)
+                // {
+                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                //     if (mag == 0 || mag > interactionRadius) continue;
+                //     var q = mag / interactionRadius;
+
+                //     p.density += _borderParticles[n].mass / p.mass * FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
+                //     p.nearDensity += _borderParticles[n].mass / p.mass * FluidMath.CubicSpikyKernel(q, cubicSpikyKernelVolume);
+                // }
+
+                // float safeDensity = math.max(p.density, restDensity * 0.1f);
+                // float2 borderPressure = float2.zero;
+                // float2 borderNearPressure = float2.zero;
+                // foreach (var n in p.borderNeighbours)
+                // {
+                //     var mag = FluidMath.Distance(p.position, _borderParticles[n].position);
+                //     if (mag == 0 || mag > interactionRadius) continue;
+
+                //     float2 gradW = FluidMath.GradW(p.position, _borderParticles[n].position, mag, interactionRadius);
+                //     float massRatio = _borderParticles[n].mass / p.mass;
+
+                //     borderPressure += massRatio * gradW;
+                //     borderNearPressure += massRatio * (1f - (mag * interactionRadius)) * gradW;
+                // }
+
+                // float2 displacementBorder = -gamma2 * dt * dt * (
+                //     pressure * (2f / (safeDensity * safeDensity)) * borderPressure +
+                //     nearPressure * (2f / (safeDensity * safeDensity)) * borderNearPressure
+                // );
+                // p.forceBuffer += dt * dt * displacementBorder;
+
+                // if (float.IsNaN(p.position.x) || float.IsNaN(p.position.y))
+                //     Debug.LogError("Simulation a position is NaN");

@@ -111,7 +111,6 @@ namespace SimulationLogic
 
         public void Draw()
         {
-            renderParticles.DrawLine(new(-1000, 0), new(1000, 100), 100, Color.white);
             if (simulation == null)
             {
                 Debug.LogError("RenderDataBuilder: Draw called before Init — simulation is null");
