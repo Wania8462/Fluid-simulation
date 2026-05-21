@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -37,10 +39,22 @@ public class ParticleRender : MonoBehaviour
         rp.matProps.SetBuffer("Colors", colorsBuffer);
     }
 
-    public void DrawParticles()
+    public void DrawParticles(List<int> indices)
     {
         compute.Dispatch(CalculateColorsKernelID, theradGroups);
+        ColorParticles(indices);
         Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
+    }
+
+    private void ColorParticles(List<int> indices)
+    {
+        // ik that its inefficient
+        var colors = ComputeHelper.GetBuffer<float4>(colorsBuffer);
+
+        for (int i = 0; i < indices.Count; i++)
+            colors[indices[i]] = new float4(0, 1, 0, 1);
+
+        colorsBuffer.SetData(colors);
     }
 
     private float4[] GetDefaultColors(int length)

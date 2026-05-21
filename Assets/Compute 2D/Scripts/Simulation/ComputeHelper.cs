@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Unity.Mathematics;
+using Unity.VisualScripting;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -33,6 +36,14 @@ public static class ComputeHelper
         { enableRandomWrite = true };
         texture.Create();
         return texture;
+    }
+
+    public static RenderTexture CreateRenderTexture(RenderTexture texture)
+    {
+        RenderTexture result = new(texture.width, texture.height, depth: 0, RenderTextureFormat.ARGBFloat)
+        { enableRandomWrite = true };
+        result.Create();
+        return result;
     }
 
     public static GraphicsBuffer CreateCommandBuffer()
@@ -100,7 +111,7 @@ public static class ComputeHelper
     {
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError) { Debug.Log("GPU sim manager: couldn't get the texture"); return; }
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             var data = request.GetData<T>();
             Debug.Log(data[index]);
         });
@@ -112,7 +123,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the texture");
+                Debug.Log("Compute helper: couldn't get the texture");
                 return;
             }
 
@@ -122,6 +133,13 @@ public static class ComputeHelper
         });
     }
 
+    public static RenderTexture GetTexture<T>(RenderTexture texture) where T : struct
+    {
+        RenderTexture result = CreateRenderTexture(texture);
+        Graphics.Blit(texture, result);
+        return result;
+    }
+
     public static T GetTexture<T>(RenderTexture texture, int index) where T : struct
     {
         T result = default;
@@ -129,13 +147,33 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the texture");
+                Debug.Log("Compute helper: couldn't get the texture");
                 return;
             }
 
             result = request.GetData<T>()[index];
         });
         
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
+    public static List<T> GetTextureStripe<T>(RenderTexture texture, int XIndex) where T : struct
+    {
+        List<T> result = new();
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("Compute helper: couldn't get the texture");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            for (int y = 0; y < texture.height; y++)
+                result.Add(data[XIndex + y * texture.width]);
+        });
+
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -147,7 +185,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the texture");
+                Debug.Log("Compute helper: couldn't get the texture");
                 return;
             }
 
@@ -165,7 +203,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the buffer");
+                Debug.Log("Compute helper: couldn't get the buffer");
                 return;
             }
 
@@ -180,7 +218,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the buffer");
+                Debug.Log("Compute helper: couldn't get the buffer");
                 return;
             }
 
@@ -190,6 +228,24 @@ public static class ComputeHelper
         });
     }
 
+    public static T[] GetBuffer<T>(ComputeBuffer buffer) where T : struct
+    {
+        T[] result = null;
+        AsyncGPUReadback.Request(buffer, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("Compute helper: couldn't get the buffer");
+                return;
+            }
+
+            result = request.GetData<T>().ToArray();
+        });
+
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
     public static T GetBuffer<T>(ComputeBuffer buffer, int index) where T : struct
     {
         T result = default;
@@ -197,7 +253,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the buffer");
+                Debug.Log("Compute helper: couldn't get the buffer");
                 return;
             }
 
@@ -215,7 +271,7 @@ public static class ComputeHelper
         {
             if (request.hasError)
             {
-                Debug.Log("GPU sim manager: couldn't get the buffer");
+                Debug.Log("Compute helper: couldn't get the buffer");
                 return;
             }
 
@@ -224,6 +280,20 @@ public static class ComputeHelper
         });
 
         AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
+    public static Dictionary<string, int> GetKernels(ComputeShader compute)
+    {
+        // Won't work in build!!!
+        string path = AssetDatabase.GetAssetPath(compute);
+        string source = File.ReadAllText(path);
+        string[] lines = source.Split('\n').Where(l => l.Contains("#pragma kernel")).ToArray();
+        Dictionary<string, int> result = new();
+
+        for (int i = 0; i < lines.Length; i++)
+            result.Add(lines[i].Split(' ').Last(), i);
+
         return result;
     }
 }

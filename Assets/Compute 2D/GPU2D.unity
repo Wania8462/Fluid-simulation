@@ -196,7 +196,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Spawn2DParticles
-  particleSquareLength: 80
+  particleSquareLength: 50
   spacing: 2
   useJitter: 1
   jitterStrength: 0.2
@@ -215,6 +215,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8887504430f5bf64aac7c469145f770d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GPUSimulationManager
+  sprite: {fileID: 8074285413722058007, guid: 40f0b627a7cbb422d9074fd26c43d7e4, type: 3}
   paused: 0
   settings:
     interactionRadius: 6
@@ -236,10 +237,14 @@ MonoBehaviour:
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0
-  compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
+  compute: {fileID: 7200000, guid: ac996d6701fb78f4a8d93334d3c29225, type: 3}
   spawn: {fileID: 1001776192}
   render: {fileID: 441569835}
   numParticles: 0
+  threadGropus:
+    x: 0
+    y: 0
+    z: 0
 --- !u!4 &1001776194
 Transform:
   m_ObjectHideFlags: 0

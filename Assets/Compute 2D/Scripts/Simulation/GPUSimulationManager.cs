@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 [Serializable]
 public struct SimulationSettings
@@ -52,26 +50,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     [HideInInspector] public int numParticles;
 
-    private readonly Dictionary<string, int> KernelIDs = new()
-    {
-        { "ExternalForces", 0 },
-        { "ClearForceBuffers", 1 },
-        { "DoubleDensityRelaxation", 2 },
-        { "ApplyForceBuffers", 3 },
-        { "ApplyForceBuffersToVelocities", 4 },
-        { "ApplyViscosity", 5 },
-        { "AdjustSprings", 6 },
-        { "SpringDisplacements", 7 },
-        { "ResolveBoundaries", 8 },
-        { "AttractToMouse", 9 },
-        { "AdvancePredictedPositions", 10 },
-        { "CalculateVelocity", 11 },
-
-        { "ClearGrid", 12 },
-        { "ClearNeighbours", 13 },
-        { "InitSpatialPartitoning", 14 },
-        { "SetNeighbours", 15 }
-    };
+    private Dictionary<string, int> KernelIDs;
 
     public readonly Dictionary<string, ComputeBuffer> buffers = new()
     {
@@ -103,6 +82,8 @@ public class GPUSimulationManager : MonoBehaviour
 
     private readonly int debugLength = 100;
 
+    private List<GameObject> squares = new();
+
     private void Start()
     {
         Setup();
@@ -121,7 +102,19 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        render.DrawParticles();
+        if (Input.GetKeyDown(KeyCode.W))
+        {
+            foreach (var square in squares)
+                Destroy(square);
+
+            var neighbourIndices = GetNeighboursIndicesDebug(GetMousePos());
+            Debug.Log(neighbourIndices.Count);
+            var neighbourPositons = GetNeighbourPositionsDebug(neighbourIndices);
+            DrawPointsDebug(neighbourPositons);
+        }
+
+        var neighbours = GetNeighboursIndicesDebug(100);
+        render.DrawParticles(neighbours);
     }
 
     private void SimulationStep()
@@ -130,58 +123,37 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("dt", dt);
 
         // todo change it
-        Debug.Log("1");
         int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns, SP.rows);
         compute.Dispatch(KernelIDs["ClearGrid"], groups);
-        Debug.Log("2");
-        // ComputeHelper.LogBuffer<int>(buffers["NeighboursLength"], 100);
-        // AsyncGPUReadback.WaitAllRequests();
         compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
-        Debug.Log("3");
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
-        Debug.Log("4");
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
-        Debug.Log("5");
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
-        Debug.Log("6");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("7");
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
-        Debug.Log("8");
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
-        Debug.Log("9");
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
-        Debug.Log("10");
 
         compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
-        Debug.Log("11");
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("12");
         compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
-        Debug.Log("13");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
-        Debug.Log("15");
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        Debug.Log("16");
         compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
-        Debug.Log("17");
         compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
 
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
-            Debug.Log("18");
         }
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
-        Debug.Log("19");
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-        Debug.Log("20");
     }
 
     private void OnValidate()
@@ -195,14 +167,14 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void Setup()
     {
+        KernelIDs = ComputeHelper.GetKernels(compute);
         Application.targetFrameRate = targetFrameRate;
         float2 boundingBoxSize = spawn.GetBoundingBoxSize();
         SP = new(
             new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
             new(boundingBoxSize.x / 2, boundingBoxSize.y / 2),
             settings.interactionRadius);
-        Instantiate(sprite, new Vector3(-boundingBoxSize.x, -boundingBoxSize.y), quaternion.identity);
-        Instantiate(sprite, new Vector3(boundingBoxSize.x, boundingBoxSize.y), quaternion.identity);
+
         numParticles = spawn.GetNumberOfParticles();
 
         ReleaseBuffers();
@@ -308,6 +280,70 @@ public class GPUSimulationManager : MonoBehaviour
         Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
         Camera.main.ScreenToWorldPoint(Input.mousePosition).y
     );
+
+    #region Debug
+#if UNITY_EDITOR
+    private List<int> GetNeighboursIndicesDebug(float2 position)
+    {
+        float2 scaled = (position - SP.offset) / SP.length;
+        int2 cellPosition = new((int)math.clamp(scaled.x, 0, SP.columns - 1),
+                                (int)math.clamp(scaled.y, 0, SP.rows - 1));
+
+        int cellIndex = cellPosition.x + cellPosition.y * SP.columns;
+        throw new NotImplementedException();
+    }
+
+    private List<int> GetNeighboursIndicesDebug(int index)
+    {
+        var neighboursLength = ComputeHelper.GetBuffer<int>(buffers["NeighboursLength"], index);
+        var neighboursIndices = ComputeHelper.GetTextureStripe<int>(textures["Neighbours"], index);
+
+        if (neighboursLength < neighboursIndices.Count)
+            neighboursIndices.RemoveRange(neighboursLength + 1, neighboursIndices.Count - neighboursLength - 1);
+
+        return neighboursIndices;
+    }
+
+
+    private List<float2> GetNeighbourPositionsDebug(List<int> indices)
+    {
+        var positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
+        var result = new List<float2>();
+
+        for (int i = 0; i < indices.Count; i++)
+            result.Add(positions[i]);
+
+        return result;
+    }
+
+    private List<int> GetNeighboursIndicesDebug(Vector4 position) => GetNeighboursIndicesDebug(new float2(position.x, position.y));
+
+    private void DrawSPGradient()
+    {
+        // Instantiate(sprite, new Vector3(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2), quaternion.identity);
+        // Instantiate(sprite, new Vector3(boundingBoxSize.x / 2, boundingBoxSize.y / 2), quaternion.identity);
+        var prevScale = sprite.transform.localScale;
+        sprite.transform.localScale = new Vector3(SP.length, SP.length, 1);
+        for (int i = 0; i < SP.columns; i++)
+            for (int j = 0; j < SP.rows; j++)
+            {
+                var pos = new Vector3(SP.offset.x + (SP.length / 2), SP.offset.y + (SP.length / 2));
+                pos.x += SP.length * i;
+                pos.y += SP.length * j;
+                var square = Instantiate(sprite, pos, quaternion.identity);
+                square.GetComponent<SpriteRenderer>().color = new Color(0, (float)i / SP.columns, (float)j / SP.rows);
+            }
+
+        sprite.transform.localScale = prevScale;
+    }
+
+    private void DrawPointsDebug(List<float2> positions)
+    {
+        foreach (var pos in positions)
+            squares.Add(Instantiate(sprite, new Vector3(pos.x, pos.y), quaternion.identity));
+    }
+#endif
+    #endregion
 }
 
 public class SPValues
