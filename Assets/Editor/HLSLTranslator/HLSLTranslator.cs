@@ -77,6 +77,7 @@ namespace Translator
                     continue;
                 }
 
+
                 // handle brackets
                 if (line.Contains("{"))
                 {
@@ -272,7 +273,7 @@ namespace Translator
                     Debug.LogError($"Translator: last token in kernel function line is too short to extract indexer: \"{nextLine}\"");
                     return result;
                 }
-                indexer = lastWord[..(lastWord.Length - 2)];
+                indexer = lastWord[..(lastWord.Length - 1)];
                 insideBrackets++;
             }
 

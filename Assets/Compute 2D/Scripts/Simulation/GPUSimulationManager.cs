@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -47,6 +46,8 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ParticleRender render;
+    [SerializeField] private Material debugMaterial;
+    private RenderDebug renderDebug;
     private SPValues SP;
 
     [HideInInspector] public int numParticles;
@@ -124,11 +125,13 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("dt", dt);
 
         // todo change it
-        int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns, SP.rows);
+        int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
         compute.Dispatch(KernelIDs["ClearGrid"], groups);
         compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+
+        ComputeHelper.LogTexture<int>(textures["Neighbours"], 0);
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
 
@@ -170,6 +173,8 @@ public class GPUSimulationManager : MonoBehaviour
     {
         KernelIDs = ComputeHelper.GetKernels(compute);
         Application.targetFrameRate = targetFrameRate;
+        renderDebug = new(debugMaterial);
+
         float2 boundingBoxSize = spawn.GetBoundingBoxSize();
         SP = new(
             new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
@@ -284,87 +289,6 @@ public class GPUSimulationManager : MonoBehaviour
 
     #region Debug
 #if UNITY_EDITOR
-    readonly int2[] offsets2D = new int2[]
-    {
-        new(-1, 1),
-        new(0, 1),
-        new(1, 1),
-        new(-1, 0),
-        new(0, 0),
-        new(1, 0),
-        new(-1, -1),
-        new(0, -1),
-        new(1, -1),
-    };
-
-    private void TempNighboursTest()
-    {
-        float2[] positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
-        int[,] grid = ComputeHelper.GetTextureAs2DArr<int>(textures["Grid"]);
-        int[,] neighbours = ComputeHelper.GetTextureAs2DArr<int>(textures["Neighbours"]);
-        int[] cellsLength = ComputeHelper.GetBuffer<int>(buffers["CellsLength"]);
-        int[] neighboursLength = ComputeHelper.GetBuffer<int>(buffers["NeighboursLength"]);
-
-        // Init SP
-        for (int i = 0; i < neighboursLength.Length; i++)
-        {
-            int cellIndex = GetCellIndex(positions[i]);
-
-            if (cellsLength[cellIndex] < maxParticlesPerCell)
-            {
-                grid[cellIndex, cellsLength[cellIndex]] = i;
-                cellsLength[cellIndex]++;
-            }
-        }
-
-        // Set neighbours
-        for (int i = 0; i < neighboursLength.Length; i++)
-        {
-            int2 cellPosition = GetCellPosition(positions[i]);
-            int cellIndex = cellPosition.x + cellPosition.y * SP.columns;
-
-            for (int j = 0; j < 9; j++)
-            {
-                int2 neighbourPos = cellPosition + offsets2D[j];
-                if (neighbourPos.x < 0 || neighbourPos.y < 0) continue;
-                int neighbourIndex = neighbourPos.x + neighbourPos.y * SP.columns;
-
-                for (int k = 0; k < cellsLength[neighbourIndex]; k++)
-                {
-                    neighbours[i, neighboursLength[i]] = grid[neighbourIndex, k];
-                    neighboursLength[i]++;
-                }
-            }
-        }
-
-        StringBuilder sb = new("Neighbours: ");
-        for (int i = 0; i < neighboursLength[100]; i++)
-            sb.Append($"{neighbours[100, i]}, ");
-
-        sb.Remove(sb.Length - 3, sb.Length - 1);
-        Debug.Log(sb);
-        sb.Clear();
-
-        sb.Append("Positions: ");
-        for (int i = 0; i < neighboursLength[100]; i++)
-            sb.Append($"{positions[neighbours[100, i]]}, ");
-
-        sb.Remove(sb.Length - 2, sb.Length);
-        Debug.Log(sb);
-    }
-
-    int2 GetCellPosition(float2 position)
-    {
-        float2 scaled = (position - SP.offset) / SP.length;
-        return new int2((int)Mathf.Clamp(scaled.x, 0, SP.columns - 1),
-                     (int)Mathf.Clamp(scaled.y, 0, SP.rows - 1));
-    }
-
-    int GetCellIndex(float2 position)
-    {
-        int2 cellPosition = GetCellPosition(position);
-        return cellPosition.x + cellPosition.y * SP.columns;
-    }
 
     private List<int> GetNeighboursIndicesDebug(float2 position)
     {
@@ -407,6 +331,7 @@ public class GPUSimulationManager : MonoBehaviour
         // Instantiate(sprite, new Vector3(boundingBoxSize.x / 2, boundingBoxSize.y / 2), quaternion.identity);
         var prevScale = sprite.transform.localScale;
         sprite.transform.localScale = new Vector3(SP.length, SP.length, 1);
+        
         for (int i = 0; i < SP.columns; i++)
             for (int j = 0; j < SP.rows; j++)
             {

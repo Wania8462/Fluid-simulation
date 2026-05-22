@@ -164,7 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleRender
   particleQuality: 5
-  compute: {fileID: 7200000, guid: 462f799661ec4ba4896f8f3a6bae698f, type: 3}
+  compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
 --- !u!1 &1001776191
 GameObject:
@@ -233,13 +233,14 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 1
-  maxParticlesPerCell: 128
+  maxParticlesPerCell: 64
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0
-  compute: {fileID: 7200000, guid: ac996d6701fb78f4a8d93334d3c29225, type: 3}
+  compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
   spawn: {fileID: 1001776192}
   render: {fileID: 441569835}
+  debugMaterial: {fileID: 2100000, guid: 97d537b1176625d49b9b5e87cf503036, type: 2}
   numParticles: 0
   threadGropus:
     x: 0

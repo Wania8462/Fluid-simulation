@@ -32,7 +32,7 @@ public static class ComputeHelper
 
     public static RenderTexture CreateRenderTexture(int width, int height)
     {
-        RenderTexture texture = new(width, height, depth: 0, RenderTextureFormat.ARGBFloat)
+        RenderTexture texture = new(width, height, depth: 0, RenderTextureFormat.RInt)
         { enableRandomWrite = true };
         texture.Create();
         return texture;
@@ -40,7 +40,7 @@ public static class ComputeHelper
 
     public static RenderTexture CreateRenderTexture(RenderTexture texture)
     {
-        RenderTexture result = new(texture.width, texture.height, depth: 0, RenderTextureFormat.ARGBFloat)
+        RenderTexture result = new(texture.width, texture.height, depth: 0, RenderTextureFormat.RInt)
         { enableRandomWrite = true };
         result.Create();
         return result;
@@ -113,7 +113,6 @@ public static class ComputeHelper
         {
             if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             var data = request.GetData<T>();
-            Debug.Log(data[index]);
         });
     }
 
@@ -153,7 +152,7 @@ public static class ComputeHelper
 
             result = request.GetData<T>()[index];
         });
-        
+
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -209,10 +208,10 @@ public static class ComputeHelper
             }
 
             var data = request.GetData<T>();
-            
+
             for (int i = 0; i < texture.height; i++)
                 for (int j = 0; j < texture.width; j++)
-                    result[i,j] = data[i * texture.width + j];
+                    result[j, i] = data[i * texture.width + j];
         });
 
         AsyncGPUReadback.WaitAllRequests();
