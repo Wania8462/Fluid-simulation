@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -283,6 +284,88 @@ public class GPUSimulationManager : MonoBehaviour
 
     #region Debug
 #if UNITY_EDITOR
+    readonly int2[] offsets2D = new int2[]
+    {
+        new(-1, 1),
+        new(0, 1),
+        new(1, 1),
+        new(-1, 0),
+        new(0, 0),
+        new(1, 0),
+        new(-1, -1),
+        new(0, -1),
+        new(1, -1),
+    };
+
+    private void TempNighboursTest()
+    {
+        float2[] positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
+        int[,] grid = ComputeHelper.GetTextureAs2DArr<int>(textures["Grid"]);
+        int[,] neighbours = ComputeHelper.GetTextureAs2DArr<int>(textures["Neighbours"]);
+        int[] cellsLength = ComputeHelper.GetBuffer<int>(buffers["CellsLength"]);
+        int[] neighboursLength = ComputeHelper.GetBuffer<int>(buffers["NeighboursLength"]);
+
+        // Init SP
+        for (int i = 0; i < neighboursLength.Length; i++)
+        {
+            int cellIndex = GetCellIndex(positions[i]);
+
+            if (cellsLength[cellIndex] < maxParticlesPerCell)
+            {
+                grid[cellIndex, cellsLength[cellIndex]] = i;
+                cellsLength[cellIndex]++;
+            }
+        }
+
+        // Set neighbours
+        for (int i = 0; i < neighboursLength.Length; i++)
+        {
+            int2 cellPosition = GetCellPosition(positions[i]);
+            int cellIndex = cellPosition.x + cellPosition.y * SP.columns;
+
+            for (int j = 0; j < 9; j++)
+            {
+                int2 neighbourPos = cellPosition + offsets2D[j];
+                if (neighbourPos.x < 0 || neighbourPos.y < 0) continue;
+                int neighbourIndex = neighbourPos.x + neighbourPos.y * SP.columns;
+
+                for (int k = 0; k < cellsLength[neighbourIndex]; k++)
+                {
+                    neighbours[i, neighboursLength[i]] = grid[neighbourIndex, k];
+                    neighboursLength[i]++;
+                }
+            }
+        }
+
+        StringBuilder sb = new("Neighbours: ");
+        for (int i = 0; i < neighboursLength[100]; i++)
+            sb.Append($"{neighbours[100, i]}, ");
+
+        sb.Remove(sb.Length - 3, sb.Length - 1);
+        Debug.Log(sb);
+        sb.Clear();
+
+        sb.Append("Positions: ");
+        for (int i = 0; i < neighboursLength[100]; i++)
+            sb.Append($"{positions[neighbours[100, i]]}, ");
+
+        sb.Remove(sb.Length - 2, sb.Length);
+        Debug.Log(sb);
+    }
+
+    int2 GetCellPosition(float2 position)
+    {
+        float2 scaled = (position - SP.offset) / SP.length;
+        return new int2((int)Mathf.Clamp(scaled.x, 0, SP.columns - 1),
+                     (int)Mathf.Clamp(scaled.y, 0, SP.rows - 1));
+    }
+
+    int GetCellIndex(float2 position)
+    {
+        int2 cellPosition = GetCellPosition(position);
+        return cellPosition.x + cellPosition.y * SP.columns;
+    }
+
     private List<int> GetNeighboursIndicesDebug(float2 position)
     {
         float2 scaled = (position - SP.offset) / SP.length;

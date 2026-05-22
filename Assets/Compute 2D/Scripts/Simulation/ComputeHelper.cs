@@ -197,6 +197,28 @@ public static class ComputeHelper
         return result;
     }
 
+    public static T[,] GetTextureAs2DArr<T>(RenderTexture texture) where T : struct
+    {
+        T[,] result = new T[texture.width, texture.height];
+        AsyncGPUReadback.Request(texture, 0, request =>
+        {
+            if (request.hasError)
+            {
+                Debug.Log("GPU sim manager: couldn't get the texture");
+                return;
+            }
+
+            var data = request.GetData<T>();
+            
+            for (int i = 0; i < texture.height; i++)
+                for (int j = 0; j < texture.width; j++)
+                    result[i,j] = data[i * texture.width + j];
+        });
+
+        AsyncGPUReadback.WaitAllRequests();
+        return result;
+    }
+
     public static void LogBuffer<T>(ComputeBuffer buffer, int index) where T : struct
     {
         AsyncGPUReadback.Request(buffer, request =>
@@ -264,10 +286,10 @@ public static class ComputeHelper
         return result;
     }
 
-    public static T[] GetBuffer<T>(RenderTexture texture, List<int> indices) where T : struct
+    public static T[] GetBuffer<T>(ComputeBuffer texture, List<int> indices) where T : struct
     {
         T[] result = new T[indices.Count];
-        AsyncGPUReadback.Request(texture, 0, request =>
+        AsyncGPUReadback.Request(texture, request =>
         {
             if (request.hasError)
             {

@@ -27,10 +27,14 @@ namespace Translator
                 if (source.StartsWith("#translate"))
                 {
                     string translated = HLSLTranslator.Translate(source, config);
+
+                    if (translated == null)
+                        Debug.LogWarning($"Translator manager: {assetPath} is empty");
+
                     string outputPath = Path.Combine(config.TargetPath, Path.GetFileName(assetPath));
 
                     File.WriteAllText(outputPath, translated);
-                    Debug.Log($"[HlslTranslator] Retranslated {assetPath}");
+                    Debug.Log($"Translator manager: translated {assetPath}");
                 }
             }
         }

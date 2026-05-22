@@ -80,22 +80,13 @@ float2 ReadForceBuffer(uint index)
                   (float)ForceBuffersY[index] / FloatScale);
 }
 
-uint SpringIndex(uint i, uint j)
-{
-    return i * numParticles + j;
-}
+uint SpringIndex(uint i, uint j) => return i * numParticles + j;
 
 [threads(numParticles)]
-void ExternalForces (indexer = e)
-{
-    Velocities[e].y += dt * gravity;
-}
+void ExternalForces (indexer = e) => Velocities[e].y += dt * gravity;
 
 [threads(numParticles)]
-void ClearForceBuffers (indexer = e)
-{
-    SetForceBuffer(id.x, ZeroImpulse);
-}
+void ClearForceBuffers (indexer = e) => SetForceBuffer(id.x, ZeroImpulse);
 
 [threads(numParticles)]
 void DoubleDensityRelaxation (indexer = e)
@@ -133,16 +124,10 @@ void DoubleDensityRelaxation (indexer = e)
 }
 
 [threads(numParticles)]
-void ApplyForceBuffers (indexer = e)
-{
-    Positions[e] += ReadForceBuffer(id.x);
-}
+void ApplyForceBuffers (indexer = e) => Positions[e] += ReadForceBuffer(id.x);
 
 [threads(numParticles)]
-void ApplyForceBuffersToVelocities (indexer = e)
-{
-    Velocities[e] += ReadForceBuffer(id.x);
-}
+void ApplyForceBuffersToVelocities (indexer = e) => Velocities[e] += ReadForceBuffer(id.x);
 
 [threads(numParticles)]
 void ApplyViscosity (indexer = e)
@@ -261,10 +246,7 @@ void AttractToMouse (indexer = e)
 }
 
 [threads(numParticles)]
-void CalculateVelocity (indexer = e)
-{
-    Velocities[e] = (Positions[e] - PrevPositions[e]) / dt;
-}
+void CalculateVelocity (indexer = e) => Velocities[e] = (Positions[e] - PrevPositions[e]) / dt;
 
 static int2 offsets2D[9] =
 {
@@ -293,16 +275,10 @@ uint GetCellIndex(float2 position)
 }
 
 [threads(numCells)]
-void ClearGrid (indexer = e)
-{
-    CellsLength[e] = 0;
-}
+void ClearGrid (indexer = e) => CellsLength[e] = 0;
 
 [threads(numParticles)]
-void ClearNeighbours (indexer = e)
-{
-    NeighboursLength[e] = 0;
-}
+void ClearNeighbours (indexer = e) => NeighboursLength[e] = 0;
 
 [threads(numParticles)]
 void InitSpatialPartitoning (indexer = e)

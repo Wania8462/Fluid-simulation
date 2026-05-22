@@ -18,7 +18,7 @@
 #include "C:\Users\Ivan\Documents\GitHub\Fluid-simulation\Assets\Compute 2D\Scripts\Simulation\FluidMath.hlsl"
 
 static const int ThreadGroupSize = 64;
-static float2 ZeroImpulse = float2(0, 0);
+static const float2 ZeroImpulse = float2(0, 0);
 static const int FloatScale = 1000000;
 
 RWStructuredBuffer<float2> Positions;
@@ -302,15 +302,15 @@ void CalculateVelocity (uint3 id : SV_DispatchThreadID)
 
 static int2 offsets2D[9] =
 {
-	int2(-1, 1),
-	int2(0, 1),
-	int2(1, 1),
-	int2(-1, 0),
-	int2(0, 0),
-	int2(1, 0),
-	int2(-1, -1),
-	int2(0, -1),
-	int2(1, -1),
+    int2(-1, 1),
+    int2(0, 1),
+    int2(1, 1),
+    int2(-1, 0),
+    int2(0, 0),
+    int2(1, 0),
+    int2(-1, -1),
+    int2(0, -1),
+    int2(1, -1),
 };
 
 uint2 GetCellPosition(float2 position)

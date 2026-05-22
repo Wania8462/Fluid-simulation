@@ -88,52 +88,77 @@ namespace Translator
                 if (line.Contains("}"))
                 {
                     insideBrackets--;
+
+                    if (insideBrackets < 0)
+                        Debug.LogError($"Translator: unexpected '}}' at source line {i + 1} — bracket mismatch");
+
                     sb.Append(line, insideBrackets);
                     continue;
                 }
 
-                // outside of brackets
                 if (insideBrackets == 0)
                 {
                     // variables
-                    if (line.EndsWith("="))
+                    (string, bool) result = HandleVariables(line);
+                    if (result.Item2)
                     {
-                        (string, bool) result = HandleVariables(line);
-                        sb.Append(line, insideBrackets);
-                        int c = 1;
-
-                        while (!line.Contains("}"))
+                        if (line.EndsWith("="))
                         {
-                            line = lines[i + c];
                             sb.Append(line, insideBrackets);
-                            c++;
-                        }
+                            int c = 1;
 
-                        i += c - 1;
-                        continue;
-                    }
+                            while (!line.Contains("}"))
+                            {
+                                if (i + c >= lines.Length)
+                                {
+                                    Debug.LogError($"Translator: unclosed array initializer starting at source line {i + 1}");
+                                    break;
+                                }
+                                line = lines[i + c];
+                                sb.Append(line, insideBrackets);
+                                c++;
+                            }
 
-                    else
-                    {
-                        (string, bool) result = HandleVariables(line);
-                        if (result.Item2)
-                        {
-                            sb.Append(result.Item1, insideBrackets);
+                            i += c - 1;
                             continue;
                         }
+
+                        else
+                        {
+                            if (result.Item2)
+                            {
+                                sb.Append(result.Item1, insideBrackets);
+                                continue;
+                            }
+                        }
+                    }
+
+                    // functions
+                    if (ContainsDatatype(line) && !IsVariable(line) && line.Contains("=>"))
+                    {
+                        string func = line[..(line.IndexOf(')') + 1)] + "\n";
+                        func += "{\n";
+                        func += "    " + line[(line.IndexOf("=>") + 3)..];
+                        func += "\n}\n";
+                        sb.Append(func);
+                        continue;
                     }
 
                     //kernels
                     if (line.Contains("threads"))
                     {
-                        line = HandleKernles(line, lines[i + 1], kernels, ref indexer);
+                        if (i + 1 >= lines.Length)
+                        {
+                            Debug.LogError($"Translator: kernel declaration at source line {i + 1} has no following function line");
+                            continue;
+                        }
+                        line = HandleKernles(line, lines[i + 1], kernels, ref indexer, ref insideBrackets);
                         i += 2;
-                        sb.Append(line, insideBrackets);
-                        insideBrackets++;
+                        sb.Append(line);
                         continue;
                     }
                 }
-                
+
                 if (insideBrackets > 0)
                 {
                     if (line.Contains($"[{indexer}]"))
@@ -143,6 +168,13 @@ namespace Translator
                     {
                         string[] words = line.Split(' ');
                         int range = Array.IndexOf(words, "->");
+
+                        if (range == -1)
+                        {
+                            Debug.LogError($"Translator: for-loop at source line {i + 1} is missing '->' range operator: \"{line}\"");
+                            sb.Append(line, insideBrackets);
+                            continue;
+                        }
 
                         char ind = line[line.IndexOf('(') + 1];
                         string min = words[range - 1];
@@ -162,13 +194,17 @@ namespace Translator
             }
 
             sb.Insert(0, "\n");
+
+            if (kernels.Count == 0)
+                Debug.LogWarning("Translator: there are no kernels");
+
             for (int i = kernels.Count - 1; i >= 0; i--)
                 sb.Insert(0, $"#pragma kernel {kernels[i]}\n");
 
             return sb.ToString();
         }
 
-        private static string HandleKernles(string line, string nextLine, List<string> kernels, ref string indexer)
+        private static string HandleKernles(string line, string nextLine, List<string> kernels, ref string indexer, ref int insideBrackets)
         {
             string result = "";
 
@@ -176,31 +212,77 @@ namespace Translator
                 Debug.LogError("Translator: multi dimentional kernels aren't supported yet");
 
             string[] words = nextLine.Split(' ');
+
+            if (words.Length < 2)
+            {
+                Debug.LogError($"Translator: kernel function line has too few tokens: \"{nextLine}\"");
+                return result;
+            }
+
             kernels.Add(words[1]);
-            indexer = words[^1][..(words[^1].Length - 2)];
+
+            if (!nextLine.Contains('('))
+            {
+                Debug.LogError($"Translator: kernel function line is missing '(': \"{nextLine}\"");
+                return result;
+            }
 
             result = $"[numthreads({conf.ThreadGroupX},{conf.ThreadGroupY},{conf.ThreadGroupZ})]\n";
-            result += nextLine[..(nextLine.IndexOf('(')+1)] + "uint3 id : SV_DispatchThreadID)" + "\n";
+            result += nextLine[..(nextLine.IndexOf('(') + 1)] + "uint3 id : SV_DispatchThreadID)" + "\n";
             result += "{" + "\n";
-            result += $"    if (id.x >= {line[(line.IndexOf('(') + 1)..line.IndexOf(')')]}) return;\n";
+
+            if (!line.Contains('(') || !line.Contains(')'))
+            {
+                Debug.LogError($"Translator: kernel size declaration is missing parentheses: \"{line}\"");
+                return result;
+            }
+
+            result += $"    if (id.x >= {line[(line.IndexOf('(') + 1)..line.IndexOf(')')]}) return;\n\n";
+
+            if (nextLine.Contains("=>"))
+            {
+                result += "    " + nextLine[(nextLine.IndexOf("=>") + 3)..] + "\n";
+                int rawIndex = Array.IndexOf(words, "(indexer");
+                
+                if (rawIndex == -1 || rawIndex + 2 >= words.Length)
+                {
+                    Debug.LogError($"Translator: could not locate indexer parameter in kernel line: \"{nextLine}\"");
+                    return result;
+                }
+
+                int indexerIndex = rawIndex + 2;
+                string indexerStr = words[indexerIndex];
+
+                if (indexerStr.Length < 1)
+                {
+                    Debug.LogError($"Translator: indexer token is empty in kernel line: \"{nextLine}\"");
+                    return result;
+                }
+
+                indexer = indexerStr[..(indexerStr.Length - 1)];
+                result = result.Replace($"[{indexer}]", "[id.x]");
+                result += "}\n\n";
+            }
+
+            else
+            {
+                string lastWord = words[^1];
+                if (lastWord.Length < 2)
+                {
+                    Debug.LogError($"Translator: last token in kernel function line is too short to extract indexer: \"{nextLine}\"");
+                    return result;
+                }
+                indexer = lastWord[..(lastWord.Length - 2)];
+                insideBrackets++;
+            }
+
             return result;
         }
 
         // returns the line and if its a variable
         private static (string, bool) HandleVariables(string line)
         {
-            bool isVariable = false;
-
-            foreach (var type in dataTypes)
-            {
-                if (line.Contains(type) && !line.Contains("("))
-                {
-                    isVariable = true;
-                    break;
-                }
-            }
-
-            if (!isVariable)
+            if (!IsVariable(line))
                 return (line, false);
 
             if (line.StartsWith("static"))
@@ -222,6 +304,39 @@ namespace Translator
                 line = "const " + line;
 
             return (line, true);
+        }
+        
+        private static bool IsVariable(string line)
+        {
+            if (line.Contains("=>") || !line.EndsWith(";"))
+                return false;
+
+            bool isVariable = false;
+            foreach (var type in dataTypes)
+            {
+                if (line.Contains(type))
+                {
+                    isVariable = true;
+                    break;
+                }
+            }
+
+            return isVariable;
+        }
+
+        private static bool ContainsDatatype(string line)
+        {
+            bool contains = false;
+            foreach (var type in dataTypes)
+            {
+                if (line.Contains(type))
+                {
+                    contains = true;
+                    break;
+                }
+            }
+
+            return contains;
         }
 
         private static void Append(this StringBuilder sb, string text, int indents)
