@@ -164,7 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleRender
   particleQuality: 5
-  compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
+  compute: {fileID: 7200000, guid: 462f799661ec4ba4896f8f3a6bae698f, type: 3}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
 --- !u!1 &1001776191
 GameObject:

@@ -69,7 +69,7 @@ namespace Translator
                 {
                     if (line.Contains("pragma kernel"))
                     {
-                        kernels.Add(line.Split(' ').Last());
+                        kernels.Add(line.Split(' ').Last(), true);
                         continue;
                     }
 
@@ -219,7 +219,7 @@ namespace Translator
                 return result;
             }
 
-            kernels.Add(words[1]);
+            kernels.Add(words[1], true);
 
             if (!nextLine.Contains('('))
             {
@@ -347,6 +347,23 @@ namespace Translator
                 str += "    ";
 
             sb.Append(str + text + "\n");
+        }
+
+        private static bool Add<T>(this List<T> list, T item, bool unique)
+        {
+            if (unique)
+            {
+                if (!list.Contains(item))
+                {
+                    list.Add(item);
+                    return true;
+                }
+
+                return false;
+            }
+
+            list.Add(item);
+            return true;
         }
     }
 }

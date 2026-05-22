@@ -1,7 +1,6 @@
 #translate
 #include "C:\Users\Ivan\Documents\GitHub\Fluid-simulation\Assets\Compute 2D\Scripts\Simulation\FluidMath.hlsl"
 
-static int ThreadGroupSize = 64;
 static float2 ZeroImpulse = float2(0, 0);
 static int FloatScale = 1000000;
 

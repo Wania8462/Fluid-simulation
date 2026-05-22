@@ -30,6 +30,7 @@ public class ParticleRender : MonoBehaviour
 
         theradGroups = compute.GetThreadGroups(0, sim.numParticles);
         compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.buffers["Velocities"]);
+        compute.SetInt("numParticles", sim.numParticles);
 
         colorsBuffer?.Release();
         colorsBuffer = ComputeHelper.CreateStructuredBufferWithData(GetDefaultColors(sim.numParticles));
