@@ -7,7 +7,8 @@ using UnityEngine;
 enum RenderingType
 {
     Particles,
-    DensityMap
+    DensityMap,
+    MarchingSquares
 }
 
 public struct Spring
@@ -62,6 +63,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ParticleRender render;
     [SerializeField] private RenderDensityMap densityMap;
+    [SerializeField] private RenderMarchingSquares marchingSquares;
     [SerializeField] private Material debugMaterial;
     private RenderDebug renderDebug;
     private SPValues SP;
@@ -97,8 +99,11 @@ public class GPUSimulationManager : MonoBehaviour
         if (renderingType == RenderingType.Particles)
             render.DrawParticles();
 
-        else
+        else if (renderingType == RenderingType.DensityMap)
             densityMap.Draw();
+
+        else
+            marchingSquares.Draw();
     }
 
     private void SimulationStep()
@@ -179,7 +184,8 @@ public class GPUSimulationManager : MonoBehaviour
 
         Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
         render.Setup(this);
-        densityMap?.Setup(this, boundingBoxSize);
+        densityMap.Setup(this, boundingBoxSize);
+        marchingSquares.Setup(this, boundingBoxSize);
     }
 
     #region Buffer helpers

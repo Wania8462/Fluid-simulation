@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 441569832}
   - component: {fileID: 441569835}
   - component: {fileID: 441569836}
+  - component: {fileID: 441569837}
   m_Layer: 0
   m_Name: Render
   m_TagString: Untagged
@@ -180,10 +181,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d6bf37a52df3c74c8f0eec4cc98a89a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDensityMap
-  resolution: 50
-  densityLimit: 4
+  resolution: 300
+  densityLimit: 3.5
   compute: {fileID: 7200000, guid: 038e2c438917daf4e94680fd7e6b6adc, type: 3}
   material: {fileID: 2100000, guid: 2f9c27889d8bf3a4f88335d548162b1f, type: 2}
+--- !u!114 &441569837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 441569831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0131161c898eb6418b64d024de3dfcf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RenderMarchingSquares
+  resolution: 100
+  densityThreshold: 3.5
+  color: {r: 0.08877714, g: 0.38391832, b: 0.8962264, a: 1}
+  compute: {fileID: 7200000, guid: d0a52b93523603148a81476d8bec6e96, type: 3}
+  material: {fileID: 2100000, guid: de7bd6d1052bdfe47b1c32d737000933, type: 2}
 --- !u!1 &1001776191
 GameObject:
   m_ObjectHideFlags: 0
@@ -256,11 +274,12 @@ MonoBehaviour:
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0
-  renderingType: 0
+  renderingType: 2
   compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
   spawn: {fileID: 1001776192}
   render: {fileID: 441569835}
   densityMap: {fileID: 441569836}
+  marchingSquares: {fileID: 441569837}
   debugMaterial: {fileID: 2100000, guid: 97d537b1176625d49b9b5e87cf503036, type: 2}
   numParticles: 0
   threadGropus:
