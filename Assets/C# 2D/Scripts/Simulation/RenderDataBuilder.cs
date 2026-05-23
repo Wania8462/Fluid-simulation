@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Rendering;
 using Unity.Mathematics;
@@ -68,7 +66,9 @@ namespace SimulationLogic
             simulation = sim;
             renderPositions = new float2[sim.maxParticles];
             renderVelocities = new float2[sim.maxParticles];
-            renderBorderPositions = new float2[sim._borderParticles.Count];
+
+            if (simulation.useParticlesAsBorder)
+                renderBorderPositions = new float2[sim._borderParticles.Count];
 
             renderParticles.DeleteAllTypesOfParticles();
 
@@ -111,7 +111,6 @@ namespace SimulationLogic
 
         public void Draw()
         {
-            renderParticles.DrawLine(new(-1000, 0), new(1000, 100), 100, Color.white);
             if (simulation == null)
             {
                 Debug.LogError("RenderDataBuilder: Draw called before Init — simulation is null");
@@ -307,7 +306,8 @@ namespace SimulationLogic
                 {
                     var neighboursPos = simulation.GetNeighbourParticlesPositions(pos);
                     var magnitudes = neighboursPos.Select(x => FluidMath.Distance(pos, x)).ToArray();
-                    trackParticle = neighboursIndices[Array.IndexOf(magnitudes, magnitudes.Min())];
+                    var trackIndex = neighboursIndices[Array.IndexOf(magnitudes, magnitudes.Min())];
+                    trackParticle = simulation._particles[trackIndex].ID;
                 }
             }
 
@@ -317,19 +317,19 @@ namespace SimulationLogic
 
         private void HandleBodyInputs()
         {
-            if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.P))
+            if (Input.GetKeyDown(KeyCode.P))
                 bodyDebug = !bodyDebug;
 
-            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.B))
+            else if (Input.GetKeyDown(KeyCode.B))
                 bodyDebugDisplay = DebugDisplay.SPBox;
 
-            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.A))
+            else if (Input.GetKeyDown(KeyCode.A))
                 bodyDebugDisplay = DebugDisplay.AllNeighbours;
 
-            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.V))
+            else if (Input.GetKeyDown(KeyCode.V))
                 bodyDebugDisplay = DebugDisplay.Velocity;
 
-            else if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.F))
+            else if (Input.GetKeyDown(KeyCode.F))
                 bodyDebugDisplay = DebugDisplay.Force;
         }
         #endregion

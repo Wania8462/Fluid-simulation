@@ -136,18 +136,6 @@ namespace SimulationLogic
                 return;
             }
 
-            // var density = 0f;
-            // for (int i = 0; i < count; i++)
-            // {
-            //     var mag = FluidMath.Distance(float2.zero, _particles[i].position);
-            //         if (mag > interactionRadius) continue;
-            //         var q = mag / interactionRadius;
-
-            //         density += FluidMath.QuadraticSpikyKernel(q, quadraticSpikyKernelVolume);
-            // }
-
-            // Debug.Log($"Density: {density}");
-
             CheckArraysLength();
             dt = deltatime;
 

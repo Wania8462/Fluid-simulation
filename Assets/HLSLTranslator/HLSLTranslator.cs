@@ -24,14 +24,14 @@ namespace Translator
             "RWTexture2D", "Texture2D", "Texture3D",
             "RWBuffer", "Buffer",
             // other
-            "SamplerState", "cbuffer",
+            "SamplerState", "cbuffer"
         };
 
         private static readonly HashSet<string> bufferTypes = new()
         {
             "RWStructuredBuffer", "StructuredBuffer",
             "RWTexture2D", "Texture2D", "Texture3D",
-            "RWBuffer", "Buffer",
+            "RWTexture3D", "RWBuffer", "Buffer"
         };
 
         private static TranslatorConfig conf;

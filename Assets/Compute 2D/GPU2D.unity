@@ -196,7 +196,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Spawn2DParticles
-  particleSquareLength: 50
+  particleSquareLength: 60
   spacing: 2
   useJitter: 1
   jitterStrength: 0.2
@@ -233,7 +233,8 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 1
-  maxParticlesPerCell: 128
+  maxParticlesPerCell: 64
+  maxSpringsPerParticle: 64
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0
@@ -243,6 +244,10 @@ MonoBehaviour:
   debugMaterial: {fileID: 2100000, guid: 97d537b1176625d49b9b5e87cf503036, type: 2}
   numParticles: 0
   threadGropus:
+    x: 0
+    y: 0
+    z: 0
+  gridThreadGropus:
     x: 0
     y: 0
     z: 0

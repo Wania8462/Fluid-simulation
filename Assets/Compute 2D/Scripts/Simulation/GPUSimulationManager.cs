@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
-using Unity.VisualScripting;
 using UnityEngine;
+
+public struct Spring
+{
+    public int neighbourIndex;
+    public float restLength;
+}
 
 [Serializable]
 public struct SimulationSettings
@@ -39,6 +44,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] private bool paused;
     [SerializeField] private SimulationSettings settings;
     [SerializeField] private int maxParticlesPerCell;
+    [SerializeField] private int maxSpringsPerParticle;
     [SerializeField] public float particleRadius;
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
@@ -54,54 +60,21 @@ public class GPUSimulationManager : MonoBehaviour
     [HideInInspector] public int numParticles;
 
     private Dictionary<string, int> KernelIDs;
-
-    public readonly Dictionary<string, ComputeBuffer> buffers = new()
-    {
-        { "Positions", null },
-        { "PrevPositions", null },
-        { "ForceBuffersX", null },
-        { "ForceBuffersY", null },
-        { "Velocities", null },
-        { "Densities", null },
-        { "NearDensities", null },
-        { "Springs", null },
-
-        { "CellsLength", null },
-        { "NeighboursLength", null },
-
-        { "DebugFloat", null },
-        { "DebugInt", null }
-    };
-
-    public readonly Dictionary<string, RenderTexture> textures = new()
-    {
-        { "Grid", null },
-        { "Neighbours", null },
-    };
+    public Dictionary<string, ComputeBuffer> Buffers = new();
+    public Dictionary<string, RenderTexture> Textures = new();
 
     public int3 threadGropus;
-    private const int float2Size = 8;
+    public int3 gridThreadGropus;
     private const float fakeDT = 1 / 60f;
-
-    private int[] neighboursFlat;
-    private uint[] neighbourLengthsFlat;
-    private Texture2D neighboursStagingTex;
-    private readonly List<int> neighbourListCPU = new();
-
     private readonly int debugLength = 100;
-
-    private List<GameObject> squares = new();
 
     private void Start()
     {
-        //DrawSPGradient();
         Setup();
     }
 
     private void Update()
     {
-        SP.Draw(Color.green);
-
         if (Input.GetKeyDown(KeyCode.R))
             Setup();
 
@@ -111,19 +84,7 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        // if (Input.GetKeyDown(KeyCode.W))
-        // {
-        //     foreach (var square in squares)
-        //         Destroy(square);
-
-        //     var neighbourIndices = GetNeighboursIndicesDebug(GetMousePos());
-        //     Debug.Log(neighbourIndices.Count);
-        //     var neighbourPositons = GetNeighbourPositionsDebug(neighbourIndices);
-        //     DrawPointsDebug(neighbourPositons);
-        // }
-
-        // var neighbours = GetNeighboursIndicesDebug(100);
-        render.DrawParticles(null);
+        render.DrawParticles();
     }
 
     private void SimulationStep()
@@ -131,36 +92,10 @@ public class GPUSimulationManager : MonoBehaviour
         float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
         compute.SetFloat("dt", dt);
 
-        // todo change it
-        int3 groups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
-        compute.Dispatch(KernelIDs["ClearGrid"], groups);
+        compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
         compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
-
-        // float2 boundingBoxSize = spawn.GetBoundingBoxSize();
-        // SpatialPartitioning sp = new(
-        //     new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
-        //     new(boundingBoxSize.x / 2, boundingBoxSize.y / 2),
-        //     settings.interactionRadius);
-        // var positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
-        // sp.Init(positions);
-
-        // int maxN = maxParticlesPerCell * 9;
-        // Array.Clear(neighboursFlat, 0, neighboursFlat.Length);
-        // for (int i = 0; i < positions.Length; i++)
-        // {
-        //     sp.GetNeighbours(positions[i], neighbourListCPU);
-        //     int count = math.min(neighbourListCPU.Count, maxN);
-        //     neighbourLengthsFlat[i] = (uint)count;
-        //     for (int j = 0; j < count; j++)
-        //         neighboursFlat[j * numParticles + i] = neighbourListCPU[j];
-        // }
-
-        // buffers["NeighboursLength"].SetData(neighbourLengthsFlat);
-        // neighboursStagingTex.SetPixelData(neighboursFlat, 0);
-        // neighboursStagingTex.Apply(false);
-        // Graphics.CopyTexture(neighboursStagingTex, textures["Neighbours"]);
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
 
@@ -170,10 +105,10 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
 
-        compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
-        compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
-        compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+        // compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
+        // compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+        // compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
+        // compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
         compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
@@ -191,7 +126,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void OnValidate()
     {
-        if (buffers["Positions"] != null)
+        if (Buffers["Positions"] != null)
         {
             Application.targetFrameRate = targetFrameRate;
             UpdateComputeSettings();
@@ -201,6 +136,9 @@ public class GPUSimulationManager : MonoBehaviour
     private void Setup()
     {
         KernelIDs = ComputeHelper.GetKernels(compute);
+        Buffers = ComputeHelper.GetBuffers(compute);
+        Textures = ComputeHelper.GetTextures(compute);
+
         Application.targetFrameRate = targetFrameRate;
         renderDebug = new(debugMaterial);
 
@@ -215,16 +153,13 @@ public class GPUSimulationManager : MonoBehaviour
         ReleaseBuffers();
         CreateBuffers();
 
-        int maxN = maxParticlesPerCell * 9;
-        neighboursFlat = new int[numParticles * maxN];
-        neighbourLengthsFlat = new uint[numParticles];
-        neighboursStagingTex = new Texture2D(numParticles, maxN, TextureFormat.RFloat, false);
-
         SetBuffers();
         SetComputeSettings();
+        
         threadGropus = compute.GetThreadGroups(0, numParticles);
-        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
+        gridThreadGropus = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
 
+        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
         render.Setup(this);
     }
 
@@ -262,6 +197,7 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.SetInt("numCells", SP.columns * SP.rows);
         compute.SetInt("maxParticlesPerCell", maxParticlesPerCell);
+        compute.SetInt("maxSpringsPerParticle", maxSpringsPerParticle);
         compute.SetVector("offset", new(SP.offset.x, SP.offset.y));
         compute.SetFloat("length", SP.length);
         compute.SetInt("columns", SP.columns);
@@ -271,11 +207,11 @@ public class GPUSimulationManager : MonoBehaviour
     private void SetBuffers()
     {
         foreach (var kernel in KernelIDs)
-            foreach (var buffer in buffers)
+            foreach (var buffer in Buffers)
                 compute.SetBuffer(kernel.Value, buffer.Key, buffer.Value);
 
         foreach (var kernel in KernelIDs)
-            foreach (var texture in textures)
+            foreach (var texture in Textures)
                 compute.SetTexture(kernel.Value, texture.Key, texture.Value);
     }
 
@@ -284,34 +220,34 @@ public class GPUSimulationManager : MonoBehaviour
         if (numParticles == 0)
             Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
 
-        buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
-        buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
-        buffers["ForceBuffersX"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
-        buffers["ForceBuffersY"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
-        buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
-        buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
-        buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
-        buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializeSprings());
+        Buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
+        Buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
+        Buffers["ForceBuffersX"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
+        Buffers["ForceBuffersY"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
+        Buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
 
-        textures["Grid"] = ComputeHelper.CreateRenderTexture(SP.columns * SP.rows, maxParticlesPerCell);
-        textures["Neighbours"] = ComputeHelper.CreateRenderTexture(numParticles, maxParticlesPerCell * 9);
-        buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
-        buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+        Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
 
-        buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
-        buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
+        Buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData<Spring>(numParticles * maxSpringsPerParticle);
+        Buffers["SpringLengths"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+
+        Textures["Grid"] = ComputeHelper.CreateRenderTexture2D(SP.columns * SP.rows, maxParticlesPerCell);
+        Textures["Neighbours"] = ComputeHelper.CreateRenderTexture2D(numParticles, maxParticlesPerCell * 9);
+        Buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
+        Buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+
+        Buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
+        Buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
     }
 
     private void ReleaseBuffers()
     {
-        foreach (var buffer in buffers)
+        foreach (var buffer in Buffers)
             buffer.Value?.Release();
 
-        foreach (var texture in textures)
+        foreach (var texture in Textures)
             texture.Value?.Release();
-
-        if (neighboursStagingTex != null)
-            Destroy(neighboursStagingTex);
     }
 
     private void OnDestroy()
@@ -340,8 +276,8 @@ public class GPUSimulationManager : MonoBehaviour
 
     private List<int> GetNeighboursIndicesDebug(int index)
     {
-        var neighboursLength = ComputeHelper.GetBuffer<int>(buffers["NeighboursLength"], index);
-        var neighboursIndices = ComputeHelper.GetTextureStripe<int>(textures["Neighbours"], index);
+        var neighboursLength = ComputeHelper.GetBuffer<int>(Buffers["NeighboursLength"], index);
+        var neighboursIndices = ComputeHelper.GetTextureStripe<int>(Textures["Neighbours"], index);
 
         if (neighboursLength < neighboursIndices.Count)
             neighboursIndices.RemoveRange(neighboursLength + 1, neighboursIndices.Count - neighboursLength - 1);
@@ -349,10 +285,11 @@ public class GPUSimulationManager : MonoBehaviour
         return neighboursIndices;
     }
 
+    private List<int> GetNeighboursIndicesDebug(Vector4 position) => GetNeighboursIndicesDebug(new float2(position.x, position.y));
 
-    private List<float2> GetNeighbourPositionsDebug(List<int> indices)
+    private List<float2> GetPositionsDebug(List<int> indices)
     {
-        var positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
+        var positions = ComputeHelper.GetBuffer<float2>(Buffers["Positions"]);
         var result = new List<float2>();
 
         for (int i = 0; i < indices.Count; i++)
@@ -360,82 +297,6 @@ public class GPUSimulationManager : MonoBehaviour
 
         return result;
     }
-
-    private List<int> GetNeighboursIndicesDebug(Vector4 position) => GetNeighboursIndicesDebug(new float2(position.x, position.y));
-
-    private void DrawSPGradient()
-    {
-        // Instantiate(sprite, new Vector3(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2), quaternion.identity);
-        // Instantiate(sprite, new Vector3(boundingBoxSize.x / 2, boundingBoxSize.y / 2), quaternion.identity);
-        var prevScale = sprite.transform.localScale;
-        sprite.transform.localScale = new Vector3(SP.length, SP.length, 1);
-
-        for (int i = 0; i < SP.columns; i++)
-            for (int j = 0; j < SP.rows; j++)
-            {
-                var pos = new Vector3(SP.offset.x + (SP.length / 2), SP.offset.y + (SP.length / 2));
-                pos.x += SP.length * i;
-                pos.y += SP.length * j;
-                var square = Instantiate(sprite, pos, quaternion.identity);
-                square.GetComponent<SpriteRenderer>().color = new Color(0, (float)i / SP.columns, (float)j / SP.rows);
-            }
-
-        sprite.transform.localScale = prevScale;
-    }
-
-    private void DrawPointsDebug(List<float2> positions)
-    {
-        foreach (var pos in positions)
-            squares.Add(Instantiate(sprite, new Vector3(pos.x, pos.y), quaternion.identity));
-    }
 #endif
     #endregion
-}
-
-public class SPValues
-{
-    public float2 offset;
-    public float length;
-    public int columns;
-    public int rows;
-
-    public SPValues(float2 bottomLeft, float2 topRight, float length)
-    {
-        if (length <= 0)
-            Debug.LogError($"SPValues: length must be > 0, got {length}");
-
-        this.length = length;
-        offset = bottomLeft;
-        var width = topRight.x - bottomLeft.x;
-        var height = topRight.y - bottomLeft.y;
-
-        if (width <= 0 || height <= 0)
-            Debug.LogWarning($"SPValues: grid dimensions are non-positive (width={width}, height={height}), likely caused by a degenerate bounding box");
-
-        columns = (int)(width / length);
-        rows = (int)(height / length);
-
-        if (width % length != 0) columns++;
-        if (height % length != 0) rows++;
-
-        if (columns == 0 || rows == 0)
-            Debug.LogWarning($"SPValues: grid has zero cells (columns={columns}, rows={rows}), neighbour queries will return nothing");
-    }
-
-    public void Draw(Color color)
-    {
-        for (var i = 0; i <= columns; i++)
-        {
-            Vector3 start = new(offset.x + (length * i), -offset.y, 0);
-            Vector3 end = new(offset.x + (length * i), offset.y, 0);
-            Debug.DrawLine(start, end, color);
-        }
-
-        for (var i = 0; i <= rows; i++)
-        {
-            Vector3 start = new(-offset.x, offset.y + (length * i), 0);
-            Vector3 end = new(offset.x, offset.y + (length * i), 0);
-            Debug.DrawLine(start, end, color);
-        }
-    }
 }

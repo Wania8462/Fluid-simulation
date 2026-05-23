@@ -29,21 +29,27 @@ public class ParticleRender : MonoBehaviour
         rp = ComputeHelper.CreateRenderParams(material);
 
         theradGroups = compute.GetThreadGroups(0, sim.numParticles);
-        compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.buffers["Velocities"]);
+        compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.Buffers["Velocities"]);
         compute.SetInt("numParticles", sim.numParticles);
 
         colorsBuffer?.Release();
         colorsBuffer = ComputeHelper.CreateStructuredBufferWithData(GetDefaultColors(sim.numParticles));
         compute.SetBuffer(CalculateColorsKernelID, "Colors", colorsBuffer);
 
-        rp.matProps.SetBuffer("Positions", sim.buffers["Positions"]);
+        rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);
     }
 
-    public void DrawParticles(List<int> indices)
+    public void DrawParticles()
     {
         compute.Dispatch(CalculateColorsKernelID, theradGroups);
-        // ColorParticles(indices);
+        Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
+    }
+
+    public void DrawParticles(List<int> indicesToHighlight)
+    {
+        compute.Dispatch(CalculateColorsKernelID, theradGroups);
+        ColorParticles(indicesToHighlight);
         Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
     }
 

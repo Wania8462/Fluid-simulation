@@ -20,14 +20,22 @@ void CalculateColors (indexer = e)
 static float2 ZeroImpulse = float2(0, 0);
 static int FloatScale = 1000000;
 
+// struct Spring {
+//     int neighbourIndex;
+//     float restLength;
+// };
+
 RWStructuredBuffer<float2> Positions;
 RWStructuredBuffer<float2> PrevPositions;
 RWBuffer<int> ForceBuffersX;
 RWBuffer<int> ForceBuffersY;
 RWStructuredBuffer<float2> Velocities;
+
 RWBuffer<float> Densities;
 RWBuffer<float> NearDensities;
-RWBuffer<float> Springs;
+
+// RWStructuredBuffer<Spring> Springs;
+// RWBuffer<uint> SpringLengths;
 
 RWTexture2D<uint> Grid;
 RWTexture2D<uint> Neighbours;
@@ -53,6 +61,7 @@ float nearStiffness;
 float restDensity;
 
 // Springs settings
+uint maxSpringsPerParticle;
 float springInteractionRadius;
 float springRadius;
 float springStiffness;
@@ -95,7 +104,7 @@ float2 ReadForceBuffer(uint index)
                   (float)ForceBuffersY[index] / FloatScale);
 }
 
-uint SpringIndex(uint i, uint j) => return i * numParticles + j;
+uint SpringIndex(uint i, uint j) => i * maxSpringsPerParticle + j;
 
 [threads(numParticles)]
 void ExternalForces (indexer = e) => Velocities[e].y += dt * gravity;
@@ -104,33 +113,33 @@ void ExternalForces (indexer = e) => Velocities[e].y += dt * gravity;
 void ClearForceBuffers (indexer = e) => SetForceBuffer(id.x, ZeroImpulse);
 
 [threads(numParticles)]
-void DoubleDensityRelaxation (indexer = e)
+void DoubleDensityRelaxation (indexer = id.x)
 {
-    Densities[e] = 0;
-    NearDensities[e] = 0;
+    Densities[id.x] = 0;
+    NearDensities[id.x] = 0;
 
-    for (i; 0 -> NeighboursLength[e])
+    for (i; 0 -> NeighboursLength[id.x])
     {
-        float mag = DistanceSq(Positions[e], Positions[Neighbours[uint2(id.x, i)]]);
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
         
         float q = mag / interactionRadius;
-        Densities[e] += QuadraticSpikyKernel(q);
-        NearDensities[e] += CubicSpikyKernel(q);
+        Densities[id.x] += QuadraticSpikyKernel(q);
+        NearDensities[id.x] += CubicSpikyKernel(q);
     }
     
-    float pressure = stiffness * (Densities[e] - restDensity);
-    float nearPressure = nearStiffness * NearDensities[e];
+    float pressure = stiffness * (Densities[id.x] - restDensity);
+    float nearPressure = nearStiffness * NearDensities[id.x];
     
-    for (j; 0 -> NeighboursLength[e])
+    for (j; 0 -> NeighboursLength[id.x])
     {
-        float mag = DistanceSq(Positions[e], Positions[Neighbours[uint2(id.x, j)]]);
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
         
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[e], Positions[Neighbours[uint2(id.x, j)]], mag);
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]], mag);
         float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
         AtomicAddForceBuffer(Neighbours[uint2(id.x, j)], displacement);
@@ -145,85 +154,84 @@ void ApplyForceBuffers (indexer = e) => Positions[e] += ReadForceBuffer(id.x);
 void ApplyForceBuffersToVelocities (indexer = e) => Velocities[e] += ReadForceBuffer(id.x);
 
 [threads(numParticles)]
-void ApplyViscosity (indexer = e)
+void ApplyViscosity (indexer = id.x)
 {
-    for (i; 0 -> numParticles)
+    for (i; 0 -> NeighboursLength[id.x])
     {
         if (i >= id.x) continue;
-        float mag = Distance(Positions[e], Positions[i]);
+        float mag = Distance(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
         if (mag > interactionRadius || mag == 0) continue;
 
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[e], Positions[i], mag);
-        float inwardVelocity = dot(Velocities[e] - Velocities[i], r);
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]], mag);
+        float inwardVelocity = dot(Velocities[id.x] - Velocities[Neighbours[uint2(id.x, i)]], r);
         if(inwardVelocity <= 0) continue;
 
         float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
         AtomicAddForceBuffer(id.x, -impulse);
-        AtomicAddForceBuffer(i, impulse);
+        AtomicAddForceBuffer(Neighbours[uint2(id.x, i)], impulse);
     }
 }
 
-[threads(numParticles)]
-void AdjustSprings (indexer = e)
-{
-    for (j; 0 -> numParticles)
-    {
-        if (j <= id.x) continue;
-
-        uint springIndex = SpringIndex(id.x, j);
-        float mag = Distance(Positions[e], Positions[j]);
-
-        if (mag == 0) continue;
-
-        if (mag > springRadius)
-        {
-            Springs[springIndex] = 0;
-            continue;
-        }
-
-        float q = mag / springInteractionRadius;
-        float restLength = Springs[SpringIndex(id.x, j)];
+// [threads(numParticles)]
+// void AdjustSprings (indexer = id.x)
+// {
+//     for (n; 0 -> NeighboursLength[id.x])
+//     {
+//         if (id.x >= Neighbours[uint2(id.x, n)]) continue;
+//         float mag = Distance(Positions[id.x], Positions[Neighbours[uint2(id.x, n)]]);
+//         if (mag == 0) continue;
         
-        if (restLength == 0)
-            restLength = springRadius;
+//         int springIndex = SpringIndex(id.x, n);
 
-        float deformation = springDeformationLimit * restLength;
+//         if (mag > springRadius)
+//         {
+//             RemoveSpring(springIndex);
+//             continue;
+//         }
 
-        if (mag > restLength + deformation)
-            Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
+//         float q = mag / springInteractionRadius;
+//         float restLength = Springs(springIndex).restLength;
+        
+//         if (restLength == 0)
+//             restLength = springRadius;
 
-        else if (mag < restLength + deformation)
-            Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
-    }
-}
+//         float deformation = springDeformationLimit * restLength;
 
-[threads(numParticles)]
-void SpringDisplacements (indexer = e)
-{
-    for (j; 0 -> numParticles)
-    {
-        if (j <= id.x) continue;
+//         if (mag > restLength + deformation)
+//             Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
 
-        float restLength = Springs[SpringIndex(id.x, j)];
-        if (restLength == 0) continue;
+//         else if (mag < restLength + deformation)
+//             Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
+//     }
+// }
 
-        float mag = Distance(Positions[e], Positions[j]);
-        if (mag == 0) continue;
+// [threads(numParticles)]
+// void SpringDisplacements (indexer = e)
+// {
+//     for (j; 0 -> numParticles)
+//     {
+//         if (j <= id.x) continue;
 
-        float2 r = UnitVector(Positions[e], Positions[j], mag);
-        float2 displacement = DisplacementBySpring(
-            dt,
-            springStiffness,
-            restLength,
-            springRadius,
-            mag,
-            r) * 0.5;
+//         float restLength = Springs[SpringIndex(id.x, j)];
+//         if (restLength == 0) continue;
 
-        AtomicAddForceBuffer(id.x, -displacement);
-        AtomicAddForceBuffer(j, displacement);
-    }
-}
+//         float mag = Distance(Positions[e], Positions[j]);
+//         if (mag == 0) continue;
+
+//         float2 r = UnitVector(Positions[e], Positions[j], mag);
+//         float2 displacement = DisplacementBySpring(
+//             dt,
+//             springStiffness,
+//             restLength,
+//             springRadius,
+//             mag,
+//             r) * 0.5;
+
+//         AtomicAddForceBuffer(id.x, -displacement);
+//         AtomicAddForceBuffer(j, displacement);
+//     }
+// }
 
 [threads(numParticles)]
 void ResolveBoundaries (indexer = e)

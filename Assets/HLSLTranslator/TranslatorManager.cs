@@ -11,7 +11,7 @@ namespace Translator
         private const string ConfigPath = "Assets/HLSLTranslator/Translator.conf";
         private const string CodeStoreName = "SourceCodes";
 
-        [MenuItem("Translator/TranslateAll")]
+        [MenuItem("Tools/Translator/TranslateAll")]
         public static void TranslateAllMenu()
         {
             TranslateAll();

@@ -819,7 +819,7 @@ MonoBehaviour:
     flow: 0
     maxParticles: 5000
     includeBody: 0
-    useParticlesAsBorder: 1
+    useParticlesAsBorder: 0
     body:
       radius: 10
       position:

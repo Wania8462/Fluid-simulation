@@ -10,6 +10,17 @@ public static class ComputeHelper
 {
     private const int commandCount = 1;
 
+    private static readonly HashSet<string> bufferTypes = new()
+    {
+        "RWStructuredBuffer<", "StructuredBuffer<",
+        "RWBuffer<", "Buffer<"
+    };
+
+    private static readonly HashSet<string> textureTypes = new()
+    {
+        "RWTexture2D<", "Texture2D<", "Texture3D<"
+    };
+
     public static ComputeBuffer CreateStructuredBuffer<T>(int count)
     {
         return new ComputeBuffer(count, GetStride<T>());
@@ -29,7 +40,7 @@ public static class ComputeHelper
         return buffer;
     }
 
-    public static RenderTexture CreateRenderTexture(int width, int height)
+    public static RenderTexture CreateRenderTexture2D(int width, int height)
     {
         RenderTexture texture = new(width, height, depth: 0, RenderTextureFormat.RInt)
         { enableRandomWrite = true };
@@ -37,9 +48,17 @@ public static class ComputeHelper
         return texture;
     }
 
-    public static RenderTexture CreateRenderTexture(RenderTexture texture)
+    public static RenderTexture CreateRenderTexture3D(int width, int depth, int height)
     {
-        RenderTexture result = new(texture.width, texture.height, depth: 0, RenderTextureFormat.RInt)
+        RenderTexture texture = new(width, height, depth, RenderTextureFormat.RInt)
+        { enableRandomWrite = true };
+        texture.Create();
+        return texture;
+    }
+
+    public static RenderTexture CopyTexture(RenderTexture texture)
+    {
+        RenderTexture result = new(texture.width, texture.height, texture.depth, RenderTextureFormat.RInt)
         { enableRandomWrite = true };
         result.Create();
         return result;
@@ -133,7 +152,7 @@ public static class ComputeHelper
 
     public static RenderTexture GetTexture<T>(RenderTexture texture) where T : struct
     {
-        RenderTexture result = CreateRenderTexture(texture);
+        RenderTexture result = CopyTexture(texture);
         Graphics.Blit(texture, result);
         return result;
     }
@@ -313,6 +332,34 @@ public static class ComputeHelper
 
         for (int i = 0; i < lines.Length; i++)
             result.Add(lines[i].Split(' ').Last(), i);
+
+        return result;
+    }
+
+    public static Dictionary<string, ComputeBuffer> GetBuffers(ComputeShader compute)
+    {
+        string path = AssetDatabase.GetAssetPath(compute);
+        string source = TranslatorManager.GetTranslatedVer(path);
+        string[] lines = source.Split('\n');
+        string[] bufferLines = lines.Where(line => bufferTypes.Any(t => line.Contains(t))).ToArray();
+        Dictionary<string, ComputeBuffer> result = new();
+
+        for (int i = 0; i < bufferLines.Length; i++)
+            result.Add(bufferLines[i].Split(' ').Last()[..^1], null);
+
+        return result;
+    }
+
+    public static Dictionary<string, RenderTexture> GetTextures(ComputeShader compute)
+    {
+        string path = AssetDatabase.GetAssetPath(compute);
+        string source = TranslatorManager.GetTranslatedVer(path);
+        string[] lines = source.Split('\n');
+        string[] bufferLines = lines.Where(line => textureTypes.Any(t => line.Contains(t))).ToArray();
+        Dictionary<string, RenderTexture> result = new();
+
+        for (int i = 0; i < bufferLines.Length; i++)
+            result.Add(bufferLines[i].Split(' ').Last()[..^1], null);
 
         return result;
     }

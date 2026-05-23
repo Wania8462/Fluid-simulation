@@ -24,8 +24,6 @@ void CalculateColors (uint3 id : SV_DispatchThreadID)
 #pragma kernel ApplyForceBuffers
 #pragma kernel ApplyForceBuffersToVelocities
 #pragma kernel ApplyViscosity
-#pragma kernel AdjustSprings
-#pragma kernel SpringDisplacements
 #pragma kernel ResolveBoundaries
 #pragma kernel AdvancePredictedPositions
 #pragma kernel AttractToMouse
@@ -40,14 +38,16 @@ void CalculateColors (uint3 id : SV_DispatchThreadID)
 static const float2 ZeroImpulse = float2(0, 0);
 static const int FloatScale = 1000000;
 
+
 RWStructuredBuffer<float2> Positions;
 RWStructuredBuffer<float2> PrevPositions;
 RWBuffer<int> ForceBuffersX;
 RWBuffer<int> ForceBuffersY;
 RWStructuredBuffer<float2> Velocities;
+
 RWBuffer<float> Densities;
 RWBuffer<float> NearDensities;
-RWBuffer<float> Springs;
+
 
 RWTexture2D<uint> Grid;
 RWTexture2D<uint> Neighbours;
@@ -70,6 +70,7 @@ const float stiffness;
 const float nearStiffness;
 const float restDensity;
 
+const uint maxSpringsPerParticle;
 const float springInteractionRadius;
 const float springRadius;
 const float springStiffness;
@@ -111,7 +112,7 @@ float2 ReadForceBuffer(uint index)
 
 uint SpringIndex(uint i, uint j)
 {
-    return i * numParticles + j;
+    i * maxSpringsPerParticle + j;
 }
 
 [numthreads(64,1,1)]
@@ -188,87 +189,35 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    for (uint i = 0; i < numParticles; i++)
+    for (uint i = 0; i < NeighboursLength[id.x]; i++)
     {
         if (i >= id.x) continue;
-        float mag = Distance(Positions[id.x], Positions[i]);
+        float mag = Distance(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
         if (mag > interactionRadius || mag == 0) continue;
 
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[i], mag);
-        float inwardVelocity = dot(Velocities[id.x] - Velocities[i], r);
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]], mag);
+        float inwardVelocity = dot(Velocities[id.x] - Velocities[Neighbours[uint2(id.x, i)]], r);
         if(inwardVelocity <= 0) continue;
 
         float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
         AtomicAddForceBuffer(id.x, -impulse);
-        AtomicAddForceBuffer(i, impulse);
+        AtomicAddForceBuffer(Neighbours[uint2(id.x, i)], impulse);
     }
 }
 
-[numthreads(64,1,1)]
-void AdjustSprings (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles) return;
 
-    for (uint j = 0; j < numParticles; j++)
-    {
-        if (j <= id.x) continue;
 
-        uint springIndex = SpringIndex(id.x, j);
-        float mag = Distance(Positions[id.x], Positions[j]);
 
-        if (mag == 0) continue;
 
-        if (mag > springRadius)
-        {
-            Springs[springIndex] = 0;
-            continue;
-        }
 
-        float q = mag / springInteractionRadius;
-        float restLength = Springs[SpringIndex(id.x, j)];
 
-        if (restLength == 0)
-        restLength = springRadius;
 
-        float deformation = springDeformationLimit * restLength;
 
-        if (mag > restLength + deformation)
-        Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
 
-        else if (mag < restLength + deformation)
-        Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
-    }
-}
 
-[numthreads(64,1,1)]
-void SpringDisplacements (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles) return;
 
-    for (uint j = 0; j < numParticles; j++)
-    {
-        if (j <= id.x) continue;
 
-        float restLength = Springs[SpringIndex(id.x, j)];
-        if (restLength == 0) continue;
-
-        float mag = Distance(Positions[id.x], Positions[j]);
-        if (mag == 0) continue;
-
-        float2 r = UnitVector(Positions[id.x], Positions[j], mag);
-        float2 displacement = DisplacementBySpring(
-        dt,
-        springStiffness,
-        restLength,
-        springRadius,
-        mag,
-        r) * 0.5;
-
-        AtomicAddForceBuffer(id.x, -displacement);
-        AtomicAddForceBuffer(j, displacement);
-    }
-}
 
 [numthreads(64,1,1)]
 void ResolveBoundaries (uint3 id : SV_DispatchThreadID)
