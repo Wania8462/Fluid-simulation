@@ -31,8 +31,9 @@ public class ParticleRender : MonoBehaviour
     public void Setup(GPUSimulationManager sim)
     {
         mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, particleQuality) : mesh;
-        commandBuf ??= ComputeHelper.CreateCommandBuffer();
-        commandData ??= ComputeHelper.CreateCommandData(mesh, sim.numParticles);
+        commandBuf?.Release();
+        commandBuf = ComputeHelper.CreateCommandBuffer();
+        commandData = ComputeHelper.CreateCommandData(mesh, sim.numParticles);
         commandBuf.SetData(commandData);
         rp = ComputeHelper.CreateRenderParams(material);
 

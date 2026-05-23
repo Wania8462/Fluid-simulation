@@ -197,13 +197,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Spawn2DParticles
-  particleSquareLength: 100
+  particleSquareLength: 300
   spacing: 2
   useJitter: 1
   jitterStrength: 0.2
   boundingBoxSizeOffset:
-    x: 200
-    y: 100
+    x: 600
+    y: 300
 --- !u!114 &1001776193
 MonoBehaviour:
   m_ObjectHideFlags: 0

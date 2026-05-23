@@ -136,6 +136,8 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void Setup()
     {
+        ReleaseBuffers();
+
         KernelIDs = ComputeHelper.GetKernels(compute);
         Buffers = ComputeHelper.GetBuffers(compute);
         Textures = ComputeHelper.GetTextures(compute);
@@ -151,7 +153,6 @@ public class GPUSimulationManager : MonoBehaviour
 
         numParticles = spawn.GetNumberOfParticles();
 
-        ReleaseBuffers();
         CreateBuffers();
 
         SetBuffers();
@@ -230,8 +231,8 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
         Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
 
-        Buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData<Spring>(numParticles * maxSpringsPerParticle);
-        Buffers["SpringLengths"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+        // Buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData<Spring>(numParticles * maxSpringsPerParticle);
+        // Buffers["SpringLengths"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
         Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
         Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
