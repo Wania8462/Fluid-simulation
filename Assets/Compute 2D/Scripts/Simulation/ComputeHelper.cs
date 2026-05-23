@@ -1,11 +1,10 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Unity.Mathematics;
-using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Translator;
 
 public static class ComputeHelper
 {
@@ -308,7 +307,7 @@ public static class ComputeHelper
     {
         // Won't work in build!!!
         string path = AssetDatabase.GetAssetPath(compute);
-        string source = File.ReadAllText(path);
+        string source = TranslatorManager.GetTranslatedVer(path);
         string[] lines = source.Split('\n').Where(l => l.Contains("#pragma kernel")).ToArray();
         Dictionary<string, int> result = new();
 

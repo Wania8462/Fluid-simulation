@@ -1,3 +1,23 @@
+#pragma kernel CalculateColors
+
+
+RWStructuredBuffer<float2> Velocities;
+RWStructuredBuffer<float4> Colors;
+
+const uint numParticles;
+
+[numthreads(64,1,1)]
+void CalculateColors (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
+    Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+}
+
+
+----------------------------------------------
+
 #pragma kernel ExternalForces
 #pragma kernel ClearForceBuffers
 #pragma kernel DoubleDensityRelaxation
@@ -29,10 +49,10 @@ RWBuffer<float> Densities;
 RWBuffer<float> NearDensities;
 RWBuffer<float> Springs;
 
-RWTexture2D<int> Grid;
-RWTexture2D<int> Neighbours;
-RWBuffer<int> CellsLength;
-RWBuffer<int> NeighboursLength;
+RWTexture2D<uint> Grid;
+RWTexture2D<uint> Neighbours;
+RWBuffer<uint> CellsLength;
+RWBuffer<uint> NeighboursLength;
 
 RWBuffer<float> DebugFloat;
 RWBuffer<int> DebugInt;
@@ -65,7 +85,7 @@ const float2 mousePosition;
 const float dt;
 
 const uint numCells;
-const int maxParticlesPerCell;
+const uint maxParticlesPerCell;
 const float2 offset;
 const float length;
 const int columns;
@@ -376,3 +396,7 @@ void SetNeighbours (uint3 id : SV_DispatchThreadID)
         }
     }
 }
+
+
+----------------------------------------------
+

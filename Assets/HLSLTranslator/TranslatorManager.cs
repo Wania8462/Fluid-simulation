@@ -3,33 +3,48 @@ using System.IO;
 using UnityEngine;
 using System.Linq;
 using UnityEditor.Compilation;
-using System.Collections.Generic;
 
 namespace Translator
 {
     public static class TranslatorManager
     {
-        private const string ConfigPath = "Assets/Editor/HLSLTranslator/Translator.conf";
+        private const string ConfigPath = "Assets/HLSLTranslator/Translator.conf";
         private const string CodeStoreName = "SourceCodes";
 
         [MenuItem("Translator/TranslateAll")]
-        public static void TranslateAllMenu() => CompilationPipeline.RequestScriptCompilation();
-            
+        public static void TranslateAllMenu()
+        {
+            TranslateAll();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            RestoreCode();
+            // CompilationPipeline.RequestScriptCompilation();
+        }
+
+        public static string GetTranslatedVer(string path)
+        {
+            string assetPath = path.Replace('\\', '/');
+            string source = File.ReadAllText(assetPath);
+
+            if (!source.StartsWith("#translate"))
+            {
+                Debug.LogWarning($"Translator manager: trying to get translated version of non shlsl file at {path}");
+                return null;
+            }
+
+            return HLSLTranslator.Translate(source, GetConfig());
+        }
+
         public static void TranslateAll()
         {
             var config = GetConfig();
-            string[] paths = Directory.GetFiles(config.SourcePath, "*.compute", SearchOption.AllDirectories)
-                .Where(p => !p.Contains("TranslatedFiles"))
-                .ToArray();
+            string[] paths = Directory.GetFiles(config.SourcePath, "*.compute", SearchOption.AllDirectories).ToArray();
 
-            // todo fix logs
-            // File.WriteAllText(config.BackupPath, "");
-            // File.WriteAllText(config.TemporaryPath, "");
+            File.WriteAllText(config.BackupPath, "");
+            File.WriteAllText(config.TemporaryPath, "");
 
             foreach (var path in paths)
             {
                 string assetPath = path.Replace('\\', '/');
-
                 string source = File.ReadAllText(assetPath);
 
                 if (source.StartsWith("#translate"))
@@ -48,7 +63,7 @@ namespace Translator
             }
         }
 
-        // [UnityEditor.Callbacks.DidReloadScripts]
+        [UnityEditor.Callbacks.DidReloadScripts]
         public static void RestoreCode()
         {
             string txt = SessionState.GetString(CodeStoreName, null);
@@ -95,6 +110,11 @@ namespace Translator
             static HlslTranslatorStartup()
             {
                 CompilationPipeline.compilationStarted += _ => TranslateAll();
+                EditorApplication.playModeStateChanged += state =>
+                {
+                    if (state == PlayModeStateChange.ExitingEditMode)
+                        TranslateAllMenu();
+                };
             }
         }
 

@@ -260,8 +260,8 @@ public class GPUSimulationManager : MonoBehaviour
 
         textures["Grid"] = ComputeHelper.CreateRenderTexture(SP.columns * SP.rows, maxParticlesPerCell);
         textures["Neighbours"] = ComputeHelper.CreateRenderTexture(numParticles, maxParticlesPerCell * 9);
-        buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(SP.columns * SP.rows);
-        buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<int>(numParticles);
+        buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
+        buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
         buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
         buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
