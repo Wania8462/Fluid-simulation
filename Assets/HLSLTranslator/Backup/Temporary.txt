@@ -1,41 +1,3 @@
-#pragma kernel CalculateColors
-
-
-RWStructuredBuffer<float2> Velocities;
-RWStructuredBuffer<float4> Colors;
-
-const bool solidBlue;
-const bool blueToRed;
-const bool blueToWhite;
-
-const uint numParticles;
-
-[numthreads(64,1,1)]
-void CalculateColors (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles) return;
-
-    if (solidBlue)
-    {
-        Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
-        return;
-    }
-
-    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
-
-    if (blueToRed)
-    {
-        Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
-        return;
-    }
-
-    if (blueToWhite)
-    Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
-}
-
-
-----------------------------------------------
-
 #pragma kernel ExternalForces
 #pragma kernel ClearForceBuffers
 #pragma kernel DoubleDensityRelaxation
@@ -209,7 +171,6 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 
     for (uint i = 0; i < NeighboursLength[id.x]; i++)
     {
-        if (i >= id.x) continue;
         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
         if (mag > interactionRadius || mag == 0) continue;
 
@@ -370,6 +331,44 @@ void SetNeighbours (uint3 id : SV_DispatchThreadID)
             Neighbours[id.x + index * numParticles] = Grid[gridIndex];
         }
     }
+}
+
+
+----------------------------------------------
+
+#pragma kernel CalculateColors
+
+
+RWStructuredBuffer<float2> Velocities;
+RWStructuredBuffer<float4> Colors;
+
+const bool solidBlue;
+const bool blueToRed;
+const bool blueToWhite;
+
+const uint numParticles;
+
+[numthreads(64,1,1)]
+void CalculateColors (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    if (solidBlue)
+    {
+        Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
+        return;
+    }
+
+    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
+
+    if (blueToRed)
+    {
+        Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+        return;
+    }
+
+    if (blueToWhite)
+    Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
 }
 
 

@@ -142,7 +142,6 @@ void ApplyViscosity (indexer = id.x)
 {
     for (i; 0 -> NeighboursLength[id.x])
     {
-        if (i >= id.x) continue;
         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
         if (mag > interactionRadius || mag == 0) continue;
 

@@ -1,38 +1,4 @@
 #translate
-
-RWStructuredBuffer<float2> Velocities;
-RWStructuredBuffer<float4> Colors;
-
-bool solidBlue;
-bool blueToRed;
-bool blueToWhite;
-
-uint numParticles;
-
-[threads(numParticles)]
-void CalculateColors (indexer = e)
-{
-    if (solidBlue)
-    {
-        Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
-        return;
-    }
-
-    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
-
-    if (blueToRed)
-    {
-        Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
-        return;
-    }
-
-    if (blueToWhite)
-        Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
-}
-
----------------------------------------------
-
-#translate
 #include "C:\Users\Ivan\Documents\GitHub\Fluid-simulation\Assets\Compute 2D\Scripts\Simulation\FluidMath.hlsl"
 
 static float2 ZeroImpulse = float2(0, 0);
@@ -176,7 +142,6 @@ void ApplyViscosity (indexer = id.x)
 {
     for (i; 0 -> NeighboursLength[id.x])
     {
-        if (i >= id.x) continue;
         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
         if (mag > interactionRadius || mag == 0) continue;
 
@@ -359,6 +324,40 @@ void SetNeighbours (indexer = id.x)
             Neighbours[id.x + index * numParticles] = Grid[gridIndex];
         }
     }
+}
+
+---------------------------------------------
+
+#translate
+
+RWStructuredBuffer<float2> Velocities;
+RWStructuredBuffer<float4> Colors;
+
+bool solidBlue;
+bool blueToRed;
+bool blueToWhite;
+
+uint numParticles;
+
+[threads(numParticles)]
+void CalculateColors (indexer = e)
+{
+    if (solidBlue)
+    {
+        Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
+        return;
+    }
+
+    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
+
+    if (blueToRed)
+    {
+        Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+        return;
+    }
+
+    if (blueToWhite)
+        Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
 }
 
 ---------------------------------------------

@@ -4,6 +4,12 @@ using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
+enum RenderingType
+{
+    Particles,
+    DensityMap
+}
+
 public struct Spring
 {
     public int neighbourIndex;
@@ -49,16 +55,19 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] public float particleRadius;
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
+    [SerializeField] private RenderingType renderingType;
 
     [Header("References")]
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Spawn2DParticles spawn;
     [SerializeField] private ParticleRender render;
+    [SerializeField] private RenderDensityMap densityMap;
     [SerializeField] private Material debugMaterial;
     private RenderDebug renderDebug;
     private SPValues SP;
 
     [HideInInspector] public int numParticles;
+    public float InteractionRadius => settings.interactionRadius;
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
@@ -85,7 +94,11 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        render.DrawParticles();
+        if (renderingType == RenderingType.Particles)
+            render.DrawParticles();
+
+        else
+            densityMap.Draw();
     }
 
     private void SimulationStep()
@@ -127,10 +140,13 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void OnValidate()
     {
-        if (Buffers["Positions"] != null && Buffers.ContainsKey("Positions"))
+        if (Buffers.ContainsKey("Positions"))
         {
-            Application.targetFrameRate = targetFrameRate;
-            UpdateComputeSettings();
+            if (Buffers["Positions"] != null)
+            {
+                Application.targetFrameRate = targetFrameRate;
+                UpdateComputeSettings();
+            }
         }
     }
 
@@ -163,6 +179,7 @@ public class GPUSimulationManager : MonoBehaviour
 
         Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
         render.Setup(this);
+        densityMap?.Setup(this, boundingBoxSize);
     }
 
     #region Buffer helpers
