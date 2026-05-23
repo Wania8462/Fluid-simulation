@@ -3,12 +3,20 @@ using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
+enum ParticleColor
+{
+    SolidBlue,
+    BlueToRed,
+    BlueToWhite
+}
+
 public class ParticleRender : MonoBehaviour
 {
     [SerializeField] private int particleQuality;
+    [SerializeField] private ParticleColor color;
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Material material;
-    
+
     private Mesh mesh;
 
     private ComputeBuffer colorsBuffer;
@@ -35,6 +43,9 @@ public class ParticleRender : MonoBehaviour
         colorsBuffer?.Release();
         colorsBuffer = ComputeHelper.CreateStructuredBufferWithData(GetDefaultColors(sim.numParticles));
         compute.SetBuffer(CalculateColorsKernelID, "Colors", colorsBuffer);
+        compute.SetBool("solidBlue", color == ParticleColor.SolidBlue);
+        compute.SetBool("blueToRed", color == ParticleColor.BlueToRed);
+        compute.SetBool("blueToWhite", color == ParticleColor.BlueToWhite);
 
         rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);

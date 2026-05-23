@@ -21,8 +21,8 @@ RWBuffer<float> NearDensities;
 // RWStructuredBuffer<Spring> Springs;
 // RWBuffer<uint> SpringLengths;
 
-RWTexture2D<uint> Grid;
-RWTexture2D<uint> Neighbours;
+RWBuffer<uint> Grid;
+RWBuffer<uint> Neighbours;
 RWBuffer<uint> CellsLength;
 RWBuffer<uint> NeighboursLength;
 
@@ -104,10 +104,10 @@ void DoubleDensityRelaxation (indexer = id.x)
 
     for (i; 0 -> NeighboursLength[id.x])
     {
-        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
-        
+
         float q = mag / interactionRadius;
         Densities[id.x] += QuadraticSpikyKernel(q);
         NearDensities[id.x] += CubicSpikyKernel(q);
@@ -118,15 +118,15 @@ void DoubleDensityRelaxation (indexer = id.x)
     
     for (j; 0 -> NeighboursLength[id.x])
     {
-        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]]);
+        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[id.x + j * numParticles]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
-        
+
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, j)]], mag);
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[id.x + j * numParticles]], mag);
         float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
-        AtomicAddForceBuffer(Neighbours[uint2(id.x, j)], displacement);
+        AtomicAddForceBuffer(Neighbours[id.x + j * numParticles], displacement);
         AtomicAddForceBuffer(id.x, -displacement);
     }
 }
@@ -143,17 +143,17 @@ void ApplyViscosity (indexer = id.x)
     for (i; 0 -> NeighboursLength[id.x])
     {
         if (i >= id.x) continue;
-        float mag = Distance(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]]);
+        float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
         if (mag > interactionRadius || mag == 0) continue;
 
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[uint2(id.x, i)]], mag);
-        float inwardVelocity = dot(Velocities[id.x] - Velocities[Neighbours[uint2(id.x, i)]], r);
+        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]], mag);
+        float inwardVelocity = dot(Velocities[id.x] - Velocities[Neighbours[id.x + i * numParticles]], r);
         if(inwardVelocity <= 0) continue;
 
         float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
         AtomicAddForceBuffer(id.x, -impulse);
-        AtomicAddForceBuffer(Neighbours[uint2(id.x, i)], impulse);
+        AtomicAddForceBuffer(Neighbours[id.x + i * numParticles], impulse);
     }
 }
 
@@ -162,8 +162,8 @@ void ApplyViscosity (indexer = id.x)
 // {
 //     for (n; 0 -> NeighboursLength[id.x])
 //     {
-//         if (id.x >= Neighbours[uint2(id.x, n)]) continue;
-//         float mag = Distance(Positions[id.x], Positions[Neighbours[uint2(id.x, n)]]);
+//         if (id.x >= Neighbours[id.x + n * numParticles]) continue;
+//         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + n * numParticles]]);
 //         if (mag == 0) continue;
         
 //         int springIndex = SpringIndex(id.x, n);
@@ -290,15 +290,16 @@ void ClearNeighbours (indexer = e) => NeighboursLength[e] = 0;
 [threads(numParticles)]
 void InitSpatialPartitoning (indexer = e)
 {
-    uint cellIndex = GetCellIndex(Positions[e]);
+    uint2 cellPosition = GetCellPosition(Positions[e]);
+    uint cellIndex = cellPosition.x + cellPosition.y * columns;
     uint ret;
     InterlockedAdd(CellsLength[cellIndex], 1, ret);
 
     if (ret < maxParticlesPerCell)
     {
-        Grid[uint2(cellIndex, ret)] = id.x;
+        uint gridIndex = cellPosition.x + cellPosition.y * columns + ret * columns * rows;
+        Grid[cellPosition.x + cellPosition.y * columns + ret * columns * rows] = id.x;
     }
-    
 }
 
 [threads(numParticles)]
@@ -319,7 +320,9 @@ void SetNeighbours (indexer = id.x)
 
             uint index;
             InterlockedAdd(NeighboursLength[id.x], 1, index);
-            Neighbours[uint2(id.x, index)] = Grid[uint2(neighbourIndex, j)];
+
+            uint gridIndex = neighbourPos.x + neighbourPos.y * columns + j * columns * rows;
+            Neighbours[id.x + index * numParticles] = Grid[gridIndex];
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 
 public struct Spring
@@ -126,7 +127,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void OnValidate()
     {
-        if (Buffers["Positions"] != null)
+        if (Buffers["Positions"] != null && Buffers.ContainsKey("Positions"))
         {
             Application.targetFrameRate = targetFrameRate;
             UpdateComputeSettings();
@@ -155,7 +156,7 @@ public class GPUSimulationManager : MonoBehaviour
 
         SetBuffers();
         SetComputeSettings();
-        
+
         threadGropus = compute.GetThreadGroups(0, numParticles);
         gridThreadGropus = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
 
@@ -232,8 +233,8 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData<Spring>(numParticles * maxSpringsPerParticle);
         Buffers["SpringLengths"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
-        Textures["Grid"] = ComputeHelper.CreateRenderTexture2D(SP.columns * SP.rows, maxParticlesPerCell);
-        Textures["Neighbours"] = ComputeHelper.CreateRenderTexture2D(numParticles, maxParticlesPerCell * 9);
+        Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
+        Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
         Buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
         Buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
@@ -254,6 +255,19 @@ public class GPUSimulationManager : MonoBehaviour
     {
         ReleaseBuffers();
     }
+
+#if UNITY_EDITOR
+    private void OnEnable()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
+    }
+
+    private void OnDisable()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+    }
+#endif
+
     #endregion
 
     private Vector4 GetMousePos() => new(
@@ -277,10 +291,11 @@ public class GPUSimulationManager : MonoBehaviour
     private List<int> GetNeighboursIndicesDebug(int index)
     {
         var neighboursLength = ComputeHelper.GetBuffer<int>(Buffers["NeighboursLength"], index);
-        var neighboursIndices = ComputeHelper.GetTextureStripe<int>(Textures["Neighbours"], index);
+        var allNeighbours = ComputeHelper.GetBuffer<uint>(Buffers["Neighbours"]);
 
-        if (neighboursLength < neighboursIndices.Count)
-            neighboursIndices.RemoveRange(neighboursLength + 1, neighboursIndices.Count - neighboursLength - 1);
+        var neighboursIndices = new List<int>();
+        for (int i = 0; i < neighboursLength; i++)
+            neighboursIndices.Add((int)allNeighbours[index + i * numParticles]);
 
         return neighboursIndices;
     }

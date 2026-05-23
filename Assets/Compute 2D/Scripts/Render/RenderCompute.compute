@@ -3,11 +3,29 @@
 RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float4> Colors;
 
+bool solidBlue;
+bool blueToRed;
+bool blueToWhite;
+
 uint numParticles;
 
 [threads(numParticles)]
 void CalculateColors (indexer = e)
 {
+    if (solidBlue)
+    {
+        Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
+        return;
+    }
+
     float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
-    Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+
+    if (blueToRed)
+    {
+        Colors[id.x] = float4(intensity, 0.0, 1 - intensity, 1.0);
+        return;
+    }
+
+    if (blueToWhite)
+        Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
 }

@@ -50,11 +50,17 @@ public static class ComputeHelper
 
     public static RenderTexture CreateRenderTexture3D(int width, int depth, int height)
     {
-        RenderTexture texture = new(width, height, depth, RenderTextureFormat.RInt)
-        { enableRandomWrite = true };
+        RenderTexture texture = new(width, height, depth: 0, RenderTextureFormat.RInt)
+        {
+            enableRandomWrite = true,
+            dimension = TextureDimension.Tex3D,
+            volumeDepth = depth
+        };
+        
         texture.Create();
         return texture;
     }
+
 
     public static RenderTexture CopyTexture(RenderTexture texture)
     {
