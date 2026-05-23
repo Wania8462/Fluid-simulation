@@ -43,7 +43,7 @@ public class ParticleRender : MonoBehaviour
     public void DrawParticles(List<int> indices)
     {
         compute.Dispatch(CalculateColorsKernelID, theradGroups);
-        ColorParticles(indices);
+        // ColorParticles(indices);
         Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
     }
 

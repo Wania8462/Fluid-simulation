@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
+using Unity.VisualScripting;
 using UnityEngine;
 
 [Serializable]
@@ -82,12 +83,18 @@ public class GPUSimulationManager : MonoBehaviour
     private const int float2Size = 8;
     private const float fakeDT = 1 / 60f;
 
+    private int[] neighboursFlat;
+    private uint[] neighbourLengthsFlat;
+    private Texture2D neighboursStagingTex;
+    private readonly List<int> neighbourListCPU = new();
+
     private readonly int debugLength = 100;
 
     private List<GameObject> squares = new();
 
     private void Start()
     {
+        //DrawSPGradient();
         Setup();
     }
 
@@ -104,19 +111,19 @@ public class GPUSimulationManager : MonoBehaviour
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
 
-        if (Input.GetKeyDown(KeyCode.W))
-        {
-            foreach (var square in squares)
-                Destroy(square);
+        // if (Input.GetKeyDown(KeyCode.W))
+        // {
+        //     foreach (var square in squares)
+        //         Destroy(square);
 
-            var neighbourIndices = GetNeighboursIndicesDebug(GetMousePos());
-            Debug.Log(neighbourIndices.Count);
-            var neighbourPositons = GetNeighbourPositionsDebug(neighbourIndices);
-            DrawPointsDebug(neighbourPositons);
-        }
+        //     var neighbourIndices = GetNeighboursIndicesDebug(GetMousePos());
+        //     Debug.Log(neighbourIndices.Count);
+        //     var neighbourPositons = GetNeighbourPositionsDebug(neighbourIndices);
+        //     DrawPointsDebug(neighbourPositons);
+        // }
 
-        var neighbours = GetNeighboursIndicesDebug(100);
-        render.DrawParticles(neighbours);
+        // var neighbours = GetNeighboursIndicesDebug(100);
+        render.DrawParticles(null);
     }
 
     private void SimulationStep()
@@ -131,7 +138,29 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
 
-        ComputeHelper.LogTexture<int>(textures["Neighbours"], 0);
+        // float2 boundingBoxSize = spawn.GetBoundingBoxSize();
+        // SpatialPartitioning sp = new(
+        //     new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
+        //     new(boundingBoxSize.x / 2, boundingBoxSize.y / 2),
+        //     settings.interactionRadius);
+        // var positions = ComputeHelper.GetBuffer<float2>(buffers["Positions"]);
+        // sp.Init(positions);
+
+        // int maxN = maxParticlesPerCell * 9;
+        // Array.Clear(neighboursFlat, 0, neighboursFlat.Length);
+        // for (int i = 0; i < positions.Length; i++)
+        // {
+        //     sp.GetNeighbours(positions[i], neighbourListCPU);
+        //     int count = math.min(neighbourListCPU.Count, maxN);
+        //     neighbourLengthsFlat[i] = (uint)count;
+        //     for (int j = 0; j < count; j++)
+        //         neighboursFlat[j * numParticles + i] = neighbourListCPU[j];
+        // }
+
+        // buffers["NeighboursLength"].SetData(neighbourLengthsFlat);
+        // neighboursStagingTex.SetPixelData(neighboursFlat, 0);
+        // neighboursStagingTex.Apply(false);
+        // Graphics.CopyTexture(neighboursStagingTex, textures["Neighbours"]);
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
 
@@ -185,6 +214,12 @@ public class GPUSimulationManager : MonoBehaviour
 
         ReleaseBuffers();
         CreateBuffers();
+
+        int maxN = maxParticlesPerCell * 9;
+        neighboursFlat = new int[numParticles * maxN];
+        neighbourLengthsFlat = new uint[numParticles];
+        neighboursStagingTex = new Texture2D(numParticles, maxN, TextureFormat.RFloat, false);
+
         SetBuffers();
         SetComputeSettings();
         threadGropus = compute.GetThreadGroups(0, numParticles);
@@ -274,6 +309,9 @@ public class GPUSimulationManager : MonoBehaviour
 
         foreach (var texture in textures)
             texture.Value?.Release();
+
+        if (neighboursStagingTex != null)
+            Destroy(neighboursStagingTex);
     }
 
     private void OnDestroy()
@@ -331,7 +369,7 @@ public class GPUSimulationManager : MonoBehaviour
         // Instantiate(sprite, new Vector3(boundingBoxSize.x / 2, boundingBoxSize.y / 2), quaternion.identity);
         var prevScale = sprite.transform.localScale;
         sprite.transform.localScale = new Vector3(SP.length, SP.length, 1);
-        
+
         for (int i = 0; i < SP.columns; i++)
             for (int j = 0; j < SP.rows; j++)
             {

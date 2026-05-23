@@ -233,7 +233,7 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 1
-  maxParticlesPerCell: 64
+  maxParticlesPerCell: 128
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0

@@ -74,8 +74,8 @@ uint numCells;
 uint maxParticlesPerCell;
 float2 offset;
 float length;
-int columns;
-int rows;
+uint columns;
+uint rows;
 
 void SetForceBuffer(uint index, float2 value)
 {
@@ -299,30 +299,35 @@ void ClearNeighbours (indexer = e) => NeighboursLength[e] = 0;
 void InitSpatialPartitoning (indexer = e)
 {
     uint cellIndex = GetCellIndex(Positions[e]);
+    uint ret;
+    InterlockedAdd(CellsLength[cellIndex], 1, ret);
 
-    if (CellsLength[cellIndex] < maxParticlesPerCell)
+    if (ret < maxParticlesPerCell)
     {
-        Grid[uint2(cellIndex, CellsLength[cellIndex])] = id.x;
-        CellsLength[cellIndex]++;
+        Grid[uint2(cellIndex, ret)] = id.x;
     }
+    
 }
 
 [threads(numParticles)]
-void SetNeighbours (indexer = e)
+void SetNeighbours (indexer = id.x)
 {
-    uint2 cellPosition = GetCellPosition(Positions[e]);
-    uint cellIndex = cellPosition.x + cellPosition.y * columns;
+    uint2 cellPosition = GetCellPosition(Positions[id.x]);
 
     for (i; 0 -> 9)
     {
         uint2 neighbourPos = cellPosition + offsets2D[i];
-        if (neighbourPos.x == 0xFFFFFFFF || neighbourPos.y == 0xFFFFFFFF) continue;
+        if (neighbourPos.x == 0xFFFFFFFF || neighbourPos.y == 0xFFFFFFFF || neighbourPos.x >= columns || neighbourPos.y >= rows) continue;
         uint neighbourIndex = neighbourPos.x + neighbourPos.y * columns;
 
         for (j; 0 -> CellsLength[neighbourIndex])
         {
-            Neighbours[uint2(id.x, NeighboursLength[e])] = Grid[uint2(neighbourIndex, j)];
-            NeighboursLength[e]++;
+            if (j >= maxParticlesPerCell)
+                continue;
+
+            uint index;
+            InterlockedAdd(NeighboursLength[id.x], 1, index);
+            Neighbours[uint2(id.x, index)] = Grid[uint2(neighbourIndex, j)];
         }
     }
 }
