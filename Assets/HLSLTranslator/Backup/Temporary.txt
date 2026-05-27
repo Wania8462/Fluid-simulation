@@ -185,19 +185,6 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 [numthreads(64,1,1)]
 void ResolveBoundaries (uint3 id : SV_DispatchThreadID)
 {
@@ -332,6 +319,19 @@ void SetNeighbours (uint3 id : SV_DispatchThreadID)
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ----------------------------------------------

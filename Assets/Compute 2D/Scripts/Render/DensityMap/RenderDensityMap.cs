@@ -35,19 +35,19 @@ public class RenderDensityMap : MonoBehaviour
 
         mesh = mesh == null ? MeshGenerator.Rectangle(cellSize.x, cellSize.y) : mesh;
 
-        commandBuf?.Release();
+        ComputeHelper.Release(commandBuf);
         commandBuf = ComputeHelper.CreateCommandBuffer();
         commandData = ComputeHelper.CreateCommandData(mesh, numCells);
         commandBuf.SetData(commandData);
         rp = ComputeHelper.CreateRenderParams(material);
 
-        cellPositionsBuffer?.Release();
+        ComputeHelper.Release(cellPositionsBuffer);
         cellPositionsBuffer = ComputeHelper.CreateStructuredBufferWithData(GenerateCellPositions(bounds));
 
-        densityMapBuffer?.Release();
+        ComputeHelper.Release(densityMapBuffer);
         densityMapBuffer = ComputeHelper.CreateStructuredBuffer<float>(numCells);
 
-        colorsBuffer?.Release();
+        ComputeHelper.Release(colorsBuffer);
         colorsBuffer = ComputeHelper.CreateStructuredBuffer<float4>(numCells);
 
         calcDensitiesKernel = compute.FindKernel("CalculateDensities");
@@ -93,12 +93,22 @@ public class RenderDensityMap : MonoBehaviour
         return positions;
     }
 
+    private void ReleaseBuffers()
+    {
+        ComputeHelper.Release(commandBuf);
+        ComputeHelper.Release(cellPositionsBuffer);
+        ComputeHelper.Release(densityMapBuffer);
+        ComputeHelper.Release(colorsBuffer);
+    }
+
     private void OnDestroy()
     {
-        commandBuf?.Release();
-        cellPositionsBuffer?.Release();
-        densityMapBuffer?.Release();
-        colorsBuffer?.Release();
+        ReleaseBuffers();
         Destroy(mesh);
     }
+
+#if UNITY_EDITOR
+    private void OnEnable()  => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
+    private void OnDisable() => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+#endif
 }

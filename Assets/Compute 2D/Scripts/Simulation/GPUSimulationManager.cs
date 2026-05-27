@@ -80,7 +80,7 @@ public class GPUSimulationManager : MonoBehaviour
     private int3 gridThreadGropus;
 
     private readonly int debugLength = 100;
-    private const float fakeDT = 1 / 60f;
+    private const float fakeDT = 1 / 120f;
 
 
     private float _maxForce = 0f;
@@ -100,6 +100,12 @@ public class GPUSimulationManager : MonoBehaviour
 
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
+
+        else if (Input.GetKeyDown(KeyCode.PageDown))
+        {
+            for (int i = 0; i < 10; i++)
+                SimulationStep();
+        }
 
         if (renderingType == RenderingType.Particles)
             render.DrawParticles();
@@ -187,7 +193,7 @@ public class GPUSimulationManager : MonoBehaviour
         threadGropus = compute.GetThreadGroups(0, numParticles);
         gridThreadGropus = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
 
-        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
+        Camera.main.orthographicSize = math.max(spawn.GetRealHalfBoundSize(0).y + 2, spawn.GetRealHalfBoundSize(0).x - 237);
         render.Setup(this);
         densityMap.Setup(this, boundingBoxSize);
         marchingSquares.Setup(this, boundingBoxSize);
@@ -274,7 +280,7 @@ public class GPUSimulationManager : MonoBehaviour
     private void ReleaseBuffers()
     {
         foreach (var buffer in Buffers)
-            buffer.Value?.Release();
+            ComputeHelper.Release(buffer.Value);
 
         foreach (var texture in Textures)
             texture.Value?.Release();

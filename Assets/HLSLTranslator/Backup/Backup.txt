@@ -156,66 +156,6 @@ void ApplyViscosity (indexer = id.x)
     }
 }
 
-// [threads(numParticles)]
-// void AdjustSprings (indexer = id.x)
-// {
-//     for (n; 0 -> NeighboursLength[id.x])
-//     {
-//         if (id.x >= Neighbours[id.x + n * numParticles]) continue;
-//         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + n * numParticles]]);
-//         if (mag == 0) continue;
-        
-//         int springIndex = SpringIndex(id.x, n);
-
-//         if (mag > springRadius)
-//         {
-//             RemoveSpring(springIndex);
-//             continue;
-//         }
-
-//         float q = mag / springInteractionRadius;
-//         float restLength = Springs(springIndex).restLength;
-        
-//         if (restLength == 0)
-//             restLength = springRadius;
-
-//         float deformation = springDeformationLimit * restLength;
-
-//         if (mag > restLength + deformation)
-//             Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
-
-//         else if (mag < restLength + deformation)
-//             Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
-//     }
-// }
-
-// [threads(numParticles)]
-// void SpringDisplacements (indexer = e)
-// {
-//     for (j; 0 -> numParticles)
-//     {
-//         if (j <= id.x) continue;
-
-//         float restLength = Springs[SpringIndex(id.x, j)];
-//         if (restLength == 0) continue;
-
-//         float mag = Distance(Positions[e], Positions[j]);
-//         if (mag == 0) continue;
-
-//         float2 r = UnitVector(Positions[e], Positions[j], mag);
-//         float2 displacement = DisplacementBySpring(
-//             dt,
-//             springStiffness,
-//             restLength,
-//             springRadius,
-//             mag,
-//             r) * 0.5;
-
-//         AtomicAddForceBuffer(id.x, -displacement);
-//         AtomicAddForceBuffer(j, displacement);
-//     }
-// }
-
 [threads(numParticles)]
 void ResolveBoundaries (indexer = e)
 {
@@ -325,6 +265,66 @@ void SetNeighbours (indexer = id.x)
         }
     }
 }
+
+// [threads(numParticles)]
+// void AdjustSprings (indexer = id.x)
+// {
+//     for (n; 0 -> NeighboursLength[id.x])
+//     {
+//         if (id.x >= Neighbours[id.x + n * numParticles]) continue;
+//         float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + n * numParticles]]);
+//         if (mag == 0) continue;
+        
+//         int springIndex = SpringIndex(id.x, n);
+
+//         if (mag > springRadius)
+//         {
+//             RemoveSpring(springIndex);
+//             continue;
+//         }
+
+//         float q = mag / springInteractionRadius;
+//         float restLength = Springs(springIndex).restLength;
+        
+//         if (restLength == 0)
+//             restLength = springRadius;
+
+//         float deformation = springDeformationLimit * restLength;
+
+//         if (mag > restLength + deformation)
+//             Springs[springIndex] += StretchSpring(dt, plasticity, mag, restLength, deformation);
+
+//         else if (mag < restLength + deformation)
+//             Springs[springIndex] -= CompressSpring(dt, plasticity, mag, restLength, deformation);
+//     }
+// }
+
+// [threads(numParticles)]
+// void SpringDisplacements (indexer = e)
+// {
+//     for (j; 0 -> numParticles)
+//     {
+//         if (j <= id.x) continue;
+
+//         float restLength = Springs[SpringIndex(id.x, j)];
+//         if (restLength == 0) continue;
+
+//         float mag = Distance(Positions[e], Positions[j]);
+//         if (mag == 0) continue;
+
+//         float2 r = UnitVector(Positions[e], Positions[j], mag);
+//         float2 displacement = DisplacementBySpring(
+//             dt,
+//             springStiffness,
+//             restLength,
+//             springRadius,
+//             mag,
+//             r) * 0.5;
+
+//         AtomicAddForceBuffer(id.x, -displacement);
+//         AtomicAddForceBuffer(j, displacement);
+//     }
+// }
 
 ---------------------------------------------
 
