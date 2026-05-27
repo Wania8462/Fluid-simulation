@@ -48,7 +48,7 @@ public class RenderMarchingSquares : MonoBehaviour
 
         // Single command buffer holds all 16 cases' indirect args.
         // Stride must equal IndirectDrawIndexedArgs.size (20 bytes).
-        commandBuf?.Release();
+        ComputeHelper.Release(commandBuf);
         commandBuf = new GraphicsBuffer(
             GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Structured,
             16,
@@ -71,21 +71,21 @@ public class RenderMarchingSquares : MonoBehaviour
             rp[c].matProps.SetFloat("densityThreshold", densityThreshold);
         }
 
-        vertexPositionsBuffer?.Release();
+        ComputeHelper.Release(vertexPositionsBuffer);
         vertexPositionsBuffer = ComputeHelper.CreateStructuredBufferWithData(
             GenerateVertexPositions(bounds, numVerticesX, numVerticesY)
         );
 
-        vertexDensitiesBuffer?.Release();
+        ComputeHelper.Release(vertexDensitiesBuffer);
         vertexDensitiesBuffer = ComputeHelper.CreateStructuredBuffer<float>(numVertices);
 
-        caseCountsBuffer?.Release();
+        ComputeHelper.Release(caseCountsBuffer);
         caseCountsBuffer = ComputeHelper.CreateStructuredBuffer<uint>(16);
 
-        casePositionsBuffer?.Release();
+        ComputeHelper.Release(casePositionsBuffer);
         casePositionsBuffer = ComputeHelper.CreateStructuredBuffer<float2>(16 * numCells);
 
-        caseDensitiesBuffer?.Release();
+        ComputeHelper.Release(caseDensitiesBuffer);
         caseDensitiesBuffer = ComputeHelper.CreateStructuredBuffer<float4>(16 * numCells);
 
         clearCaseCountsKernel     = compute.FindKernel("ClearCaseCounts");
@@ -151,16 +151,26 @@ public class RenderMarchingSquares : MonoBehaviour
         return positions;
     }
 
+    private void ReleaseBuffers()
+    {
+        ComputeHelper.Release(commandBuf);
+        ComputeHelper.Release(vertexPositionsBuffer);
+        ComputeHelper.Release(vertexDensitiesBuffer);
+        ComputeHelper.Release(caseCountsBuffer);
+        ComputeHelper.Release(casePositionsBuffer);
+        ComputeHelper.Release(caseDensitiesBuffer);
+    }
+
     private void OnDestroy()
     {
-        commandBuf?.Release();
-        vertexPositionsBuffer?.Release();
-        vertexDensitiesBuffer?.Release();
-        caseCountsBuffer?.Release();
-        casePositionsBuffer?.Release();
-        caseDensitiesBuffer?.Release();
+        ReleaseBuffers();
         if (meshes != null)
             foreach (var m in meshes)
                 if (m != null) Destroy(m);
     }
+
+#if UNITY_EDITOR
+    private void OnEnable()  => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
+    private void OnDisable() => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+#endif
 }

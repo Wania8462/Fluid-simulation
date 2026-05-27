@@ -167,6 +167,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ParticleRender
   particleQuality: 5
   color: 2
+  maxSpeed: 100
   compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
 --- !u!114 &441569836
@@ -182,7 +183,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDensityMap
   resolution: 300
-  densityLimit: 3.5
+  densityLimit: 10
   compute: {fileID: 7200000, guid: 038e2c438917daf4e94680fd7e6b6adc, type: 3}
   material: {fileID: 2100000, guid: 2f9c27889d8bf3a4f88335d548162b1f, type: 2}
 --- !u!114 &441569837
@@ -232,13 +233,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Spawn2DParticles
-  particleSquareLength: 100
+  particleSquareLength: 150
   spacing: 2
-  useJitter: 1
+  useJitter: 0
   jitterStrength: 0.2
   boundingBoxSizeOffset:
-    x: 200
-    y: 100
+    x: 400
+    y: 150
 --- !u!114 &1001776193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -267,14 +268,14 @@ MonoBehaviour:
     springStiffness: 0.1
     springDeformationLimit: 0
     plasticity: 0.05
-    highViscosity: 0
-    lowViscosity: 1
+    highViscosity: 0.2
+    lowViscosity: 3
   maxParticlesPerCell: 64
   maxSpringsPerParticle: 64
   particleRadius: 0.5
-  targetFrameRate: 120
+  targetFrameRate: -1
   useRealDeltaTime: 0
-  renderingType: 2
+  renderingType: 0
   compute: {fileID: 7200000, guid: 31897a459382a2d45af34efb36c17c76, type: 3}
   spawn: {fileID: 1001776192}
   render: {fileID: 441569835}
@@ -282,14 +283,6 @@ MonoBehaviour:
   marchingSquares: {fileID: 441569837}
   debugMaterial: {fileID: 2100000, guid: 97d537b1176625d49b9b5e87cf503036, type: 2}
   numParticles: 0
-  threadGropus:
-    x: 0
-    y: 0
-    z: 0
-  gridThreadGropus:
-    x: 0
-    y: 0
-    z: 0
 --- !u!4 &1001776194
 Transform:
   m_ObjectHideFlags: 0

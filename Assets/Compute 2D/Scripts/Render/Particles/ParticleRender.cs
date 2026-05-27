@@ -14,6 +14,7 @@ public class ParticleRender : MonoBehaviour
 {
     [SerializeField] private int particleQuality;
     [SerializeField] private ParticleColor color;
+    [SerializeField] private float maxSpeed;
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Material material;
 
@@ -31,7 +32,7 @@ public class ParticleRender : MonoBehaviour
     public void Setup(GPUSimulationManager sim)
     {
         mesh = mesh == null ? MeshGenerator.Circle(sim.particleRadius, particleQuality) : mesh;
-        commandBuf?.Release();
+        ComputeHelper.Release(commandBuf);
         commandBuf = ComputeHelper.CreateCommandBuffer();
         commandData = ComputeHelper.CreateCommandData(mesh, sim.numParticles);
         commandBuf.SetData(commandData);
@@ -41,12 +42,13 @@ public class ParticleRender : MonoBehaviour
         compute.SetBuffer(CalculateColorsKernelID, "Velocities", sim.Buffers["Velocities"]);
         compute.SetInt("numParticles", sim.numParticles);
 
-        colorsBuffer?.Release();
+        ComputeHelper.Release(colorsBuffer);
         colorsBuffer = ComputeHelper.CreateStructuredBufferWithData(GetDefaultColors(sim.numParticles));
         compute.SetBuffer(CalculateColorsKernelID, "Colors", colorsBuffer);
         compute.SetBool("solidBlue", color == ParticleColor.SolidBlue);
         compute.SetBool("blueToRed", color == ParticleColor.BlueToRed);
         compute.SetBool("blueToWhite", color == ParticleColor.BlueToWhite);
+        compute.SetFloat("maxSpeed", maxSpeed);
 
         rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);
@@ -86,9 +88,16 @@ public class ParticleRender : MonoBehaviour
         return defaultColors;
     }
 
-    private void OnDestroy()
+    private void ReleaseBuffers()
     {
-        commandBuf?.Release();
-        colorsBuffer.Release();
+        ComputeHelper.Release(commandBuf);
+        ComputeHelper.Release(colorsBuffer);
     }
+
+    private void OnDestroy() => ReleaseBuffers();
+
+#if UNITY_EDITOR
+    private void OnEnable()  => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
+    private void OnDisable() => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+#endif
 }

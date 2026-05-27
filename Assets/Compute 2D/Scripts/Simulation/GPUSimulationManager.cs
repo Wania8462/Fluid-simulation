@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
@@ -73,12 +74,15 @@ public class GPUSimulationManager : MonoBehaviour
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
-    public Dictionary<string, RenderTexture> Textures = new();
 
-    public int3 threadGropus;
-    public int3 gridThreadGropus;
-    private const float fakeDT = 1 / 60f;
+    private int3 threadGropus;
+    private int3 gridThreadGropus;
+
     private readonly int debugLength = 100;
+    private const float fakeDT = 1 / 120f;
+
+
+    private float _maxForce = 0f;
 
     private void Start()
     {
@@ -95,6 +99,12 @@ public class GPUSimulationManager : MonoBehaviour
 
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             SimulationStep();
+
+        else if (Input.GetKeyDown(KeyCode.PageDown))
+        {
+            for (int i = 0; i < 10; i++)
+                SimulationStep();
+        }
 
         if (renderingType == RenderingType.Particles)
             render.DrawParticles();
@@ -161,7 +171,6 @@ public class GPUSimulationManager : MonoBehaviour
 
         KernelIDs = ComputeHelper.GetKernels(compute);
         Buffers = ComputeHelper.GetBuffers(compute);
-        Textures = ComputeHelper.GetTextures(compute);
 
         Application.targetFrameRate = targetFrameRate;
         renderDebug = new(debugMaterial);
@@ -182,7 +191,7 @@ public class GPUSimulationManager : MonoBehaviour
         threadGropus = compute.GetThreadGroups(0, numParticles);
         gridThreadGropus = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
 
-        Camera.main.orthographicSize = spawn.GetRealHalfBoundSize(0).y + 2;
+        Camera.main.orthographicSize = math.max(spawn.GetRealHalfBoundSize(0).y + 2, spawn.GetRealHalfBoundSize(0).x - 237);
         render.Setup(this);
         densityMap.Setup(this, boundingBoxSize);
         marchingSquares.Setup(this, boundingBoxSize);
@@ -234,10 +243,6 @@ public class GPUSimulationManager : MonoBehaviour
         foreach (var kernel in KernelIDs)
             foreach (var buffer in Buffers)
                 compute.SetBuffer(kernel.Value, buffer.Key, buffer.Value);
-
-        foreach (var kernel in KernelIDs)
-            foreach (var texture in Textures)
-                compute.SetTexture(kernel.Value, texture.Key, texture.Value);
     }
 
     private void CreateBuffers()
@@ -269,10 +274,7 @@ public class GPUSimulationManager : MonoBehaviour
     private void ReleaseBuffers()
     {
         foreach (var buffer in Buffers)
-            buffer.Value?.Release();
-
-        foreach (var texture in Textures)
-            texture.Value?.Release();
+            ComputeHelper.Release(buffer.Value);
     }
 
     private void OnDestroy()
@@ -335,6 +337,39 @@ public class GPUSimulationManager : MonoBehaviour
             result.Add(positions[i]);
 
         return result;
+    }
+
+    private static string Commify(long n) =>
+        n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private void LogMaxForce()
+    {
+        const float scale = 1_000_000f;
+        int[] forceX = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersX"]);
+        int[] forceY = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersY"]);
+
+        float max = 0f;
+        int maxIndex = 0;
+        for (int i = 0; i < numParticles; i++)
+        {
+            float fx = forceX[i] / scale;
+            float fy = forceY[i] / scale;
+            float mag = Mathf.Sqrt(fx * fx + fy * fy);
+            if (mag > max)
+            {
+                max = mag;
+                maxIndex = i;
+            }
+        }
+
+        if (max > _maxForce)
+        {
+            _maxForce = max;
+            float percentX = Mathf.Abs(forceX[maxIndex]) / 2147483647f * 100;
+            float percentY = Mathf.Abs(forceY[maxIndex]) / 2147483647f * 100;
+            float maxPercent = percentX > percentY ? percentX : percentY;
+            Debug.Log($"New max force magnitude: {max:F4}. Percent of int used: {maxPercent}% (particle {maxIndex}, raw x={Commify(forceX[maxIndex])}, y={Commify(forceY[maxIndex])})");
+        }
     }
 #endif
     #endregion

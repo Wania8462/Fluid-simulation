@@ -21,23 +21,25 @@ public static class ComputeHelper
         "RWTexture2D<", "Texture2D<", "Texture3D<"
     };
 
+    #region Factory methods
     public static ComputeBuffer CreateStructuredBuffer<T>(int count)
     {
-        return new ComputeBuffer(count, GetStride<T>());
+        var buf = new ComputeBuffer(count, GetStride<T>());
+        return buf;
     }
 
     public static ComputeBuffer CreateStructuredBufferWithData<T>(T[] data)
     {
-        ComputeBuffer buffer = new(data.Length, GetStride<T>());
-        buffer.SetData(data);
-        return buffer;
+        var buf = new ComputeBuffer(data.Length, GetStride<T>());
+        buf.SetData(data);
+        return buf;
     }
 
     public static ComputeBuffer CreateStructuredBufferWithData<T>(int count)
     {
-        ComputeBuffer buffer = new(count, GetStride<T>());
-        buffer.SetData(new T[count]);
-        return buffer;
+        var buf = new ComputeBuffer(count, GetStride<T>());
+        buf.SetData(new T[count]);
+        return buf;
     }
 
     public static RenderTexture CreateRenderTexture2D(int width, int height)
@@ -56,11 +58,9 @@ public static class ComputeHelper
             dimension = TextureDimension.Tex3D,
             volumeDepth = depth
         };
-        
         texture.Create();
         return texture;
     }
-
 
     public static RenderTexture CopyTexture(RenderTexture texture)
     {
@@ -70,10 +70,7 @@ public static class ComputeHelper
         return result;
     }
 
-    public static GraphicsBuffer CreateCommandBuffer()
-    {
-        return new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
-    }
+    public static GraphicsBuffer CreateCommandBuffer() => new(GraphicsBuffer.Target.IndirectArguments, commandCount, GraphicsBuffer.IndirectDrawIndexedArgs.size);
 
     public static GraphicsBuffer.IndirectDrawIndexedArgs[] CreateCommandData(Mesh mesh, int numMeshes)
     {
@@ -91,31 +88,37 @@ public static class ComputeHelper
             matProps = new MaterialPropertyBlock()
         };
     }
+    #endregion
 
-    public static void Dispatch(this ComputeShader compute, int kernelIndex, int3 threadGroups)
+    #region Release helpers
+    public static void Release(ComputeBuffer buf)
     {
-        compute.Dispatch(kernelIndex, threadGroups.x, threadGroups.y, threadGroups.z);
+        if (buf == null) return;
+        buf.Release();
     }
+
+    public static void Release(GraphicsBuffer buf)
+    {
+        if (buf == null) return;
+        buf.Release();
+    }
+    #endregion
+
+    #region Dispatch helpers
+    public static void Dispatch(this ComputeShader compute, int kernelIndex, int3 threadGroups)
+        => compute.Dispatch(kernelIndex, threadGroups.x, threadGroups.y, threadGroups.z);
 
     public static void Dispatch(this ComputeShader compute, int kernelIndex, int threadGroupX, int threadGroupY, int threadGroupZ)
-    {
-        compute.Dispatch(kernelIndex, threadGroupX, threadGroupY, threadGroupZ);
-    }
+        => compute.Dispatch(kernelIndex, threadGroupX, threadGroupY, threadGroupZ);
 
     public static void Dispatch(this ComputeShader compute, int kernelIndex, int2 threadGroups)
-    {
-        compute.Dispatch(kernelIndex, threadGroups.x, threadGroups.y, 1);
-    }
+        => compute.Dispatch(kernelIndex, threadGroups.x, threadGroups.y, 1);
 
     public static void Dispatch(this ComputeShader compute, int kernelIndex, int threadGroupX, int threadGroupY)
-    {
-        compute.Dispatch(kernelIndex, threadGroupX, threadGroupY, 1);
-    }
+        => compute.Dispatch(kernelIndex, threadGroupX, threadGroupY, 1);
 
     public static void Dispatch(this ComputeShader compute, int kernelIndex, int threadGroupX)
-    {
-        compute.Dispatch(kernelIndex, threadGroupX, 1, 1);
-    }
+        => compute.Dispatch(kernelIndex, threadGroupX, 1, 1);
 
     public static int3 GetThreadGroups(this ComputeShader compute, int kernelIndex, int numIterationsX, int numIterationsY = 1, int numIterationsZ = 1)
     {
@@ -127,16 +130,16 @@ public static class ComputeHelper
     }
 
     public static int GetStride<T>()
-    {
-        return System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
-    }
+        => System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
+    #endregion
 
+    #region Readback helpres
     public static void LogTexture<T>(RenderTexture texture, int index) where T : struct
     {
         AsyncGPUReadback.Request(texture, 0, request =>
         {
             if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
-            var data = request.GetData<T>();
+            Debug.Log(request.GetData<T>()[index]);
         });
     }
 
@@ -144,12 +147,7 @@ public static class ComputeHelper
     {
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the texture");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             var data = request.GetData<T>();
             foreach (var i in indices)
                 Debug.Log(data[i]);
@@ -168,15 +166,9 @@ public static class ComputeHelper
         T result = default;
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the texture");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             result = request.GetData<T>()[index];
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -186,17 +178,11 @@ public static class ComputeHelper
         List<T> result = new();
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the texture");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             var data = request.GetData<T>();
             for (int y = 0; y < texture.height; y++)
                 result.Add(data[XIndex + y * texture.width]);
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -206,16 +192,10 @@ public static class ComputeHelper
         T[] result = new T[indices.Count];
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the texture");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the texture"); return; }
             var data = request.GetData<T>();
             result = indices.Select(i => data[i]).ToArray();
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -225,19 +205,12 @@ public static class ComputeHelper
         T[,] result = new T[texture.width, texture.height];
         AsyncGPUReadback.Request(texture, 0, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("GPU sim manager: couldn't get the texture");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("GPU sim manager: couldn't get the texture"); return; }
             var data = request.GetData<T>();
-
             for (int i = 0; i < texture.height; i++)
                 for (int j = 0; j < texture.width; j++)
                     result[j, i] = data[i * texture.width + j];
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -246,14 +219,8 @@ public static class ComputeHelper
     {
         AsyncGPUReadback.Request(buffer, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the buffer");
-                return;
-            }
-
-            var data = request.GetData<T>();
-            Debug.Log(data[index]);
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the buffer"); return; }
+            Debug.Log(request.GetData<T>()[index]);
         });
     }
 
@@ -261,12 +228,7 @@ public static class ComputeHelper
     {
         AsyncGPUReadback.Request(buffer, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the buffer");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the buffer"); return; }
             var data = request.GetData<T>();
             foreach (var i in indices)
                 Debug.Log(data[i]);
@@ -278,15 +240,9 @@ public static class ComputeHelper
         T[] result = null;
         AsyncGPUReadback.Request(buffer, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the buffer");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the buffer"); return; }
             result = request.GetData<T>().ToArray();
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
@@ -296,38 +252,28 @@ public static class ComputeHelper
         T result = default;
         AsyncGPUReadback.Request(buffer, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the buffer");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the buffer"); return; }
             result = request.GetData<T>()[index];
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
 
-    public static T[] GetBuffer<T>(ComputeBuffer texture, List<int> indices) where T : struct
+    public static T[] GetBuffer<T>(ComputeBuffer buffer, List<int> indices) where T : struct
     {
         T[] result = new T[indices.Count];
-        AsyncGPUReadback.Request(texture, request =>
+        AsyncGPUReadback.Request(buffer, request =>
         {
-            if (request.hasError)
-            {
-                Debug.Log("Compute helper: couldn't get the buffer");
-                return;
-            }
-
+            if (request.hasError) { Debug.Log("Compute helper: couldn't get the buffer"); return; }
             var data = request.GetData<T>();
             result = indices.Select(i => data[i]).ToArray();
         });
-
         AsyncGPUReadback.WaitAllRequests();
         return result;
     }
+    #endregion
 
+    #region Shader reflection helpers
     public static Dictionary<string, int> GetKernels(ComputeShader compute)
     {
         // Won't work in build!!!
@@ -369,4 +315,5 @@ public static class ComputeHelper
 
         return result;
     }
+    #endregion
 }
