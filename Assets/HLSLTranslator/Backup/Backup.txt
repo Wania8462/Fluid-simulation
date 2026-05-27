@@ -223,14 +223,14 @@ void ResolveBoundaries (indexer = e)
     {
         int signOfPos = sign(Positions[e].x);
         Positions[e].x = realHalfBoundSize.x * signOfPos;
-        Positions[e].x += -signOfPos * collisionDamp;
+        Positions[e].x -= signOfPos * collisionDamp;
     }
 
     if (abs(Positions[e].y) >= realHalfBoundSize.y)
     {
         int signOfPos = sign(Positions[e].y);
         Positions[e].y = realHalfBoundSize.y * signOfPos;
-        Positions[e].y += -signOfPos * collisionDamp;
+        Positions[e].y -= signOfPos * collisionDamp;
     }
 }
 
@@ -336,6 +336,7 @@ RWStructuredBuffer<float4> Colors;
 bool solidBlue;
 bool blueToRed;
 bool blueToWhite;
+float maxSpeed;
 
 uint numParticles;
 
@@ -348,7 +349,7 @@ void CalculateColors (indexer = e)
         return;
     }
 
-    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / 40.0);
+    float intensity = saturate((abs(Velocities[id.x].x) + abs(Velocities[id.x].y)) / maxSpeed);
 
     if (blueToRed)
     {

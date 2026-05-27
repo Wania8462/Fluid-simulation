@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
@@ -75,10 +76,14 @@ public class GPUSimulationManager : MonoBehaviour
     public Dictionary<string, ComputeBuffer> Buffers = new();
     public Dictionary<string, RenderTexture> Textures = new();
 
-    public int3 threadGropus;
-    public int3 gridThreadGropus;
-    private const float fakeDT = 1 / 60f;
+    private int3 threadGropus;
+    private int3 gridThreadGropus;
+
     private readonly int debugLength = 100;
+    private const float fakeDT = 1 / 60f;
+
+
+    private float _maxForce = 0f;
 
     private void Start()
     {
@@ -335,6 +340,39 @@ public class GPUSimulationManager : MonoBehaviour
             result.Add(positions[i]);
 
         return result;
+    }
+
+    private static string Commify(long n) =>
+        n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private void LogMaxForce()
+    {
+        const float scale = 1_000_000f;
+        int[] forceX = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersX"]);
+        int[] forceY = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersY"]);
+
+        float max = 0f;
+        int maxIndex = 0;
+        for (int i = 0; i < numParticles; i++)
+        {
+            float fx = forceX[i] / scale;
+            float fy = forceY[i] / scale;
+            float mag = Mathf.Sqrt(fx * fx + fy * fy);
+            if (mag > max)
+            {
+                max = mag;
+                maxIndex = i;
+            }
+        }
+
+        if (max > _maxForce)
+        {
+            _maxForce = max;
+            float percentX = Mathf.Abs(forceX[maxIndex]) / 2147483647f * 100;
+            float percentY = Mathf.Abs(forceY[maxIndex]) / 2147483647f * 100;
+            float maxPercent = percentX > percentY ? percentX : percentY;
+            Debug.Log($"New max force magnitude: {max:F4}. Percent of int used: {maxPercent}% (particle {maxIndex}, raw x={Commify(forceX[maxIndex])}, y={Commify(forceY[maxIndex])})");
+        }
     }
 #endif
     #endregion

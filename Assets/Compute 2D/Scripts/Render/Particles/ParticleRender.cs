@@ -14,6 +14,7 @@ public class ParticleRender : MonoBehaviour
 {
     [SerializeField] private int particleQuality;
     [SerializeField] private ParticleColor color;
+    [SerializeField] private float maxSpeed;
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Material material;
 
@@ -47,6 +48,7 @@ public class ParticleRender : MonoBehaviour
         compute.SetBool("solidBlue", color == ParticleColor.SolidBlue);
         compute.SetBool("blueToRed", color == ParticleColor.BlueToRed);
         compute.SetBool("blueToWhite", color == ParticleColor.BlueToWhite);
+        compute.SetFloat("maxSpeed", maxSpeed);
 
         rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);
