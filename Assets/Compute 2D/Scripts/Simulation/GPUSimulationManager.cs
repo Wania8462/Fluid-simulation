@@ -74,7 +74,6 @@ public class GPUSimulationManager : MonoBehaviour
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
-    public Dictionary<string, RenderTexture> Textures = new();
 
     private int3 threadGropus;
     private int3 gridThreadGropus;
@@ -172,7 +171,6 @@ public class GPUSimulationManager : MonoBehaviour
 
         KernelIDs = ComputeHelper.GetKernels(compute);
         Buffers = ComputeHelper.GetBuffers(compute);
-        Textures = ComputeHelper.GetTextures(compute);
 
         Application.targetFrameRate = targetFrameRate;
         renderDebug = new(debugMaterial);
@@ -245,10 +243,6 @@ public class GPUSimulationManager : MonoBehaviour
         foreach (var kernel in KernelIDs)
             foreach (var buffer in Buffers)
                 compute.SetBuffer(kernel.Value, buffer.Key, buffer.Value);
-
-        foreach (var kernel in KernelIDs)
-            foreach (var texture in Textures)
-                compute.SetTexture(kernel.Value, texture.Key, texture.Value);
     }
 
     private void CreateBuffers()
@@ -281,9 +275,6 @@ public class GPUSimulationManager : MonoBehaviour
     {
         foreach (var buffer in Buffers)
             ComputeHelper.Release(buffer.Value);
-
-        foreach (var texture in Textures)
-            texture.Value?.Release();
     }
 
     private void OnDestroy()
