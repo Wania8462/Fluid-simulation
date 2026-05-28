@@ -117,6 +117,7 @@ namespace SimulationLogic
         private float cubicSpikyKernelVolume;
         private const float particleRadius = 0.5f;
         private const float particleDiameter = 0.5f;
+        private static readonly object lockObject = new();
         private float timer;
         private float dt;
 
@@ -177,7 +178,7 @@ namespace SimulationLogic
             }
 
             AttractToMouse(mousePos);
-            Watcher.ExecuteWithTimer("11. Resolve boundaries", () => boundaries.ResolveBoundaries(realHalfBoundSize));
+            Watcher.ExecuteWithTimer("11. Resolve boundaries", ResolveBoundariesStep);
 
             Watcher.ExecuteWithTimer("12. Calculate velocity", () =>
             {
@@ -245,8 +246,8 @@ namespace SimulationLogic
                         nearPressure,
                         r);
 
-                    _particles[_sparse[n]].forceBuffer += displacement / 2; // try lock to see if anything chnages
-                    p.forceBuffer -= displacement / 2;
+                    lock (lockObject) { _particles[_sparse[n]].forceBuffer += displacement / 2; }
+                    lock (lockObject) { p.forceBuffer -= displacement / 2; }
                 }
 
                 // float safeDensity = math.max(p.density, restDensity * 0.1f);
@@ -584,7 +585,7 @@ namespace SimulationLogic
             densityNeighbours?.Dispose();
             densityNeighbours = new ThreadLocal<List<int>>(() => new List<int>());
 
-            boundaries = new Boundaries(_particles, count, particleRadius, collisionDamp, ref body, realHalfBoundSizeBody);
+            boundaries = new Boundaries(_particles, count, particleRadius, collisionDamp, realHalfBoundSizeBody);
 
             if (useParticlesAsBorder)
             {
@@ -910,6 +911,8 @@ namespace SimulationLogic
         }
         #endregion
         #region Helpers
+        private void ResolveBoundariesStep() => boundaries.ResolveBoundaries(ref body, realHalfBoundSize);
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ClearForceBuffers()
         {

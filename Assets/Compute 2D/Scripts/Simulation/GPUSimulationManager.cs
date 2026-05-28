@@ -57,6 +57,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] public float particleRadius;
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
+    [SerializeField] private float fakeDeltaTime;
     [SerializeField] private RenderingType renderingType;
 
     [Header("References")]
@@ -79,7 +80,6 @@ public class GPUSimulationManager : MonoBehaviour
     private int3 gridThreadGropus;
 
     private readonly int debugLength = 100;
-    private const float fakeDT = 1 / 120f;
 
 
     private float _maxForce = 0f;
@@ -118,7 +118,7 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void SimulationStep()
     {
-        float dt = useRealDeltaTime ? Time.deltaTime : fakeDT;
+        float dt = useRealDeltaTime ? Time.deltaTime : fakeDeltaTime;
         compute.SetFloat("dt", dt);
 
         compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);

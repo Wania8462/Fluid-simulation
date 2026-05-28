@@ -217,11 +217,13 @@ namespace Rendering
                 customBuffer.matrices[index].lossyScale
             );
 
-            Graphics.DrawMeshInstanced(
+            Graphics.DrawMesh(
                 customBuffer.mesh,
-                submeshIndex,
+                customBuffer.matrices[index],
                 mat,
-                customBuffer.matrices,
+                layer: 10,
+                Camera.main,
+                submeshIndex: 0,
                 customBuffer.mpb
             );
         }

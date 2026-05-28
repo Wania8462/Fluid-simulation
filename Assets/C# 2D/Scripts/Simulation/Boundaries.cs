@@ -11,20 +11,18 @@ namespace SimulationLogic
         private int _count;
         private float particleRadius;
         private float collisionDamp;
-        private Body body;
         private float2 realHalfBoundSizeBody;
 
-        public Boundaries(Particle[] particles, int count, float particleRadius, float collisionDamp, ref Body body, float2 realHalfBoundSizeBody)
+        public Boundaries(Particle[] particles, int count, float particleRadius, float collisionDamp, float2 realHalfBoundSizeBody)
         {
             _particles = particles;
             _count = count;
             this.particleRadius = particleRadius;
             this.collisionDamp = collisionDamp;
-            this.body = body;
             this.realHalfBoundSizeBody = realHalfBoundSizeBody;
         }
 
-        public void ResolveBoundaries(float2 realHalfBoundSize)
+        public void ResolveBoundaries(ref Body body, float2 realHalfBoundSize)
         {
             // Particles
             for (int i = 0; i < _count; i++)

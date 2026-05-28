@@ -10,6 +10,7 @@ public enum DebugDisplay
 {
     SPBox,
     AllNeighbours,
+    Pair,
     Velocity,
     Force
 }
@@ -39,6 +40,7 @@ namespace SimulationLogic
 
         [Header("Debug settings")]
         [SerializeField] private int trackParticle = -1;
+        [SerializeField] private int trackPair1 = -1, trackPair2 = -1;
         [SerializeField] private DebugDisplay particleDebugDisplay;
         [SerializeField] private bool bodyDebug;
         [SerializeField] private DebugDisplay bodyDebugDisplay;
@@ -104,9 +106,6 @@ namespace SimulationLogic
             // Density map
             renderDensityMap.Init(spawn.GetBoundSize());
             densitiesMap = new float[renderDensityMap.cells.Length];
-
-            // Debug
-            renderParticles.InitCustomParticle(new float2(0, -80), 20, Color.white);
         }
 
         public void Draw()
@@ -119,7 +118,7 @@ namespace SimulationLogic
 
             if (simulation.count == 0)
             {
-                // Debug.LogWarning("Render data builder: drawing 0 particles");
+                Debug.LogWarning("Render data builder: drawing 0 particles");
                 return;
             }
 
@@ -131,13 +130,6 @@ namespace SimulationLogic
 
             else if (renderType == RenderType.DensityMap)
                 DrawDensityMap();
-
-            // Debug
-            // renderParticles.DrawLine(new float2(-20, -200), new float2(-20, -100), 0.5f, Color.white);
-            // renderParticles.DrawLine(new float2(20, -200), new float2(20, -100), 0.5f, Color.white);
-            // renderParticles.DrawLine(new float2(-20, -100), new float2(20, -100), 0.5f, Color.white);
-            // renderParticles.DrawCustomParticle(new float2(0, -80));
-            // renderParticles.DrawRect(new(-simulation.realHalfBoundSize.x - 0.5f, simulation.realHalfBoundSize.y + 0.5f), new(simulation.realHalfBoundSize.x + 0.5f, -simulation.realHalfBoundSize.y - 0.5f), 0.2f, Color.white);
         }
 
         #region Particles
@@ -179,19 +171,59 @@ namespace SimulationLogic
 
         private void HighlghtParticlesForDebug()
         {
-            if (trackParticle == -1) return;
-
-            if (trackParticle >= simulation.count || trackParticle < 0)
+            if (trackParticle != -1)
             {
-                Debug.LogError($"Render data builder: tracked particle index is out of range. Number of particles: {simulation.count}");
-                return;
+                if (trackParticle >= simulation.count || trackParticle < 0)
+                {
+                    Debug.LogError($"Render data builder: tracked particle index is out of range. Track particle: {trackParticle}, number of particles: {simulation.count}");
+                    return;
+                }
+
+                HighlightSingle();
             }
 
-            yellowParticles.Add(trackParticle);
+            else if (trackPair1 != -1 ^ trackPair2 != -1)
+            {
+                var tracked = trackPair1 == -1 ? trackPair2 : trackPair1;
+
+                if (tracked >= simulation.count || tracked < 0)
+                {
+                    Debug.LogError($"Render data builder: tracked particle is out of range. Track particle: {tracked}, number of particles: {simulation.count}");
+                    return;
+                }
+
+                yellowParticles.Add(simulation._sparse[tracked]);
+            }
+            
+            else if (trackPair1 != -1 && trackPair2 != -1)
+            {
+                if (trackPair1 >= simulation.count || trackPair1 < 0)
+                {
+                    Debug.LogError($"Render data builder: particle 1 from the track pair is out of range. Track particle: {trackPair1}, number of particles: {simulation.count}");
+                    return;
+                }
+
+                if (trackPair1 >= simulation.count || trackPair2 < 0)
+                {
+                    Debug.LogError($"Render data builder: particle 1 from the track pair is out of range. Track particle: {trackPair2}, number of particles: {simulation.count}");
+                    return;
+                }
+
+                if (particleDebugDisplay != DebugDisplay.Pair)
+                    return;
+
+                HighlightPair();
+            }
+        }
+
+        private void HighlightSingle()
+        {
+            yellowParticles.Add(simulation._sparse[trackParticle]);
 
             if (particleDebugDisplay == DebugDisplay.SPBox)
             {
-                greenParticles.AddRange(simulation.GetParticlesSPNeighbours(trackParticle));
+                foreach (var id in simulation.GetParticlesSPNeighbours(trackParticle))
+                    greenParticles.Add(simulation._sparse[id]);
 
                 var lineThickness = 0.2f;
                 var SPBox = simulation.GetParticleSPDimentions(trackParticle);
@@ -207,7 +239,8 @@ namespace SimulationLogic
                 var trackPosition = simulation._particles[simulation._sparse[trackParticle]].position;
                 var lineThickness = 0.1f;
                 var neighbours = simulation.GetNeighbourParticles(trackParticle);
-                greenParticles.AddRange(neighbours);
+                foreach (var id in neighbours)
+                    greenParticles.Add(simulation._sparse[id]);
 
                 var neighbourPoss = new float2[neighbours.Length];
 
@@ -237,13 +270,23 @@ namespace SimulationLogic
             }
         }
 
+        private void HighlightPair()
+        {
+            yellowParticles.Add(simulation._sparse[trackPair1]);
+            greenParticles.Add(simulation._sparse[trackPair2]);
+            var firstPos = simulation._particles[simulation._sparse[trackPair1]].position;
+            var secondPos = simulation._particles[simulation._sparse[trackPair2]].position;
+            renderParticles.DrawLine(firstPos, secondPos, width: 0.1f, Color.white);
+        }
+
         private void HighlighParticlesBodyForDebug()
         {
             if (!bodyDebug) return;
 
             if (bodyDebugDisplay == DebugDisplay.SPBox)
             {
-                greenParticles.AddRange(simulation.GetBodySPNeighbours());
+                foreach (var id in simulation.GetBodySPNeighbours())
+                    greenParticles.Add(simulation._sparse[id]);
 
                 var lineThickness = 0.2f;
                 var SPBox = simulation.GetBodySPDimentions();
@@ -255,7 +298,10 @@ namespace SimulationLogic
             }
 
             else if (bodyDebugDisplay == DebugDisplay.AllNeighbours)
-                greenParticles.AddRange(simulation.GetBodyNeighbours());
+            {
+                foreach (var id in simulation.GetBodyNeighbours())
+                    greenParticles.Add(simulation._sparse[id]);
+            }
 
             else if (bodyDebugDisplay == DebugDisplay.Velocity)
             {
@@ -285,6 +331,9 @@ namespace SimulationLogic
             else if (Input.GetKeyDown(KeyCode.A))
                 particleDebugDisplay = DebugDisplay.AllNeighbours;
 
+            else if (Input.GetKeyDown(KeyCode.T))
+                particleDebugDisplay = DebugDisplay.Pair;
+
             else if (Input.GetKeyDown(KeyCode.V))
                 particleDebugDisplay = DebugDisplay.Velocity;
 
@@ -292,27 +341,32 @@ namespace SimulationLogic
                 particleDebugDisplay = DebugDisplay.Force;
 
             else if (Input.GetKeyDown(KeyCode.W))
+                trackParticle = GetClosestParticleToMouse();
+
+            else if (Input.GetMouseButtonDown(2))
             {
-                if (Camera.main == null)
-                {
-                    Debug.LogError("RenderDataBuilder: Camera.main is null — cannot select particle by mouse position");
-                    return;
-                }
+                if (trackPair1 == -1)
+                    trackPair1 = GetClosestParticleToMouse();
 
-                var pos = new float2(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
-                var neighboursIndices = simulation.GetNeighbourParticles(pos);
-
-                if (neighboursIndices.Length > 0)
-                {
-                    var neighboursPos = simulation.GetNeighbourParticlesPositions(pos);
-                    var magnitudes = neighboursPos.Select(x => FluidMath.Distance(pos, x)).ToArray();
-                    var trackIndex = neighboursIndices[Array.IndexOf(magnitudes, magnitudes.Min())];
-                    trackParticle = simulation._particles[trackIndex].ID;
-                }
+                else
+                    trackPair2 = GetClosestParticleToMouse();
             }
 
             else if (Input.GetKeyDown(KeyCode.P))
+            {
                 trackParticle = -1;
+                trackPair1 = -1;
+                trackPair2 = -1;
+            }
+
+            if (particleDebugDisplay == DebugDisplay.Pair)
+                trackParticle = -1;
+
+            else
+            {
+                trackPair1 = -1;
+                trackPair2 = -1;
+            }
         }
 
         private void HandleBodyInputs()
@@ -361,6 +415,28 @@ namespace SimulationLogic
             });
 
             renderDensityMap.Draw(densitiesMap);
+        }
+
+        private int GetClosestParticleToMouse()
+        {
+            if (Camera.main == null)
+            {
+                Debug.LogError("RenderDataBuilder: Camera.main is null — cannot select particle by mouse position");
+                return -1;
+            }
+
+            var pos = new float2(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
+            var neighboursIndices = simulation.GetNeighbourParticles(pos);
+
+            if (neighboursIndices.Length > 0)
+            {
+                var neighboursPos = simulation.GetNeighbourParticlesPositions(pos);
+                var magnitudes = neighboursPos.Select(x => FluidMath.Distance(pos, x)).ToArray();
+                return neighboursIndices[Array.IndexOf(magnitudes, magnitudes.Min())];
+            }
+
+            else
+                return -1;
         }
 
         private void SetPositions(Span<Particle> particles)

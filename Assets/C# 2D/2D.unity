@@ -381,8 +381,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bbb43918e32eeb94ea883f52f7d2a462, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rendering.RenderDensityMap
-  resolution: 100
-  densityLimt: 5
+  resolution: 200
+  densityLimt: 10
   mat: {fileID: 2100000, guid: 55e617f6c47ff214fb874da21f4b6dc3, type: 2}
   cells: []
 --- !u!1 &485211996
@@ -808,7 +808,7 @@ MonoBehaviour:
   text: {fileID: 489428649}
   pause: 1
   realDeltaTime: 0
-  targetFrameRate: 120
+  targetFrameRate: -1
   twoSimulations: 0
   settings:
   - interactionRadius: 6
@@ -952,6 +952,8 @@ MonoBehaviour:
   renderSquares: {fileID: 452458857}
   renderDensityMap: {fileID: 452458858}
   trackParticle: -1
+  trackPair1: 0
+  trackPair2: -1
   particleDebugDisplay: 1
   bodyDebug: 0
   bodyDebugDisplay: 0

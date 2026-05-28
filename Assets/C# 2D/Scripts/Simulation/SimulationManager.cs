@@ -103,7 +103,7 @@ namespace SimulationLogic
 
         private const int FirstSim = 0;
         private const int SecondSim = 1;
-        private const float fakeDT = 1 / 60f;
+        private const float fakeDT = 1 / 30f;
 
         private Simulation[] simulations;
 
@@ -116,6 +116,7 @@ namespace SimulationLogic
             Debug.Log(@"Controls: Pause/resume: space, Restart: R, Attract particles to mouse: left hold ↓
             Move body to mouse: right click
             Select particle to track: W, Deactivate debug tracking: P, All neighbours: A, Velocity: V, Force: F
+            Track pair: T, Select one of the particles: scroll wheel, Deactivate: P
             Activate/deactivate body debug: Shift + P, All neighbours: A, Velocity: V, Force: F");
             InitSimulationInstances();
             Invoke(nameof(Unpause), 0.5f);
