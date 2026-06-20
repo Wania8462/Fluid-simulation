@@ -196,6 +196,36 @@ public class RefList<T> : IRefList<T>
         _items[_size] = default!;
     }
 
+    public void ForEach(Action<T> action)
+    {
+        for (int i = 0; i < _size; i++)
+            action(_items[i]);
+    }
+
+    /// <summary>
+    /// Allocates a new <c>T[]</c> and fills it by applying <paramref name="transform"/> to each element.
+    /// <para><b>Warning:</b> allocates every call — avoid in hot paths or per-frame update loops.</para>
+    /// </summary>
+    public T[] ForEach(Func<T, T> transform)
+    {
+        T[] copy = new T[_size];
+        for (int i = 0; i < _size; i++)
+            copy[i] = transform(_items[i]);
+        return copy;
+    }
+
+    /// <summary>
+    /// Allocates a new <c>TResult[]</c> and fills it by projecting each element via <paramref name="transform"/>.
+    /// <para><b>Warning:</b> allocates every call — avoid in hot paths or per-frame update loops.</para>
+    /// </summary>
+    public TResult[] ForEach<TResult>(Func<T, TResult> transform)
+    {
+        TResult[] result = new TResult[_size];
+        for (int i = 0; i < _size; i++)
+            result[i] = transform(_items[i]);
+        return result;
+    }
+
     public void Fill(T value)
     {
         Array.Fill(_items, value, 0, _size);

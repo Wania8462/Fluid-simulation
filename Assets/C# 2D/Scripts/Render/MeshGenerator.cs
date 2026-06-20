@@ -6,7 +6,7 @@ namespace Rendering
 {
     public static class MeshGenerator
     {
-        public static Mesh Rectangle(float width, float height)
+        internal static Mesh Rectangle(float width, float height)
         {
             Vector3[] verticies = new Vector3[]
             {
@@ -30,7 +30,7 @@ namespace Rendering
             return mesh;
         }
 
-        public static Mesh Line(float2 start, float2 end, float width)
+        internal static Mesh Line(float2 start, float2 end, float width)
         {
             float2 perpendicular = end - start;
             float magnitude = math.length(perpendicular);
@@ -57,7 +57,7 @@ namespace Rendering
             return mesh;
         }
 
-        public static Mesh Circle(float radius, int resolution)
+        internal static Mesh Circle(float radius, int resolution)
         {
             Vector3[] verticies = new Vector3[4 * resolution + 1];
             int[] triangles = new int[resolution * 12];
@@ -91,7 +91,7 @@ namespace Rendering
             return mesh;
         }
 
-        public static Mesh[] MarchingSquareVariations()
+        internal static Mesh[] MarchingSquareVariations()
         {
             // Directions
             const float Up = 0.5f;

@@ -57,7 +57,7 @@ namespace Rendering
         public float Centre => (topLeft + topRight + bottomRight + bottomLeft) * 0.25f;
     }
 
-    public class RenderMarchingSquares : MonoBehaviour
+    internal class RenderMarchingSquares : MonoBehaviour
     {
         [SerializeField] private int quality;
         [SerializeField] private float threashold;
@@ -70,7 +70,7 @@ namespace Rendering
         // private List<GameObject> testObjects = new();
 
         private Mesh[] meshes;
-        public Vector3[] edges { get; private set; }
+        internal Vector3[] edges { get; private set; }
         private int width, height;
         private float2[] centres;
         private float cellWidth, cellHeight;
@@ -104,7 +104,7 @@ namespace Rendering
             new[] { 0, 1, 3, 0, 3, 2 }
         };
 
-        public void Init(float2 bounds)
+        internal void Init(float2 bounds)
         {
             if (quality < 2)
             {
@@ -120,11 +120,8 @@ namespace Rendering
         }
 
         #region Draw
-        public void DrawLerp(float[] densities)
+        internal void DrawLerp(float[] densities)
         {
-            if (!ValidateDensities(densities))
-                return;
-
             lerpVertices.Clear();
             lerpTriangles.Clear();
 
@@ -156,11 +153,8 @@ namespace Rendering
             Graphics.DrawMesh(lerpMesh, Matrix4x4.identity, mat, gameObject.layer);
         }
 
-        public void DrawMidpoints(float[] densities)
+        internal void DrawMidpoints(float[] densities)
         {
-            if (!ValidateDensities(densities))
-                return;
-
             ClearInstancedMatrices();
 
             for (int y = 0; y < height - 1; y++)
@@ -404,7 +398,7 @@ namespace Rendering
                 list.Clear();
         }
 
-        public void DestroyMeshes()
+        void OnDestroy()
         {
             if (meshes == null) return;
             for (int i = 0; i < meshes.Length; i++)

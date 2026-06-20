@@ -6,12 +6,12 @@ using UnityEngine;
 
 namespace Rendering
 {
-    public class RenderDensityMap : MonoBehaviour
+    internal class RenderDensityMap : MonoBehaviour
     {
         [SerializeField] private int resolution;
         [SerializeField] private float densityLimt;
         [SerializeField] private Material mat;
-        [HideInInspector] public float2[] cells;
+        [HideInInspector] internal float2[] cells;
         private float2 bounds;
         private int width, height;
         private float cellWidth, cellHeight;
@@ -25,7 +25,7 @@ namespace Rendering
         private const int batchSize = 1023;
         private const int submeshIndex = 0;
 
-        public void Init(float2 simBounds)
+        internal void Init(float2 simBounds)
         {
             bounds = simBounds;
             SetDimentions();
@@ -34,11 +34,8 @@ namespace Rendering
             GenerateColorsBuffer();
         }
 
-        public void Draw(float[] densities)
+        internal void Draw(float[] densities)
         {
-            if (densities.Length != cells.Length)
-                Debug.LogError($"RenderDensityMap: Length of densities != length of cells. Densities: {densities.Length}, centres: {cells.Length}");
-
             for (int i = 0; i < cells.Length; i++)
             {
                 if (densities[i] > 0) 

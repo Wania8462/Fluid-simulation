@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Unity.Mathematics;
 using UnityEditor;
@@ -118,6 +119,8 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void SimulationStep()
     {
+        // Stopwatch stopwatch = new();
+        // stopwatch.Start();
         float dt = useRealDeltaTime ? Time.deltaTime : fakeDeltaTime;
         compute.SetFloat("dt", dt);
 
@@ -151,6 +154,8 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
+        // stopwatch.Stop();
+        // UnityEngine.Debug.Log(stopwatch.ElapsedMilliseconds);
     }
 
     private void OnValidate()
@@ -248,7 +253,7 @@ public class GPUSimulationManager : MonoBehaviour
     private void CreateBuffers()
     {
         if (numParticles == 0)
-            Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
+            UnityEngine.Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
 
         Buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
         Buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
@@ -368,7 +373,7 @@ public class GPUSimulationManager : MonoBehaviour
             float percentX = Mathf.Abs(forceX[maxIndex]) / 2147483647f * 100;
             float percentY = Mathf.Abs(forceY[maxIndex]) / 2147483647f * 100;
             float maxPercent = percentX > percentY ? percentX : percentY;
-            Debug.Log($"New max force magnitude: {max:F4}. Percent of int used: {maxPercent}% (particle {maxIndex}, raw x={Commify(forceX[maxIndex])}, y={Commify(forceY[maxIndex])})");
+            UnityEngine.Debug.Log($"New max force magnitude: {max:F4}. Percent of int used: {maxPercent}% (particle {maxIndex}, raw x={Commify(forceX[maxIndex])}, y={Commify(forceY[maxIndex])})");
         }
     }
 #endif

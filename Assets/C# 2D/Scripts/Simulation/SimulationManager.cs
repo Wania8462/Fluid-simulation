@@ -103,7 +103,7 @@ namespace SimulationLogic
 
         private const int FirstSim = 0;
         private const int SecondSim = 1;
-        private const float fakeDT = 1 / 30f;
+        private const float fakeDT = 1 / 60f;
 
         private Simulation[] simulations;
 

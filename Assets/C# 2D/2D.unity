@@ -312,6 +312,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 452458856}
+  - component: {fileID: 452458859}
   - component: {fileID: 452458855}
   - component: {fileID: 452458857}
   - component: {fileID: 452458858}
@@ -384,7 +385,22 @@ MonoBehaviour:
   resolution: 200
   densityLimt: 10
   mat: {fileID: 2100000, guid: 55e617f6c47ff214fb874da21f4b6dc3, type: 2}
-  cells: []
+--- !u!114 &452458859
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 452458854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5176c369d98b4324aa77aa40f1710e47, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: C#2DRender::Rendering.RenderManager
+  renderType: 0
+  renderParticles: {fileID: 452458855}
+  renderMarchingSquares: {fileID: 452458857}
+  renderDensityMap: {fileID: 452458858}
 --- !u!1 &485211996
 GameObject:
   m_ObjectHideFlags: 0
@@ -944,13 +960,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb3668f42e2cc2f498161e42f8d5480f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RenderDataBuilder
-  renderType: 0
   Offset: 0
   manager: {fileID: 1165800423}
   spawn: {fileID: 1165800424}
-  renderParticles: {fileID: 452458855}
-  renderSquares: {fileID: 452458857}
-  renderDensityMap: {fileID: 452458858}
+  renderManager: {fileID: 452458859}
   trackParticle: -1
   trackPair1: 0
   trackPair2: -1

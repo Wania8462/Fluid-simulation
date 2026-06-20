@@ -15,16 +15,16 @@ namespace Rendering
         public MaterialPropertyBlock mpb;
     }
 
-    public class RenderParticles : MonoBehaviour
+    internal class RenderParticles : MonoBehaviour
     {
         [SerializeField] private int resolution;
         [SerializeField] private int bodyResolution;
         [SerializeField] private float redThreshold;
         [SerializeField] private Material mat;
 
-        private ParticlesBuffer fluidBuffer;
-        private ParticlesBuffer borderBuffer;
-        private ParticlesBuffer customBuffer;
+        internal ParticlesBuffer fluidBuffer;
+        internal ParticlesBuffer borderBuffer;
+        internal ParticlesBuffer customBuffer;
         
         private readonly Vector4[] colorsBatch = new Vector4[batchSize];
         private readonly Matrix4x4[] matricesBatch = new Matrix4x4[batchSize];
@@ -42,7 +42,7 @@ namespace Rendering
         private Mesh lineMesh;
 
         # region Fluid particles
-        public void InitParticles(int maxNumParticles = 100_000)
+        internal void InitParticles(int maxNumParticles = 100_000)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
@@ -61,7 +61,7 @@ namespace Rendering
             }
         }
 
-        public void InitParticles(float2[] positions, int count = -1)
+        internal void InitParticles(float2[] positions, int count = -1)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
@@ -81,11 +81,8 @@ namespace Rendering
             }
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, List<int> highlightYellow = null)
+        internal void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, List<int> highlightYellow = null)
         {
-            if (positions.Length != velocities.Length)
-                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
-
             var length = positions.Length;
             if (count != -1) length = count;
 
@@ -95,11 +92,19 @@ namespace Rendering
             DrawParticleBatches(length);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, int highlightYellow = -1)
+        internal void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, int highlightYellow = -1)
         {
-            if (positions.Length != velocities.Length)
-                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
+            var length = positions.Length;
+            if (count != -1) length = count;
 
+            UpdateParticleBuffers(positions, velocities, positions.Length);
+            ApplyHighlight(highlightGreen, Color.green);
+            ApplyHighlight(highlightYellow, Color.yellow);
+            DrawParticleBatches(length);
+        }
+
+        internal void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, List<int> highlightYellow = null)
+        {
             var length = positions.Length;
             if (count != -1) length = count;
 
@@ -109,11 +114,8 @@ namespace Rendering
             DrawParticleBatches(length);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, List<int> highlightYellow = null)
+        internal void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, int highlightYellow = -1)
         {
-            if (positions.Length != velocities.Length)
-                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
-
             var length = positions.Length;
             if (count != -1) length = count;
 
@@ -123,21 +125,7 @@ namespace Rendering
             DrawParticleBatches(length);
         }
 
-        public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, int highlightGreen = -1, int highlightYellow = -1)
-        {
-            if (positions.Length != velocities.Length)
-                Debug.LogWarning("Render particles: length of positions is different to length of velocities");
-
-            var length = positions.Length;
-            if (count != -1) length = count;
-
-            UpdateParticleBuffers(positions, velocities, length);
-            ApplyHighlight(highlightGreen, Color.green);
-            ApplyHighlight(highlightYellow, Color.yellow);
-            DrawParticleBatches(length);
-        }
-
-        public void DeleteParticles()
+        internal void DeleteParticles()
         {
             fluidBuffer.mpb = null;
             fluidBuffer.matrices?.Clear();
@@ -146,7 +134,7 @@ namespace Rendering
         # endregion
 
         # region Border particles
-        public void InitBorderParticles(float2[] positions)
+        internal void InitBorderParticles(float2[] positions)
         {
             borderBuffer.matrices ??= new();
             borderBuffer.colorsBuffer ??= new();
@@ -167,7 +155,7 @@ namespace Rendering
             borderBuffer.mpb.SetVectorArray(colors, borderBuffer.colorsBuffer);
         }
 
-        public void DrawBorderParticles()
+        internal void DrawBorderParticles()
         {
             for (var i = 0; i < borderBuffer.matrices.Count; i += batchSize)
             {
@@ -185,7 +173,7 @@ namespace Rendering
             }
         }
 
-        public void DeleteBorderParticles()
+        internal void DeleteBorderParticles()
         {
             borderBuffer.mpb = null;
             borderBuffer.matrices?.Clear();
@@ -194,7 +182,7 @@ namespace Rendering
         # endregion
 
         # region Custom particles
-        public void InitCustomParticle(float2 position, float radius, Color color)
+        internal void InitCustomParticle(float2 position, float radius, Color color)
         {
             customBuffer.matrices ??= new();
             customBuffer.mesh ??= MeshGenerator.Circle(particleRadius, bodyResolution);
@@ -209,7 +197,7 @@ namespace Rendering
             customBuffer.mpb.SetColor(colors, color);
         }
 
-        public void DrawCustomParticle(float2 position, int index = 0)
+        internal void DrawCustomParticle(float2 position, int index = 0)
         {
             customBuffer.matrices[index] = Matrix4x4.TRS(
                 new(position.x, position.y),
@@ -228,7 +216,7 @@ namespace Rendering
             );
         }
 
-        public void DrawAllCustomParticles(float2[] positions)
+        internal void DrawAllCustomParticles(float2[] positions)
         {
             if (customBuffer.matrices.Count != positions.Length)
             {
@@ -260,7 +248,7 @@ namespace Rendering
                 Debug.LogError($"Render: Too many custom particles: {customBuffer.matrices.Count}");
         }
 
-        public void DeleteCustomParticles()
+        internal void DeleteCustomParticles()
         {
             customBuffer.mpb = null;
             customBuffer.matrices?.Clear();
@@ -268,14 +256,14 @@ namespace Rendering
         }
         # endregion
 
-        public void DeleteAllTypesOfParticles()
+        internal void DeleteAllTypesOfParticles()
         {
             DeleteParticles();
             DeleteBorderParticles();
             DeleteCustomParticles();
         }
 
-        public void DestroyMeshes()
+        void OnDestroy()
         {
             Destroy(fluidBuffer.mesh);
             Destroy(borderBuffer.mesh);
@@ -293,7 +281,7 @@ namespace Rendering
             lineMesh = MeshGenerator.Line(new float2(0, 0), new float2(1, 0), 1f);
         }
         
-        public void DrawLine(float2 start, float2 end, float width, Color color)
+        internal void DrawLine(float2 start, float2 end, float width, Color color)
         {
             float2 dir = end - start;
             float length = math.length(dir);
@@ -316,13 +304,13 @@ namespace Rendering
             );
         }
 
-        public void DrawLines(float2 start, float2[] ends, float width)
+        internal void DrawLines(float2 start, float2[] ends, float width, Color color)
         {
             for (int i = 0; i < ends.Length; i++)
-                DrawLine(start, ends[i], width, Color.white);
+                DrawLine(start, ends[i], width, color);
         }
 
-        public void DrawRect(float2 topLeft, float2 bottomRight, float width, Color color)
+        internal void DrawRect(float2 topLeft, float2 bottomRight, float width, Color color)
         {
             var topRight = new float2(bottomRight.x, topLeft.y);
             var bottomLeft  = new float2(topLeft.x,     bottomRight.y);
