@@ -383,6 +383,11 @@ namespace SimulationLogic
             renderManager.DrawDensityMap(densitiesMap);
         }
 
+        public void DrawSquare(float2 topLeft, float2 bottomRight)
+        {
+            renderManager.DrawRect(topLeft, bottomRight, 50, Color.white);
+        }
+
         private int GetClosestParticleToMouse()
         {
             if (Camera.main == null)

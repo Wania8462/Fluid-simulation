@@ -61,6 +61,12 @@ public static class Watcher
         return sb.ToString();
     }
 
+    public static double GetTotal()
+    {
+        var first = _stats.OrderBy(x => int.Parse(string.Concat(x.Key.TakeWhile(char.IsDigit)))).First();
+        return first.Value.GetAverage();
+    }
+
     public static void Reset()
     {
         _stats.Clear();

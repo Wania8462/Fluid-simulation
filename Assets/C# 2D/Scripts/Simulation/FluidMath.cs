@@ -109,6 +109,9 @@ namespace SimulationLogic
         public static float DistanceSq(float2 p1, float2 p2) => (p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Magnitude(float2 vector) => Mathf.Sqrt((vector.x * vector.x) + (vector.y * vector.y));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float Pow3(float x)
         {
             return x * x * x;

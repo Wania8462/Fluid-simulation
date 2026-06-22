@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -96,21 +98,49 @@ namespace SimulationLogic
         [SerializeField] public SimulationSettings[] settings;
         public bool twoSim { get; private set; }
 
+        [Header("Graph settings")]
+        [SerializeField] private bool draw;
+
+
         [Header("References")]
         [SerializeField] private InitializeParticles spawn;
         [SerializeField] private RenderDataBuilder render;
         [SerializeField] private InputField inputField;
+        [SerializeField] private SimGraph graph;
+        [SerializeField] private Text maxVelText;
 
         private const int FirstSim = 0;
         private const int SecondSim = 1;
-        private const float fakeDT = 1 / 60f;
 
         private Simulation[] simulations;
 
         private float2 mousePos;
 
+        private List<float> buffer = new();
+
+        private float previous = 0;
+        private int currStage = 0;
+        private bool capturePending = false;
+        private readonly List<string> stages = new()
+        {
+            "Velocity 60fps",
+            "Velocity 30fps",
+            "Velocity 30fps capped",
+
+            "Displacement 60fps",
+            "Displacement 30fps",
+            "Displacement 30fps capped",
+
+            "Density 60fps",
+            "Density 30fps",
+            "Density 30fps capped"
+        };
+        private int frameTotal = 0;
+        private int frames = 0;
+
         private void Start()
         {
+            Debug.Log(Application.persistentDataPath);
             text.text = targetFrameRate.ToString();
             Application.targetFrameRate = targetFrameRate;
             Debug.Log(@"Controls: Pause/resume: space, Restart: R, Attract particles to mouse: left hold ↓
@@ -133,62 +163,39 @@ namespace SimulationLogic
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
+                {
                     InitSimulationInstances();
+                    graph.Reset();
+                }
 
                 if (Input.GetKeyDown(KeyCode.Space))
                     pause = !pause;
             }
 
-            if (Input.GetKeyDown(KeyCode.Return))
-            {
-                var command = inputField.text.Split(' ');
-
-                if (command.Length < 2)
-                {
-                    Debug.LogWarning("SimulationManager: command must have the form '<fieldName> <value>'");
-                }
-                else
-                {
-                    var field = typeof(SimulationSettings).GetField(command[0]);
-
-                    if (field != null)
-                    {
-                        if (!float.TryParse(command[1], out var value))
-                        {
-                            Debug.LogWarning($"SimulationManager: could not parse '{command[1]}' as a float");
-                        }
-                        else if (!twoSim)
-                        {
-                            field.SetValue(settings[FirstSim], value);
-                            simulations[FirstSim].UpdateSettings(settings[FirstSim]);
-                        }
-                        else
-                        {
-                            field.SetValue(settings[SecondSim], value);
-                            simulations[SecondSim].UpdateSettings(settings[SecondSim]);
-                        }
-                    }
-                    else
-                        Debug.LogWarning($"SimulationManager: no field with name '{command[0]}' found on SimulationSettings");
-                }
-            }
+            HandleFieldInputs();
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
-                var dt = realDeltaTime ? Time.deltaTime : fakeDT;
+                // float dt = HandleGraphs();
+                float dt = 1 / 60f;
+                float maxVel = GetMaxVelocity(simulations[0]._particles);
+                float maxDen = GetMaxDensity(simulations[0]._particles);
+
+                graph.AddPoint(maxVel, dt, 0);
+                graph.AddPoint(GetMaxDisplacement(simulations[0]._particles) * 20, dt, 1);
+                graph.AddPoint(maxDen * 10, dt, 2);
+
+                // Debug.Log(@$"Chnage in density: {maxDen - previous}
+                // Velocity: {maxVel}
+                // Density: {maxDen}");
+
+                // dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : dt;
+                // if (math.abs(maxDen - previous) > 0.4f) Debug.Log("Using lower dt");
+                previous = maxDen;
 
                 if (Camera.main == null)
                     Debug.LogError("SimulationManager: Camera.main is null — cannot convert mouse position to world space");
 
-                else if (twoSim)
-                {
-                    foreach (var simulation in simulations)
-                    {
-                        mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
-                        mousePos.x = mousePos.x < 0 ? mousePos.x + render.offset : mousePos.x - render.offset;
-                        simulation.SimulationStep(mousePos, dt);
-                    }
-                }
                 else
                 {
                     mousePos = new(Camera.main.ScreenToWorldPoint(Input.mousePosition).x, Camera.main.ScreenToWorldPoint(Input.mousePosition).y);
@@ -197,8 +204,230 @@ namespace SimulationLogic
                 }
             }
 
-            render.Draw();
+            if (draw)
+                render.Draw();
         }
+
+        private float HandleGraphs()
+        {
+            if (graph.GetCurrentTime() > 40)
+            {
+                if (currStage == stages.Count - 1)
+                    EditorApplication.isPlaying = false;
+
+                else if (!capturePending)
+                {
+                    capturePending = true;
+                    StartCoroutine(CaptureAndAdvance());
+                }
+            }
+
+            Particle[] particles = simulations[0]._particles;
+            float maxVel = GetMaxVelocity(particles);
+
+            float dt = stages[currStage].Contains("60") ? 1 / 60f : 1 / 30f;
+            dt = stages[currStage].Contains("capped") ? Mathf.Min(1 / maxVel, dt) : dt;
+
+            if (stages[currStage].Contains("Velocity"))
+            {
+                graph.AddPoint(maxVel, dt, 0);
+                graph.AddPoint(GetMeanVelocity(particles), dt, 1);
+                graph.AddPoint(GetMedianVelocity(particles), dt, 2);
+            }
+
+            else if (stages[currStage].Contains("Displacement"))
+            {
+                graph.AddPoint(GetMaxDisplacement(particles), dt, 0);
+                graph.AddPoint(GetMeanDisplacement(particles), dt, 1);
+                graph.AddPoint(GetMedianDisplacement(particles), dt, 2);
+            }
+
+            else if (stages[currStage].Contains("Density"))
+            {
+                graph.AddPoint(GetMaxDensity(particles), dt, 0);
+                graph.AddPoint(GetMeanDensity(particles), dt, 1);
+                graph.AddPoint(GetMedianDensity(particles), dt, 2);
+            }
+
+            return dt;
+        }
+
+        private System.Collections.IEnumerator CaptureAndAdvance()
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Application.persistentDataPath + $"/{stages[currStage]}.png", 2);
+            yield return new WaitForEndOfFrame();
+            currStage++;
+            InitSimulationInstances();
+
+            if (stages[currStage].Contains("Displacement"))
+            {
+                graph.yZoom = 20;
+                graph.yMax = 20;
+            }
+
+            graph.Reset();
+            capturePending = false;
+        }
+
+        #region Velcoities
+        private float GetMaxVelocity(Particle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                if (mag > maximum) maximum = mag;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanVelocity(Particle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                total += mag;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianVelocity(Particle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                buffer.Add(mag);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationVelocity(Particle[] particles)
+        {
+            float sum = 0;
+            float sumSqares = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                sum += mag;
+                sumSqares += mag * mag;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSqares / n - (mean * mean));
+        }
+        #endregion
+
+        #region Displacements
+        private float GetMaxDisplacement(Particle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                if (displacement > maximum) maximum = displacement;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanDisplacement(Particle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                total += displacement;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianDisplacement(Particle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                buffer.Add(displacement);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationDisplacement(Particle[] particles)
+        {
+            float sum = 0;
+            float sumSquares = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                sum += displacement;
+                sumSquares += displacement * displacement;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSquares / n - (mean * mean));
+        }
+        #endregion
+
+        #region Densities
+        private float GetMaxDensity(Particle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                if (particle.density > maximum)
+                    maximum = particle.density;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanDensity(Particle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                total += particle.density;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianDensity(Particle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                buffer.Add(particle.density);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationDensity(Particle[] particles)
+        {
+            float sum = 0;
+            float sumSquares = 0;
+            foreach (var particle in particles)
+            {
+                sum += particle.density;
+                sumSquares += particle.density * particle.density;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSquares / n - (mean * mean));
+        }
+        #endregion
 
         private void InitSimulationInstances()
         {
@@ -206,7 +435,7 @@ namespace SimulationLogic
             {
                 Debug.LogError("Simulation manager: 2 simulations aren't supported");
 #if UNITY_EDITOR
-                UnityEditor.EditorApplication.isPlaying = false;
+                EditorApplication.isPlaying = false;
 #endif
                 return;
             }
@@ -215,7 +444,7 @@ namespace SimulationLogic
             {
                 Debug.LogError("Simulation manager: There are no settings");
 #if UNITY_EDITOR
-                UnityEditor.EditorApplication.isPlaying = false; // Avoids error spamming
+                EditorApplication.isPlaying = false; // Avoids error spamming
 #endif
                 return;
             }
@@ -249,6 +478,43 @@ namespace SimulationLogic
             render.Init(simulations[FirstSim]);
         }
 
+        private void HandleFieldInputs()
+        {
+            if (Input.GetKeyDown(KeyCode.Return))
+            {
+                var command = inputField.text.Split(' ');
+
+                if (command.Length < 2)
+                {
+                    Debug.LogWarning("SimulationManager: command must have the form '<fieldName> <value>'");
+                }
+                else
+                {
+                    var field = typeof(SimulationSettings).GetField(command[0]);
+
+                    if (field != null)
+                    {
+                        if (!float.TryParse(command[1], out var value))
+                        {
+                            Debug.LogWarning($"SimulationManager: could not parse '{command[1]}' as a float");
+                        }
+                        else if (!twoSim)
+                        {
+                            field.SetValue(settings[FirstSim], value);
+                            simulations[FirstSim].UpdateSettings(settings[FirstSim]);
+                        }
+                        else
+                        {
+                            field.SetValue(settings[SecondSim], value);
+                            simulations[SecondSim].UpdateSettings(settings[SecondSim]);
+                        }
+                    }
+                    else
+                        Debug.LogWarning($"SimulationManager: no field with name '{command[0]}' found on SimulationSettings");
+                }
+            }
+        }
+
         private void OnValidate()
         {
             twoSim = twoSimulations;
@@ -261,11 +527,13 @@ namespace SimulationLogic
 
         private void LogFrameData()
         {
-            // Logs the time taken for each step every 100 frames
             if (Watcher.Count % 100 == 0)
             {
-                Debug.Log(Watcher.Log());
-                Watcher.Reset();
+                // Debug.Log(Watcher.Log());
+                // Watcher.Reset();
+                frameTotal += (int)Watcher.GetTotal();
+                frames++;
+                Debug.Log(frameTotal / frames);
             }
         }
     }
