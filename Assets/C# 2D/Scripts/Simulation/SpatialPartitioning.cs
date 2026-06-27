@@ -52,7 +52,7 @@ namespace SimulationLogic
                 grid[i] = new List<int>();
         }
 
-        public void Init(ReadOnlySpan<Particle> particles)
+        public void Init(ReadOnlySpan<FluidParticle> particles)
         {
             foreach (var list in grid)
                 list.Clear();
@@ -61,7 +61,7 @@ namespace SimulationLogic
                 grid[GetGridIndex(particle.position)].Add(particle.ID);
         }
 
-        public void Init(ReadOnlySpan<BorderParticle> particles)
+        public void Init(ReadOnlySpan<BoundaryParticle> particles)
         {
             foreach (var list in grid)
                 list.Clear();

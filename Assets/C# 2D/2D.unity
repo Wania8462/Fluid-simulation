@@ -914,7 +914,7 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-  draw: 1
+  draw: 0
   spawn: {fileID: 1165800424}
   render: {fileID: 1165800425}
   inputField: {fileID: 1902331580}
@@ -1138,10 +1138,10 @@ MonoBehaviour:
   xZoom: 10
   xTickCount: 50
   yScale: 0.5
-  yZoom: 2
+  yZoom: 20
   yTickCount: 20
   yMin: 0
-  yMax: 200
+  yMax: 20
   graphOrigin: {x: -200, y: -100}
   axisWidth: 0.5
   labelOffset: 5

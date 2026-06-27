@@ -22,6 +22,14 @@ namespace Rendering
         [SerializeField] private RenderMarchingSquares renderMarchingSquares;
         [SerializeField] private RenderDensityMap renderDensityMap;
 
+        private List<float2> persistantParticles = new();
+
+        private void Update()
+        {
+            for (int i = 0; i < persistantParticles.Count; i++)
+                renderParticles.DrawCustomParticle(persistantParticles[i]);
+        }
+
         public (int, int) InitAll(int maxNumParticles, float2 boundSize)
         {
             (int, int) ret = new();
@@ -105,6 +113,12 @@ namespace Rendering
         public void DrawBorderParticles()
         {
             renderParticles.DrawBorderParticles();
+        }
+        
+        public void CreatePersistantStaticParticle(float2 position, float radius, Color color)
+        {
+            renderParticles.InitCustomParticle(position, radius, color);
+            persistantParticles.Add(position);
         }
         #endregion
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Rendering;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
@@ -45,7 +46,6 @@ namespace SimulationLogic
         [Header("Density")]
         public float stiffness;
         public float nearStiffness;
-        public float borderStiffness;
         public float restDensity;
 
         [Header("Springs")]
@@ -73,7 +73,6 @@ namespace SimulationLogic
 
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
-            borderStiffness = settings.borderStiffness;
             restDensity = settings.restDensity;
 
             springInteractionRadius = settings.springInteractionRadius;
@@ -176,21 +175,8 @@ namespace SimulationLogic
 
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
-                // float dt = HandleGraphs();
-                float dt = 1 / 60f;
-                float maxVel = GetMaxVelocity(simulations[0]._particles);
                 float maxDen = GetMaxDensity(simulations[0]._particles);
-
-                graph.AddPoint(maxVel, dt, 0);
-                graph.AddPoint(GetMaxDisplacement(simulations[0]._particles) * 20, dt, 1);
-                graph.AddPoint(maxDen * 10, dt, 2);
-
-                // Debug.Log(@$"Chnage in density: {maxDen - previous}
-                // Velocity: {maxVel}
-                // Density: {maxDen}");
-
-                // dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : dt;
-                // if (math.abs(maxDen - previous) > 0.4f) Debug.Log("Using lower dt");
+                float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 40;
                 previous = maxDen;
 
                 if (Camera.main == null)
@@ -207,227 +193,6 @@ namespace SimulationLogic
             if (draw)
                 render.Draw();
         }
-
-        private float HandleGraphs()
-        {
-            if (graph.GetCurrentTime() > 40)
-            {
-                if (currStage == stages.Count - 1)
-                    EditorApplication.isPlaying = false;
-
-                else if (!capturePending)
-                {
-                    capturePending = true;
-                    StartCoroutine(CaptureAndAdvance());
-                }
-            }
-
-            Particle[] particles = simulations[0]._particles;
-            float maxVel = GetMaxVelocity(particles);
-
-            float dt = stages[currStage].Contains("60") ? 1 / 60f : 1 / 30f;
-            dt = stages[currStage].Contains("capped") ? Mathf.Min(1 / maxVel, dt) : dt;
-
-            if (stages[currStage].Contains("Velocity"))
-            {
-                graph.AddPoint(maxVel, dt, 0);
-                graph.AddPoint(GetMeanVelocity(particles), dt, 1);
-                graph.AddPoint(GetMedianVelocity(particles), dt, 2);
-            }
-
-            else if (stages[currStage].Contains("Displacement"))
-            {
-                graph.AddPoint(GetMaxDisplacement(particles), dt, 0);
-                graph.AddPoint(GetMeanDisplacement(particles), dt, 1);
-                graph.AddPoint(GetMedianDisplacement(particles), dt, 2);
-            }
-
-            else if (stages[currStage].Contains("Density"))
-            {
-                graph.AddPoint(GetMaxDensity(particles), dt, 0);
-                graph.AddPoint(GetMeanDensity(particles), dt, 1);
-                graph.AddPoint(GetMedianDensity(particles), dt, 2);
-            }
-
-            return dt;
-        }
-
-        private System.Collections.IEnumerator CaptureAndAdvance()
-        {
-            yield return new WaitForEndOfFrame();
-            ScreenCapture.CaptureScreenshot(Application.persistentDataPath + $"/{stages[currStage]}.png", 2);
-            yield return new WaitForEndOfFrame();
-            currStage++;
-            InitSimulationInstances();
-
-            if (stages[currStage].Contains("Displacement"))
-            {
-                graph.yZoom = 20;
-                graph.yMax = 20;
-            }
-
-            graph.Reset();
-            capturePending = false;
-        }
-
-        #region Velcoities
-        private float GetMaxVelocity(Particle[] particles)
-        {
-            float maximum = 0;
-            foreach (var particle in particles)
-            {
-                float mag = FluidMath.Magnitude(particle.velocity);
-                if (mag > maximum) maximum = mag;
-            }
-
-            return maximum;
-        }
-
-        private float GetMeanVelocity(Particle[] particles)
-        {
-            float total = 0;
-            foreach (var particle in particles)
-            {
-                float mag = FluidMath.Magnitude(particle.velocity);
-                total += mag;
-            }
-
-            return total / particles.Length;
-        }
-
-        private float GetMedianVelocity(Particle[] particles)
-        {
-            buffer.Clear();
-            foreach (var particle in particles)
-            {
-                float mag = FluidMath.Magnitude(particle.velocity);
-                buffer.Add(mag);
-            }
-
-            return buffer[particles.Length / 2];
-        }
-
-        private float GetStandardDeviationVelocity(Particle[] particles)
-        {
-            float sum = 0;
-            float sumSqares = 0;
-            foreach (var particle in particles)
-            {
-                float mag = FluidMath.Magnitude(particle.velocity);
-                sum += mag;
-                sumSqares += mag * mag;
-            }
-
-            int n = particles.Length;
-            float mean = sum / n;
-            return Mathf.Sqrt(sumSqares / n - (mean * mean));
-        }
-        #endregion
-
-        #region Displacements
-        private float GetMaxDisplacement(Particle[] particles)
-        {
-            float maximum = 0;
-            foreach (var particle in particles)
-            {
-                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
-                if (displacement > maximum) maximum = displacement;
-            }
-
-            return maximum;
-        }
-
-        private float GetMeanDisplacement(Particle[] particles)
-        {
-            float total = 0;
-            foreach (var particle in particles)
-            {
-                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
-                total += displacement;
-            }
-
-            return total / particles.Length;
-        }
-
-        private float GetMedianDisplacement(Particle[] particles)
-        {
-            buffer.Clear();
-            foreach (var particle in particles)
-            {
-                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
-                buffer.Add(displacement);
-            }
-
-            return buffer[particles.Length / 2];
-        }
-
-        private float GetStandardDeviationDisplacement(Particle[] particles)
-        {
-            float sum = 0;
-            float sumSquares = 0;
-            foreach (var particle in particles)
-            {
-                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
-                sum += displacement;
-                sumSquares += displacement * displacement;
-            }
-
-            int n = particles.Length;
-            float mean = sum / n;
-            return Mathf.Sqrt(sumSquares / n - (mean * mean));
-        }
-        #endregion
-
-        #region Densities
-        private float GetMaxDensity(Particle[] particles)
-        {
-            float maximum = 0;
-            foreach (var particle in particles)
-            {
-                if (particle.density > maximum)
-                    maximum = particle.density;
-            }
-
-            return maximum;
-        }
-
-        private float GetMeanDensity(Particle[] particles)
-        {
-            float total = 0;
-            foreach (var particle in particles)
-            {
-                total += particle.density;
-            }
-
-            return total / particles.Length;
-        }
-
-        private float GetMedianDensity(Particle[] particles)
-        {
-            buffer.Clear();
-            foreach (var particle in particles)
-            {
-                buffer.Add(particle.density);
-            }
-
-            return buffer[particles.Length / 2];
-        }
-
-        private float GetStandardDeviationDensity(Particle[] particles)
-        {
-            float sum = 0;
-            float sumSquares = 0;
-            foreach (var particle in particles)
-            {
-                sum += particle.density;
-                sumSquares += particle.density * particle.density;
-            }
-
-            int n = particles.Length;
-            float mean = sum / n;
-            return Mathf.Sqrt(sumSquares / n - (mean * mean));
-        }
-        #endregion
 
         private void InitSimulationInstances()
         {
@@ -452,7 +217,7 @@ namespace SimulationLogic
             if (!twoSim)
             {
                 simulations = new Simulation[1];
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
             }
 
             else
@@ -465,8 +230,8 @@ namespace SimulationLogic
                     settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
                 }
 
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
-                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
+                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
             }
 
             for (var i = 0; i < simulations.Length; i++)
@@ -525,6 +290,7 @@ namespace SimulationLogic
                 simulations[i].UpdateSettings(settings[i]);
         }
 
+        #region Log
         private void LogFrameData()
         {
             if (Watcher.Count % 100 == 0)
@@ -536,5 +302,227 @@ namespace SimulationLogic
                 Debug.Log(frameTotal / frames);
             }
         }
+
+        private float HandleGraphs()
+        {
+            if (graph.GetCurrentTime() > 40)
+            {
+                if (currStage == stages.Count - 1)
+                    EditorApplication.isPlaying = false;
+
+                else if (!capturePending)
+                {
+                    capturePending = true;
+                    StartCoroutine(CaptureAndAdvance());
+                }
+            }
+
+            FluidParticle[] particles = simulations[0]._particles;
+            float maxVel = GetMaxVelocity(particles);
+
+            float dt = stages[currStage].Contains("60") ? 1 / 60f : 1 / 30f;
+            dt = stages[currStage].Contains("capped") ? Mathf.Min(1 / maxVel, dt) : dt;
+
+            if (stages[currStage].Contains("Velocity"))
+            {
+                graph.AddPoint(maxVel, dt, 0);
+                graph.AddPoint(GetMeanVelocity(particles), dt, 1);
+                graph.AddPoint(GetMedianVelocity(particles), dt, 2);
+            }
+
+            else if (stages[currStage].Contains("Displacement"))
+            {
+                graph.AddPoint(GetMaxDisplacement(particles), dt, 0);
+                graph.AddPoint(GetMeanDisplacement(particles), dt, 1);
+                graph.AddPoint(GetMedianDisplacement(particles), dt, 2);
+            }
+
+            else if (stages[currStage].Contains("Density"))
+            {
+                graph.AddPoint(GetMaxDensity(particles), dt, 0);
+                graph.AddPoint(GetMeanDensity(particles), dt, 1);
+                graph.AddPoint(GetMedianDensity(particles), dt, 2);
+            }
+
+            return dt;
+        }
+
+        private System.Collections.IEnumerator CaptureAndAdvance()
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Application.persistentDataPath + $"/{stages[currStage]}.png", 2);
+            yield return new WaitForEndOfFrame();
+            currStage++;
+            InitSimulationInstances();
+
+            if (stages[currStage].Contains("Displacement"))
+            {
+                graph.yZoom = 20;
+                graph.yMax = 20;
+            }
+
+            graph.Reset();
+            capturePending = false;
+        }
+
+        #region Velcoities
+        private float GetMaxVelocity(FluidParticle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                if (mag > maximum) maximum = mag;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanVelocity(FluidParticle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                total += mag;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianVelocity(FluidParticle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                buffer.Add(mag);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationVelocity(FluidParticle[] particles)
+        {
+            float sum = 0;
+            float sumSqares = 0;
+            foreach (var particle in particles)
+            {
+                float mag = FluidMath.Magnitude(particle.velocity);
+                sum += mag;
+                sumSqares += mag * mag;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSqares / n - (mean * mean));
+        }
+        #endregion
+
+        #region Displacements
+        private float GetMaxDisplacement(FluidParticle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                if (displacement > maximum) maximum = displacement;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanDisplacement(FluidParticle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                total += displacement;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianDisplacement(FluidParticle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                buffer.Add(displacement);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationDisplacement(FluidParticle[] particles)
+        {
+            float sum = 0;
+            float sumSquares = 0;
+            foreach (var particle in particles)
+            {
+                float displacement = FluidMath.Distance(particle.position, particle.prevPosition);
+                sum += displacement;
+                sumSquares += displacement * displacement;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSquares / n - (mean * mean));
+        }
+        #endregion
+
+        #region Densities
+        private float GetMaxDensity(FluidParticle[] particles)
+        {
+            float maximum = 0;
+            foreach (var particle in particles)
+            {
+                if (particle.density > maximum)
+                    maximum = particle.density;
+            }
+
+            return maximum;
+        }
+
+        private float GetMeanDensity(FluidParticle[] particles)
+        {
+            float total = 0;
+            foreach (var particle in particles)
+            {
+                total += particle.density;
+            }
+
+            return total / particles.Length;
+        }
+
+        private float GetMedianDensity(FluidParticle[] particles)
+        {
+            buffer.Clear();
+            foreach (var particle in particles)
+            {
+                buffer.Add(particle.density);
+            }
+
+            return buffer[particles.Length / 2];
+        }
+
+        private float GetStandardDeviationDensity(FluidParticle[] particles)
+        {
+            float sum = 0;
+            float sumSquares = 0;
+            foreach (var particle in particles)
+            {
+                sum += particle.density;
+                sumSquares += particle.density * particle.density;
+            }
+
+            int n = particles.Length;
+            float mean = sum / n;
+            return Mathf.Sqrt(sumSquares / n - (mean * mean));
+        }
+        #endregion
+        #endregion
     }
 }

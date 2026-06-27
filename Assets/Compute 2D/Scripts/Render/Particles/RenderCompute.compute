@@ -1,18 +1,21 @@
-#translate
+#pragma kernel CalculateColors
+
 
 RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float4> Colors;
 
-bool solidBlue;
-bool blueToRed;
-bool blueToWhite;
-float maxSpeed;
+const bool solidBlue;
+const bool blueToRed;
+const bool blueToWhite;
+const float maxSpeed;
 
-uint numParticles;
+const uint numParticles;
 
-[threads(numParticles)]
-void CalculateColors (indexer = e)
+[numthreads(64,1,1)]
+void CalculateColors (uint3 id : SV_DispatchThreadID)
 {
+    if (id.x >= numParticles) return;
+
     if (solidBlue)
     {
         Colors[id.x] = float4(0.0, 0.0, 1.0, 1.0);
@@ -28,5 +31,5 @@ void CalculateColors (indexer = e)
     }
 
     if (blueToWhite)
-        Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
+    Colors[id.x] = float4(intensity, intensity, 1.0, 1.0);
 }

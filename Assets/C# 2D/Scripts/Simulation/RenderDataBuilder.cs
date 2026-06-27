@@ -26,7 +26,7 @@ namespace SimulationLogic
         [Header("References")]
         [SerializeField] private SimulationManager manager;
         [SerializeField] private InitializeParticles spawn;
-        [SerializeField] private RenderManager renderManager;
+        public RenderManager renderManager; // MAKE THIS PRIVATE BEFORE PUSHING TO MAIN
 
         [Header("Debug settings")]
         [SerializeField] private int trackParticle = -1;
@@ -69,7 +69,7 @@ namespace SimulationLogic
                 Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
 
             if (simulation.useParticlesAsBorder)
-                renderManager.InitBorderParticles(sim._borderParticles.ForEach(p => p.position));
+                renderManager.InitBorderParticles(sim._boundaryParticles.ForEach(p => p.position));
         }
 
         public void Draw()
@@ -410,7 +410,7 @@ namespace SimulationLogic
                 return -1;
         }
 
-        private void SetPositions(Span<Particle> particles)
+        private void SetPositions(Span<FluidParticle> particles)
         {
             if (particles.Length > renderPositions.Length)
             {
@@ -422,7 +422,7 @@ namespace SimulationLogic
                 renderPositions[i] = particles[i].position;
         }
 
-        private void SetVelocities(Span<Particle> particles)
+        private void SetVelocities(Span<FluidParticle> particles)
         {
             if (particles.Length > renderVelocities.Length)
             {

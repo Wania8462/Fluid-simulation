@@ -10,7 +10,7 @@ namespace SimulationLogic
         [SerializeField] private int particleSquareLength = 50;
         [SerializeField] private bool spawnCircle = false;
         [SerializeField] private float2 spawnOffset = float2.zero;
-        [SerializeField] private float spacing = 2;
+        [SerializeField] private float particleSpacing = 2;
         [SerializeField] private bool useJitter = true;
         [SerializeField] private float jitterStrength = 0.2f;
         [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
@@ -40,11 +40,13 @@ namespace SimulationLogic
             return IDs;
         }
 
-        public RefList<float2> InitPositions()
+        public RefList<float2> InitPositions(int length = -1, float spacing = -1)
         {
+            int len = length == -1 ? particleSquareLength : length;
+            spacing = spacing == -1 ? particleSpacing : spacing;
+            
             if (!spawnCircle)
             {
-                int len = particleSquareLength;
                 RefList<float2> pos = new(len * len);
                 jitterStrength = useJitter ? jitterStrength : 0;
 
@@ -67,7 +69,6 @@ namespace SimulationLogic
 
             else
             {
-                int len = particleSquareLength;
                 float radius = len * spacing / 2;
                 RefList<float2> positions = new();
                 float2 origin = new(0, 0);
@@ -85,7 +86,7 @@ namespace SimulationLogic
                     }
                 }
 
-                boundingBoxSize = new float2(particleSquareLength + boundingBoxSizeOffset.x * 2, particleSquareLength + boundingBoxSizeOffset.y * 2);
+                boundingBoxSize = new float2(len + boundingBoxSizeOffset.x * 2, len + boundingBoxSizeOffset.y * 2);
 
                 if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0)
                     Debug.LogWarning($"Spawn particles: Bounding box size is {boundingBoxSize}");

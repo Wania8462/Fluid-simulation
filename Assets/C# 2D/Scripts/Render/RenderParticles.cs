@@ -260,7 +260,7 @@ namespace Rendering
         {
             DeleteParticles();
             DeleteBorderParticles();
-            DeleteCustomParticles();
+            // DeleteCustomParticles(); UNCOMMENT BEFORE PUSHING TO MAIN
         }
 
         void OnDestroy()

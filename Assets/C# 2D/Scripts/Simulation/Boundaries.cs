@@ -7,13 +7,13 @@ namespace SimulationLogic
 {
     public class Boundaries
     {
-        private Particle[] _particles;
+        private FluidParticle[] _particles;
         private int _count;
         private float particleRadius;
         private float collisionDamp;
         private float2 realHalfBoundSizeBody;
 
-        public Boundaries(Particle[] particles, int count, float particleRadius, float collisionDamp, float2 realHalfBoundSizeBody)
+        public Boundaries(FluidParticle[] particles, int count, float particleRadius, float collisionDamp, float2 realHalfBoundSizeBody)
         {
             _particles = particles;
             _count = count;
