@@ -193,10 +193,7 @@ namespace SimulationLogic
         private void ExternalForces()
         {
             for (int i = 0; i < count; i++)
-            {
                 _particles[i].velocity.y += dt * gravity;
-                _boundaryParticles[i].velocity.y += dt * gravity;
-            }
         }
 
         private void DoubleDensityRelaxation()
@@ -213,36 +210,37 @@ namespace SimulationLogic
                 {
                     // todo: try distance squared and compute q just once
                     // maybe need mass
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    float mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
                     if (mag == 0 || mag > interactionRadius) continue;
-                    var q = mag / interactionRadius;
+                    float q = mag / interactionRadius;
 
                     p.density += FluidMath.QuadraticSpikyKernel(q);
                     p.nearDensity += FluidMath.CubicSpikyKernel(q);
                 }
 
-                foreach (var n in p.boundaryNeighbours)
+                foreach (var b in p.boundaryNeighbours)
                 {
-                    float mag = FluidMath.Distance(p.position, _boundaryParticles[n].position);
+                    float mag = FluidMath.Distance(p.position, _boundaryParticles[b].position);
                     if (mag == 0 || mag > interactionRadius) continue;
                     float q = mag / interactionRadius;
 
-                    // maybe need rest density
-                    p.density += _boundaryParticles[n].volume * FluidMath.QuadraticSpikyKernel(q);
-                    p.nearDensity += _boundaryParticles[n].volume * FluidMath.CubicSpikyKernel(q);
+                    // can be precomputed
+                    float psi = restDensity * _boundaryParticles[b].volume;
+                    p.density += psi * FluidMath.QuadraticSpikyKernel(q);
+                    p.nearDensity += psi * FluidMath.CubicSpikyKernel(q);
                 }
 
-                var pressure = stiffness * (p.density - restDensity);
-                var nearPressure = nearStiffness * p.nearDensity;
+                float pressure = stiffness * (p.density - restDensity);
+                float nearPressure = nearStiffness * p.nearDensity;
 
                 foreach (var n in p.neighbours)
                 {
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    float mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
                     if (mag == 0 || mag > interactionRadius) continue;
-                    var q = mag / interactionRadius;
+                    float q = mag / interactionRadius;
 
-                    var r = FluidMath.UnitVector(p.position, _particles[_sparse[n]].position, mag);
-                    var displacement = FluidMath.PressureDisplacement(
+                    float2 r = FluidMath.UnitVector(p.position, _particles[_sparse[n]].position, mag);
+                    float2 displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,
                         pressure,
@@ -253,25 +251,26 @@ namespace SimulationLogic
                     lock (lockObject) { p.forceBuffer -= displacement / 2; }
                 }
 
-                foreach (var n in p.boundaryNeighbours)
+                // Boundary particle displacement (Akinci et al. 2012, eqs. 9-10).
+                // Uses the fluid particle's own pressure, scaled by the boundary weight Psi.
+                // The boundary stays fixed, so the fluid particle absorbs the full
+                // displacement instead of the symmetric half used between two fluids.
+                foreach (var b in p.boundaryNeighbours)
                 {
-                    var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
+                    float mag = FluidMath.Distance(p.position, _boundaryParticles[b].position);
                     if (mag == 0 || mag > interactionRadius) continue;
-                    var q = mag / interactionRadius;
+                    float q = mag / interactionRadius;
 
-                    float force = -_boundaryParticles[n].volume * (pressure / (p.density * p.density)) * FluidMath.QuadraticSpikyKernelDerivative(q);
-                    float nearForce = -_boundaryParticles[n].volume * (pressure / (p.nearDensity * p.nearDensity)) * FluidMath.CubicSpikyKernelDerivative(q);
-
-                    float2 r = FluidMath.UnitVector(_boundaryParticles[n].position, p.position, mag);
-                    // float2 displacement = dt * dt * force * nearForce * r;
+                    float2 r = FluidMath.UnitVector(p.position, _boundaryParticles[b].position, mag);
                     float2 displacement = FluidMath.PressureDisplacement(
                         dt,
                         q,
-                        force,
-                        nearForce,
+                        pressure,
+                        nearPressure,
                         r);
 
-                    lock (lockObject) { p.forceBuffer += displacement; }
+                    float psi = restDensity * _boundaryParticles[b].volume;
+                    lock (lockObject) { p.forceBuffer -= psi * displacement; }
                 }
             });
 
@@ -565,10 +564,11 @@ namespace SimulationLogic
 
             boundaries = new Boundaries(_particles, count, particleRadius, collisionDamp, realHalfBoundSizeBody);
 
-            // Test boundaries
+            // Test boundaries make it look better before pushing to main
             _boundaryParticles = new();
             int nbBoundaryParticles = 100;
-            var boundPos = initParticles.InitCircleOutlinePositions(10, nbBoundaryParticles, float2.zero);
+            var boundPos = initParticles.InitCircleOutlinePositions(10, nbBoundaryParticles, new(60, -80));
+            // var boundPos = initParticles.InitBorderPositions();
             for (int i = 0; i < nbBoundaryParticles; i++)
                 _boundaryParticles.Add(new(boundPos[i]));
 
@@ -589,7 +589,7 @@ namespace SimulationLogic
 
                 foreach (int n in _boundaryParticles[i].neighbours)
                 {
-                    float relativeDistance = FluidMath.Distance(_boundaryParticles[i].position, _boundaryParticles[n].position) * 0.166666667f;
+                    float relativeDistance = FluidMath.Distance(_boundaryParticles[i].position, _boundaryParticles[n].position) / interactionRadius;
                     if (relativeDistance == 0 || relativeDistance > 1f) continue;
 
                     delta += FluidMath.QuadraticSpikyKernel(relativeDistance);
