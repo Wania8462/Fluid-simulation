@@ -67,6 +67,7 @@ namespace SimulationLogic
                 (64 * Mathf.PI * Pow9(smoothingRadius));
         }
 
+        // Relative distance is always positive because it's derived from distance
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float QuadraticSpikyKernel(float relativeDistance) => (1 - relativeDistance) * (1 - relativeDistance);
 
@@ -74,24 +75,10 @@ namespace SimulationLogic
         public static float CubicSpikyKernel(float relativeDistance) => Pow3(1 - relativeDistance);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float QuadraticSpikyKernelDerivative(float relativeDistance)
-        {
-            if (relativeDistance == 0)
-                Debug.LogError("FluidMath: trying to get derivative at undefined x");
-
-            if (relativeDistance > 0)
-                return 2 * relativeDistance - 2;
-
-            else
-                return 2 * relativeDistance + 2;
-        }
+        public static float QuadraticSpikyKernelDerivative(float relativeDistance) => 2 * relativeDistance - 2;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float CubicSpikyKernelDerivative(float distance, float interactionRadius)
-        {
-            float relativeDistance = Mathf.Abs(distance) / interactionRadius;
-            return -3f / interactionRadius * (1f - relativeDistance) * (1f - relativeDistance) * Mathf.Sign(distance);
-        }
+        public static float CubicSpikyKernelDerivative(float relativeDistance) => -3f * (relativeDistance - 1) * (relativeDistance - 1);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float2 GradW(float2 initialPosition, float2 finalPosition, float distance, float interactionRadius)

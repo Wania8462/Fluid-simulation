@@ -38,7 +38,6 @@ namespace SimulationLogic
         public bool flow;
         public int maxParticles = -1;
         public bool includeBody;
-        public bool useParticlesAsBorder;
 
         [Header("Body settings")]
         public Body body;
@@ -67,7 +66,6 @@ namespace SimulationLogic
             mouseRadius = settings.mouseRadius;
             flow = settings.flow;
             collisionDamping = settings.collisionDamping;
-            useParticlesAsBorder = settings.useParticlesAsBorder;
 
             body = settings.body;
 
@@ -176,7 +174,7 @@ namespace SimulationLogic
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 float maxDen = GetMaxDensity(simulations[0]._particles);
-                float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 40;
+                float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 1 / 40f;
                 previous = maxDen;
 
                 if (Camera.main == null)

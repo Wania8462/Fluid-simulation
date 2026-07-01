@@ -254,7 +254,21 @@ public class RefList<T> : IRefList<T>
             Resize(capacity);
     }
 
-    // foreach uses duck typing: picks this struct overload, zero allocation
+    public T[] ToArray()
+    {
+        T[] returnArr = new T[_size];
+        Array.Copy(_items, returnArr, _size);
+        return returnArr;
+    }
+
+    public List<T> ToList()
+    {
+        List<T> list = new(_size);
+        for (int i = 0; i < _size; i++)
+            list.Add(_items[i]);
+        return list;
+    }
+
     public RefListEnumerator<T> GetEnumerator() => new(_items, _size);
 
     // Explicit interface implementations for IEnumerable<T> / LINQ / etc.

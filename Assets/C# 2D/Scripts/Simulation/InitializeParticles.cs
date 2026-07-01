@@ -44,7 +44,7 @@ namespace SimulationLogic
         {
             int len = length == -1 ? particleSquareLength : length;
             spacing = spacing == -1 ? particleSpacing : spacing;
-            
+
             if (!spawnCircle)
             {
                 RefList<float2> pos = new(len * len);
@@ -94,6 +94,23 @@ namespace SimulationLogic
                 circleArraySize = positions.Count;
                 return positions;
             }
+        }
+
+        public RefList<float2> InitCircleOutlinePositions(float radius, int nbOfParticles, float2 position)
+        {
+            if (nbOfParticles < 4)
+                Debug.LogWarning("InitializeParticles: not enough particles for the circle");
+
+            RefList<float2> positions = new();
+            float theta = 2 * math.PI / nbOfParticles;
+
+            for (int i = 0; i < nbOfParticles; i++)
+            {
+                positions.Add(new(radius * Mathf.Cos(i * theta) + position.x,
+                                   radius * Mathf.Sin(i * theta) + position.y));
+            }
+
+            return positions;
         }
 
         public RefList<float2> InitBorderPositions()
