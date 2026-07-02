@@ -62,12 +62,6 @@ namespace SimulationLogic
             (int edges, int cells) = renderManager.InitAll(spawn.GetBoundSize(), sim.maxParticles, sim._boundaryParticles.Count);
             densitiesSquares = new float[edges];
             densitiesMap = new float[cells];
-
-            if (CheckSimSettings() && simulation.includeBody)
-                    renderManager.InitBody(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
-
-            else
-                Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
         }
 
         public void Draw()
@@ -98,13 +92,10 @@ namespace SimulationLogic
         private void DrawParticles()
         {
             CheckDependencies();
-            HandleKeyInputs();
+            HandleParticleInputs();
             greenParticles.Clear();
             yellowParticles.Clear();
             HighlghtParticlesForDebug();
-
-            if (CheckSimSettings() && manager.settings[0].includeBody)
-                HighlighParticlesBodyForDebug();
 
             EnsureBufferSize();
             SetPositions(simulation._particles.AsSpan(0, simulation.count));
@@ -118,7 +109,7 @@ namespace SimulationLogic
                 greenParticles,
                 yellowParticles);
 
-            if (simulation.includeBody)
+            if (simulation._boundaryParticles.Count > 0)
                 renderManager.DrawBoundaryParticles(renderBoundaryPositions);
         }
 
@@ -135,7 +126,7 @@ namespace SimulationLogic
                 HighlightSingle();
             }
 
-            else if (trackPair1 != -1 ^ trackPair2 != -1)
+            else if (trackPair1 != -1 || trackPair2 != -1)
             {
                 var tracked = trackPair1 == -1 ? trackPair2 : trackPair1;
 
@@ -232,50 +223,6 @@ namespace SimulationLogic
             renderManager.DrawLine(firstPos, secondPos, width: 0.1f, Color.white);
         }
 
-        private void HighlighParticlesBodyForDebug()
-        {
-            if (!bodyDebug) return;
-
-            if (bodyDebugDisplay == DebugDisplay.SPBox)
-            {
-                foreach (var id in simulation.GetBodySPNeighbours())
-                    greenParticles.Add(simulation._sparse[id]);
-
-                var lineThickness = 0.2f;
-                var SPBox = simulation.GetBodySPDimentions();
-
-                renderManager.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.AllNeighbours)
-            {
-                foreach (var id in simulation.GetBodyNeighbours())
-                    greenParticles.Add(simulation._sparse[id]);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.Velocity)
-            {
-                var lineThickness = 0.5f;
-                var predictedPos = simulation.body.position + simulation.body.velocity;
-                renderManager.DrawLine(simulation.body.position, predictedPos, lineThickness, Color.white);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.Force)
-                Debug.Log("Simulation manager: Body force isn't implemented");
-        }
-
-        private void HandleKeyInputs()
-        {
-            if (!Input.GetKey(KeyCode.LeftShift))
-                HandleParticleInputs();
-
-            else
-                HandleBodyInputs();
-        }
-
         private void HandleParticleInputs()
         {
             if (Input.GetKeyDown(KeyCode.B))
@@ -320,24 +267,6 @@ namespace SimulationLogic
                 trackPair1 = -1;
                 trackPair2 = -1;
             }
-        }
-
-        private void HandleBodyInputs()
-        {
-            if (Input.GetKeyDown(KeyCode.P))
-                bodyDebug = !bodyDebug;
-
-            else if (Input.GetKeyDown(KeyCode.B))
-                bodyDebugDisplay = DebugDisplay.SPBox;
-
-            else if (Input.GetKeyDown(KeyCode.A))
-                bodyDebugDisplay = DebugDisplay.AllNeighbours;
-
-            else if (Input.GetKeyDown(KeyCode.V))
-                bodyDebugDisplay = DebugDisplay.Velocity;
-
-            else if (Input.GetKeyDown(KeyCode.F))
-                bodyDebugDisplay = DebugDisplay.Force;
         }
         #endregion
 

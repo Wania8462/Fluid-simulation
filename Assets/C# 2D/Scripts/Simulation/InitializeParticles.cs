@@ -107,7 +107,58 @@ namespace SimulationLogic
             for (int i = 0; i < nbOfParticles; i++)
             {
                 positions.Add(new(radius * Mathf.Cos(i * theta) + position.x,
+                                  radius * Mathf.Sin(i * theta) + position.y));
+            }
+
+            return positions;
+        }
+
+        public RefList<float2> InitCircleOutlinePositions(float radius, float sampleDensity, float2 position)
+        {
+            RefList<float2> positions = new();
+            float arcLen = FluidMath.ArcLength(radius, sampleDensity);
+            float theta = FluidMath.AngleFromArcLength(radius, arcLen);
+            int nbOfParticles = (int)Mathf.Ceil(2 * math.PI / theta);
+
+            for (int i = 0; i < nbOfParticles; i++)
+            {
+                positions.Add(new(radius * Mathf.Cos(i * theta) + position.x,
                                    radius * Mathf.Sin(i * theta) + position.y));
+            }
+
+            return positions;
+        }
+
+        public RefList<float2> InitRectangleOutlinePositions(float width, float height, float samplingDensity, float2 position, float rotation = 0)
+        {
+            int lenX = Mathf.Max(1, Mathf.CeilToInt(width / samplingDensity));
+            int lenY = Mathf.Max(1, Mathf.CeilToInt(height / samplingDensity));
+            float spacingX = width / lenX;
+            float spacingY = height / lenY;
+
+            RefList<float2> positions = new();
+            float2 topLeft = new(-width / 2, height / 2);
+
+            for (int i = 0; i < lenX; i++)
+                positions.Add(new(topLeft.x + i * spacingX, topLeft.y));
+
+            for (int i = 0; i < lenY; i++)
+                positions.Add(new(topLeft.x + width, topLeft.y - i * spacingY));
+
+            for (int i = 0; i < lenX; i++)
+                positions.Add(new(topLeft.x + width - i * spacingX, topLeft.y - height));
+
+            for (int i = 0; i < lenY; i++)
+                positions.Add(new(topLeft.x, topLeft.y - height + i * spacingY));
+
+            float cos = Mathf.Cos(rotation);
+            float sin = Mathf.Sin(rotation);
+
+            for (int i = 0; i < positions.Count; i++)
+            {
+                float2 local = positions[i];
+                positions[i] = new(position.x + local.x * cos - local.y * sin,
+                                    position.y + local.x * sin + local.y * cos);
             }
 
             return positions;

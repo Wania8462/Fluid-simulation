@@ -22,7 +22,7 @@ namespace SimulationLogic
             this.realHalfBoundSizeBody = realHalfBoundSizeBody;
         }
 
-        public void ResolveBoundaries(ref Body body, float2 realHalfBoundSize)
+        public void ResolveBoundaries(float2 realHalfBoundSize)
         {
             // Particles
             for (int i = 0; i < _count; i++)
@@ -44,19 +44,34 @@ namespace SimulationLogic
                     _particles[i].position = pos;
                 }
             }
+        }
 
-            // Bodies
-            if (Math.Abs(body.position.x) >= realHalfBoundSizeBody.x)
+        public void KeepBoundaryInsideBorder(float2 realHalfBoundSize, RefList<BoundaryParticle> particles)
+        {
+            int n = particles.Count;
+            if (n == 0) return;
+
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            for (int i = 0; i < n; i++)
             {
-                body.position.x = realHalfBoundSizeBody.x * Math.Sign(body.position.x);
-                body.velocity.x = 0;
+                float2 pos = particles[i].position;
+                minX = math.min(minX, pos.x);
+                maxX = math.max(maxX, pos.x);
+                minY = math.min(minY, pos.y);
+                maxY = math.max(maxY, pos.y);
             }
 
-            if (Math.Abs(body.position.y) >= realHalfBoundSizeBody.y)
-            {
-                body.position.y = realHalfBoundSizeBody.y * Math.Sign(body.position.y);
-                body.velocity.y = 0;
-            }
+            float2 shift = float2.zero;
+            if (maxX > realHalfBoundSize.x) shift.x = realHalfBoundSize.x - maxX;
+            else if (minX < -realHalfBoundSize.x) shift.x = -realHalfBoundSize.x - minX;
+            if (maxY > realHalfBoundSize.y) shift.y = realHalfBoundSize.y - maxY;
+            else if (minY < -realHalfBoundSize.y) shift.y = -realHalfBoundSize.y - minY;
+
+            if (shift.x == 0 && shift.y == 0) return;
+
+            for (int i = 0; i < n; i++)
+                particles[i].position += shift;
         }
 
         private void LineBarrier(float2 start, float2 end)

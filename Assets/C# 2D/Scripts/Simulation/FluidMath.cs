@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 using UnityEngine;
@@ -97,6 +98,29 @@ namespace SimulationLogic
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Magnitude(float2 vector) => Mathf.Sqrt((vector.x * vector.x) + (vector.y * vector.y));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float ArcLength(float2 centre, float2 point1, float2 point2)
+        {
+            float radius = Distance(centre, point1);
+
+            if (radius != Distance(centre, point2))
+                throw new ArgumentException("The 2 points don't lie on the same circle");
+
+            float dist = Distance(point1, point2);
+            float angle = Mathf.Acos((2 * radius * radius - (dist * dist)) / (2 * radius * radius));
+            return 2 * angle * radius;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float AngleFromArcLength(float radius, float arcLength) => arcLength / (2 * radius);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float ArcLength(float radius, float chordLength)
+        {
+            float angle = Mathf.Acos((2 * radius * radius - (chordLength * chordLength)) / (2 * radius * radius));
+            return 2 * angle * radius;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float Pow3(float x)

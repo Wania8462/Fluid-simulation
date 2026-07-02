@@ -9,24 +9,6 @@ using UnityEngine.UI;
 namespace SimulationLogic
 {
     [Serializable]
-    public struct Body
-    {
-        public float radius;
-        public float2 position;
-        public float density;
-        public int densityResolution;
-        public int densityRadius;
-        public float upthrustStrength;
-        public float friction;
-
-        [HideInInspector] public float2 prevPosition;
-        [HideInInspector] public float2 rotation;
-        [HideInInspector] public float2 prevRotation;
-        [HideInInspector] public float2 velocity;
-        [HideInInspector] public float2[] densityPoints;
-    }
-
-    [Serializable]
     public class SimulationSettings
     {
         [Header("Simulation settings")]
@@ -37,10 +19,6 @@ namespace SimulationLogic
         public float collisionDamping;
         public bool flow;
         public int maxParticles = -1;
-        public bool includeBody;
-
-        [Header("Body settings")]
-        public Body body;
 
         [Header("Density")]
         public float stiffness;
@@ -66,8 +44,6 @@ namespace SimulationLogic
             mouseRadius = settings.mouseRadius;
             flow = settings.flow;
             collisionDamping = settings.collisionDamping;
-
-            body = settings.body;
 
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
@@ -234,7 +210,7 @@ namespace SimulationLogic
 
             for (var i = 0; i < simulations.Length; i++)
             {
-                simulations[i].SetSettings(settings[i]);
+                simulations[i].UpdateSettings(settings[i]);
                 simulations[i].SetScene();
             }
 
