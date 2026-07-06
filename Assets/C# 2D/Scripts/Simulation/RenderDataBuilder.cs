@@ -26,7 +26,7 @@ namespace SimulationLogic
         [Header("References")]
         [SerializeField] private SimulationManager manager;
         [SerializeField] private InitializeParticles spawn;
-        public RenderManager renderManager; // MAKE THIS PRIVATE BEFORE PUSHING TO MAIN
+        [SerializeField] private RenderManager renderManager;
 
         [Header("Debug settings")]
         [SerializeField] private int trackParticle = -1;

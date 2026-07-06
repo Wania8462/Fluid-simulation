@@ -34,6 +34,11 @@ namespace SimulationLogic
         public float highViscosity;
         public float lowViscosity;
 
+        [Header("Boundary object")]
+        public bool deformableBoundaryObject;
+        public float boundaryFriction;
+        public float boundaryObjectMass;
+
         public SimulationSettings() { }
 
         public SimulationSettings(SimulationSettings settings)
@@ -56,6 +61,10 @@ namespace SimulationLogic
             plasticity = settings.plasticity;
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
+
+            deformableBoundaryObject = settings.deformableBoundaryObject;
+            boundaryFriction = settings.boundaryFriction;
+            boundaryObjectMass = settings.boundaryObjectMass;
         }
     }
 
@@ -136,10 +145,7 @@ namespace SimulationLogic
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
-                {
                     InitSimulationInstances();
-                    graph.Reset();
-                }
 
                 if (Input.GetKeyDown(KeyCode.Space))
                     pause = !pause;
@@ -150,7 +156,8 @@ namespace SimulationLogic
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 float maxDen = GetMaxDensity(simulations[0]._particles);
-                float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 1 / 40f;
+                // float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 1 / 40f;
+                float dt = 1 / 60f;
                 previous = maxDen;
 
                 if (Camera.main == null)
@@ -191,7 +198,7 @@ namespace SimulationLogic
             if (!twoSim)
             {
                 simulations = new Simulation[1];
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
             }
 
             else
@@ -204,8 +211,8 @@ namespace SimulationLogic
                     settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
                 }
 
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
-                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
             }
 
             for (var i = 0; i < simulations.Length; i++)

@@ -11,15 +11,13 @@ namespace SimulationLogic
         private int _count;
         private float particleRadius;
         private float collisionDamp;
-        private float2 realHalfBoundSizeBody;
 
-        public Boundaries(FluidParticle[] particles, int count, float particleRadius, float collisionDamp, float2 realHalfBoundSizeBody)
+        public Boundaries(FluidParticle[] particles, int count, float particleRadius, float collisionDamp)
         {
             _particles = particles;
             _count = count;
             this.particleRadius = particleRadius;
             this.collisionDamp = collisionDamp;
-            this.realHalfBoundSizeBody = realHalfBoundSizeBody;
         }
 
         public void ResolveBoundaries(float2 realHalfBoundSize)
@@ -46,14 +44,14 @@ namespace SimulationLogic
             }
         }
 
-        public void KeepBoundaryInsideBorder(float2 realHalfBoundSize, RefList<BoundaryParticle> particles)
+        public void ResolveBoundaryParticleCollisions(float2 realHalfBoundSize, RefList<BoundaryParticle> particles)
         {
-            int n = particles.Count;
-            if (n == 0) return;
+            if (particles.Count == 0) return;
 
             float minX = float.MaxValue, maxX = float.MinValue;
             float minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < n; i++)
+
+            for (int i = 0; i < particles.Count; i++)
             {
                 float2 pos = particles[i].position;
                 minX = math.min(minX, pos.x);
@@ -70,7 +68,7 @@ namespace SimulationLogic
 
             if (shift.x == 0 && shift.y == 0) return;
 
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < particles.Count; i++)
                 particles[i].position += shift;
         }
 
