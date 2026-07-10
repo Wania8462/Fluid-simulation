@@ -273,7 +273,7 @@ MonoBehaviour:
   maxParticlesPerCell: 64
   maxSpringsPerParticle: 64
   particleRadius: 0.5
-  targetFrameRate: 240
+  targetFrameRate: -1
   useRealDeltaTime: 0
   fakeDeltaTime: 0.016666668
   renderingType: 0

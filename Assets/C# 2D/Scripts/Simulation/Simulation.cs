@@ -408,8 +408,8 @@ namespace SimulationLogic
             if (_boundaryParticles.Count == 0) return;
 
             // Maintain the shape
-            float angle = FindRotationAngle();
-            PlaceBoundaryParticles(angle);
+            boundaryAngle = FindRotationAngle();
+            PlaceBoundaryParticles(boundaryAngle);
 
             if (deformableBoundaryObject)
                 boundaries.ResolveBoundaryParticleCollisions(realHalfBoundSize, _boundaryParticles);
@@ -960,7 +960,7 @@ namespace SimulationLogic
                 return true;
             }
 
-            if (dt <= 0)
+            if (dt >= 1 / 5f)
             {
                 Debug.LogWarning($"Simulation: deltatime is too large. Deltatime: {dt}");
                 return true;
