@@ -8,21 +8,22 @@ namespace SimulationLogic
     public class Boundaries
     {
         private FluidParticle[] _particles;
+        RefList<BoundaryParticle> _boundaryParticles;
         private int _count;
         private float particleRadius;
         private float collisionDamp;
 
-        public Boundaries(FluidParticle[] particles, int count, float particleRadius, float collisionDamp)
+        public Boundaries(FluidParticle[] particles, RefList<BoundaryParticle> boundaryParticles, int count, float particleRadius, float collisionDamp)
         {
             _particles = particles;
+            _boundaryParticles = boundaryParticles;
             _count = count;
             this.particleRadius = particleRadius;
             this.collisionDamp = collisionDamp;
         }
 
-        public void ResolveBoundaries(float2 realHalfBoundSize)
+        public void ResolveFluidBorder(float2 realHalfBoundSize)
         {
-            // Particles
             for (int i = 0; i < _count; i++)
             {
                 var pos = _particles[i].position;
@@ -44,16 +45,16 @@ namespace SimulationLogic
             }
         }
 
-        public void ResolveBoundaryParticleCollisions(float2 realHalfBoundSize, RefList<BoundaryParticle> particles)
+        public void ResolveBoundaryBorder(float2 realHalfBoundSize)
         {
-            if (particles.Count == 0) return;
+            if (_boundaryParticles.Count == 0) return;
 
             float minX = float.MaxValue, maxX = float.MinValue;
             float minY = float.MaxValue, maxY = float.MinValue;
 
-            for (int i = 0; i < particles.Count; i++)
+            for (int i = 0; i < _boundaryParticles.Count; i++)
             {
-                float2 pos = particles[i].position;
+                float2 pos = _boundaryParticles[i].position;
                 minX = math.min(minX, pos.x);
                 maxX = math.max(maxX, pos.x);
                 minY = math.min(minY, pos.y);
@@ -68,8 +69,8 @@ namespace SimulationLogic
 
             if (shift.x == 0 && shift.y == 0) return;
 
-            for (int i = 0; i < particles.Count; i++)
-                particles[i].position += shift;
+            for (int i = 0; i < _boundaryParticles.Count; i++)
+                _boundaryParticles[i].position += shift;
         }
 
         private void LineBarrier(float2 start, float2 end)

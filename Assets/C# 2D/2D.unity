@@ -845,9 +845,16 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-    deformableBoundaryObject: 0
+    deformableBoundaryBody: 0
+    shape: 0
+    sampleDensity: 0.5
+    bodyRadius: 10
+    bodyPosition:
+      x: 80
+      y: -60
+    bodyRotationRad: 0
     boundaryFriction: 10
-    boundaryObjectMass: 200
+    boundaryBodyMass: 200
   - interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 0.5
@@ -865,9 +872,16 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.1
-    deformableBoundaryObject: 0
+    deformableBoundaryBody: 0
+    shape: 0
+    sampleDensity: 0
+    bodyRadius: 0
+    bodyPosition:
+      x: 0
+      y: 0
+    bodyRotationRad: 0
     boundaryFriction: 10
-    boundaryObjectMass: 1000
+    boundaryBodyMass: 0
   draw: 1
   spawn: {fileID: 1165800424}
   render: {fileID: 1165800425}

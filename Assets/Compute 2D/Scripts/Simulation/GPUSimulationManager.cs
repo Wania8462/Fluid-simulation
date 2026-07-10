@@ -47,7 +47,6 @@ public struct SimulationSettings
 
 public class GPUSimulationManager : MonoBehaviour
 {
-    public GameObject sprite;
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
     [SerializeField] private SimulationSettings settings;
@@ -56,7 +55,7 @@ public class GPUSimulationManager : MonoBehaviour
     [SerializeField] public float particleRadius;
     [SerializeField] private int targetFrameRate;
     [SerializeField] private bool useRealDeltaTime;
-    [SerializeField] private float fakeDeltaTime;
+    [SerializeField] private float fakeFramerate;
     [SerializeField] private RenderingType renderingType;
 
     [Header("References")]
@@ -117,13 +116,11 @@ public class GPUSimulationManager : MonoBehaviour
 
         else
             marchingSquares.Draw();
-
-        LogFrameData();
     }
 
     private void SimulationStep()
     {
-        float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeDeltaTime;
+        float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeFramerate;
         compute.SetFloat("dt", dt);
         clock++;
 
@@ -159,18 +156,6 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-
-        var temp = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersX"], 1);
-    }
-
-    private void LogFrameData()
-    {
-        if (Watcher.Count % 1000 == 0)
-        {
-            frameTotal += (int)Watcher.GetTotal();
-            frames++;
-            UnityEngine.Debug.Log(frameTotal / frames);
-        }
     }
 
     private void OnValidate()
@@ -279,9 +264,6 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
         Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
 
-        // Buffers["Springs"] = ComputeHelper.CreateStructuredBufferWithData<Spring>(numParticles * maxSpringsPerParticle);
-        // Buffers["SpringLengths"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
-
         Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
         Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
         Buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
@@ -322,8 +304,17 @@ public class GPUSimulationManager : MonoBehaviour
     );
 
     #region Debug
+    // Retrieve some dummy data at the end of the function or it will only wait for the calls
+    private void LogFrameData()
+    {
+        if (Watcher.Count % 1000 == 0)
+        {
+            frameTotal += (int)Watcher.GetTotal();
+            frames++;
+            UnityEngine.Debug.Log(frameTotal / frames);
+        }
+    }
 #if UNITY_EDITOR
-
     private List<int> GetNeighboursIndicesDebug(float2 position)
     {
         float2 scaled = (position - SP.offset) / SP.length;

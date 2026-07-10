@@ -35,9 +35,14 @@ namespace SimulationLogic
         public float lowViscosity;
 
         [Header("Boundary object")]
-        public bool deformableBoundaryObject;
+        public bool deformableBoundaryBody;
+        public BoundaryShape shape;
+        public float sampleDensity;
+        public float bodyRadius;
+        public float2 bodyPosition;
+        public float bodyRotationRad;
         public float boundaryFriction;
-        public float boundaryObjectMass;
+        public float boundaryBodyMass;
 
         public SimulationSettings() { }
 
@@ -62,9 +67,14 @@ namespace SimulationLogic
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
 
-            deformableBoundaryObject = settings.deformableBoundaryObject;
+            deformableBoundaryBody = settings.deformableBoundaryBody;
+            shape = settings.shape;
+            sampleDensity = settings.sampleDensity;
+            bodyRadius = settings.bodyRadius;
+            bodyPosition = settings.bodyPosition;
+            bodyRotationRad = settings.bodyRotationRad;
             boundaryFriction = settings.boundaryFriction;
-            boundaryObjectMass = settings.boundaryObjectMass;
+            boundaryBodyMass = settings.boundaryBodyMass;
         }
     }
 
