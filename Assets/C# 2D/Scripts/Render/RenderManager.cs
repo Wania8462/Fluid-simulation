@@ -30,32 +30,49 @@ namespace Rendering
                 renderParticles.DrawCustomParticle(persistantParticles[i]);
         }
 
-        public (int, int) InitAll(int maxNumParticles, float2 boundSize)
+        public (int edges, int cells) InitAll(float2 boundSize, int maxNbParticles, int nbBoundaryParticles = 0)
         {
-            (int, int) ret = new();
-            InitParticles(maxNumParticles);
-            ret.Item1 = InitMarchingSqaures(boundSize);
-            ret.Item2 = InitDensityMap(boundSize);
+            InitParticles(maxNbParticles);
+
+            (int edges, int cells) ret = new();
+            ret.edges = InitMarchingSqaures(boundSize);
+            ret.cells = InitDensityMap(boundSize);
+
+            if (nbBoundaryParticles > 0)
+                InitBoundaryParticles(nbBoundaryParticles);
+
             return ret;
         }
 
         #region Particles
-        public void InitParticles(int maxNumParticles)
+        /// <summary>
+        /// Calling this more than once will append particles rather than reinitializing.
+        /// Delete particles first if that is not intended.
+        /// </summary>
+        public void InitParticles(int maxNbParticles)
         {
             renderParticles.DeleteAllTypesOfParticles();
-            renderParticles.InitParticles(maxNumParticles);
+            renderParticles.InitParticles(maxNbParticles);
         }
 
+        /// <summary>
+        /// Calling this more than once will append particles rather than reinitializing.
+        /// Delete particles first if that is not intended.
+        /// </summary>
         public void InitCustomParticle(float2 position, float radius, Color color)
         {
             renderParticles.DeleteCustomParticles();
             renderParticles.InitCustomParticle(position, radius, color);
         }
 
-        public void InitBorderParticles(float2[] positions)
+        /// <summary>
+        /// Calling this more than once will append particles rather than reinitializing.
+        /// Delete particles first if that is not intended.
+        /// </summary>
+        public void InitBoundaryParticles(int nbParticles)
         {
-            renderParticles.DeleteBorderParticles();
-            renderParticles.InitBorderParticles(positions);
+            renderParticles.DeleteBoundaryParticles();
+            renderParticles.InitBoundaryParticles(nbParticles);
         }
 
         public void DrawParticles(float2[] positions, float2[] velocities, int count = -1, List<int> highlightGreen = null, List<int> highlightYellow = null)
@@ -110,9 +127,14 @@ namespace Rendering
             renderParticles.DrawAllCustomParticles(positions);
         }
 
-        public void DrawBorderParticles()
+        public void DrawBoundaryParticles(float2[] positions)
         {
-            renderParticles.DrawBorderParticles();
+            renderParticles.DrawBoundaryParticles(positions);
+        }
+
+        public void DrawBoundaryParticles()
+        {
+            renderParticles.DrawBoundaryParticles();
         }
         
         public void CreatePersistantStaticParticle(float2 position, float radius, Color color)

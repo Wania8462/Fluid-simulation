@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
@@ -80,10 +78,14 @@ public class GPUSimulationManager : MonoBehaviour
     private int3 threadGropus;
     private int3 gridThreadGropus;
 
+    private int clock;
+
     private readonly int debugLength = 100;
 
-
     private float _maxForce = 0f;
+    private float _maxDisplacement = 0f;
+    private int frameTotal = 0;
+    private int frames = 0;
 
     private void Start()
     {
@@ -99,12 +101,12 @@ public class GPUSimulationManager : MonoBehaviour
             paused = !paused;
 
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
-            SimulationStep();
+            Watcher.ExecuteWithTimer("1. Time step", SimulationStep);
 
         else if (Input.GetKeyDown(KeyCode.PageDown))
         {
             for (int i = 0; i < 10; i++)
-                SimulationStep();
+                Watcher.ExecuteWithTimer("1. Time step", SimulationStep);
         }
 
         if (renderingType == RenderingType.Particles)
@@ -115,19 +117,24 @@ public class GPUSimulationManager : MonoBehaviour
 
         else
             marchingSquares.Draw();
+
+        LogFrameData();
     }
 
     private void SimulationStep()
     {
-        // Stopwatch stopwatch = new();
-        // stopwatch.Start();
-        float dt = useRealDeltaTime ? Time.deltaTime : fakeDeltaTime;
+        float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeDeltaTime;
         compute.SetFloat("dt", dt);
+        clock++;
 
-        compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
-        compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
-        compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
-        compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+        if (clock % 4 == 0)
+        {
+            compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
+            compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
+            compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
+            compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+            clock = 0;
+        }
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
 
@@ -137,14 +144,12 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
 
-        // compute.Dispatch(KernelIDs["AdjustSprings"], threadGropus);
-        // compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        // compute.Dispatch(KernelIDs["SpringDisplacements"], threadGropus);
-        // compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
-
-        compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-        compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
-        compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+        for (int i = 0; i < 2; i++)
+        {
+            compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+            compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
+            compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+        }
 
         if (Input.GetMouseButton(0))
         {
@@ -154,8 +159,18 @@ public class GPUSimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-        // stopwatch.Stop();
-        // UnityEngine.Debug.Log(stopwatch.ElapsedMilliseconds);
+
+        var temp = ComputeHelper.GetBuffer<int>(Buffers["ForceBuffersX"], 1);
+    }
+
+    private void LogFrameData()
+    {
+        if (Watcher.Count % 1000 == 0)
+        {
+            frameTotal += (int)Watcher.GetTotal();
+            frames++;
+            UnityEngine.Debug.Log(frameTotal / frames);
+        }
     }
 
     private void OnValidate()
@@ -184,7 +199,7 @@ public class GPUSimulationManager : MonoBehaviour
         SP = new(
             new(-boundingBoxSize.x / 2, -boundingBoxSize.y / 2),
             new(boundingBoxSize.x / 2, boundingBoxSize.y / 2),
-            settings.interactionRadius);
+            settings.interactionRadius + 1);
 
         numParticles = spawn.GetNumberOfParticles();
 
@@ -374,6 +389,33 @@ public class GPUSimulationManager : MonoBehaviour
             float percentY = Mathf.Abs(forceY[maxIndex]) / 2147483647f * 100;
             float maxPercent = percentX > percentY ? percentX : percentY;
             UnityEngine.Debug.Log($"New max force magnitude: {max:F4}. Percent of int used: {maxPercent}% (particle {maxIndex}, raw x={Commify(forceX[maxIndex])}, y={Commify(forceY[maxIndex])})");
+        }
+    }
+
+    private void LogMaxDisplacement()
+    {
+        float2[] positions = ComputeHelper.GetBuffer<float2>(Buffers["Positions"]);
+        float2[] prevPositions = ComputeHelper.GetBuffer<float2>(Buffers["PrevPositions"]);
+
+        float max = 0f;
+        int maxIndex = 0;
+        float2 maxDisplacement = float2.zero;
+        for (int i = 0; i < numParticles; i++)
+        {
+            float2 displacement = positions[i] - prevPositions[i];
+            float largestComponent = math.max(math.abs(displacement.x), math.abs(displacement.y));
+            if (largestComponent > max)
+            {
+                max = largestComponent;
+                maxIndex = i;
+                maxDisplacement = displacement;
+            }
+        }
+
+        if (max > _maxDisplacement)
+        {
+            _maxDisplacement = max;
+            UnityEngine.Debug.Log($"New max displacement vector: {maxDisplacement} (particle {maxIndex})");
         }
     }
 #endif

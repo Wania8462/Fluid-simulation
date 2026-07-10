@@ -57,10 +57,18 @@ namespace SimulationLogic
             foreach (var list in grid)
                 list.Clear();
 
-            foreach(var particle in particles)
-                grid[GetGridIndex(particle.position)].Add(particle.ID);
-        }
+            foreach (var particle in particles)
+            {
+                if (GetGridIndex(particle.position) < 0 || GetGridIndex(particle.position) > grid.Length)
+                {
+                    var test = GetGridIndex(particle.position);
+                    Debug.Log("WTF");
+                }
 
+                grid[GetGridIndex(particle.position)].Add(particle.ID);
+            }
+        }
+        
         public void Init(ReadOnlySpan<BoundaryParticle> particles)
         {
             foreach (var list in grid)

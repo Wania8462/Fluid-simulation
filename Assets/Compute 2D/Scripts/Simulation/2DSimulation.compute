@@ -50,12 +50,6 @@ const float stiffness;
 const float nearStiffness;
 const float restDensity;
 
-const uint maxSpringsPerParticle;
-const float springInteractionRadius;
-const float springRadius;
-const float springStiffness;
-const float springDeformationLimit;
-const float plasticity;
 const float highViscosity;
 const float lowViscosity;
 
@@ -88,11 +82,6 @@ float2 ReadForceBuffer(uint index)
 {
     return float2((float)ForceBuffersX[index] / FloatScale,
     (float)ForceBuffersY[index] / FloatScale);
-}
-
-uint SpringIndex(uint i, uint j)
-{
-    i * maxSpringsPerParticle + j;
 }
 
 [numthreads(64,1,1)]
@@ -319,16 +308,3 @@ void SetNeighbours (uint3 id : SV_DispatchThreadID)
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

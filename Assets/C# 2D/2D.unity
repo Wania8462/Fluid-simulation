@@ -216,7 +216,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &290152733
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -830,82 +830,13 @@ MonoBehaviour:
   settings:
   - interactionRadius: 6
     gravity: -20
-    mouseAttractiveness: 0.5
-    mouseRadius: 1000
-    collisionDamping: 0.083
-    flow: 0
-    maxParticles: 5000
-    includeBody: 0
-    useParticlesAsBorder: 0
-    body:
-      radius: 10
-      position:
-        x: 70
-        y: 0
-      density: 3
-      densityResolution: 10
-      densityRadius: 2
-      upthrustStrength: 1
-      friction: 0
-      prevPosition:
-        x: 0
-        y: 0
-      rotation:
-        x: 0
-        y: 0
-      prevRotation:
-        x: 0
-        y: 0
-      velocity:
-        x: 0
-        y: 0
-      densityPoints: []
-    stiffness: 200
-    nearStiffness: 20
-    borderStiffness: 100
-    restDensity: 5
-    springInteractionRadius: 2
-    springRadius: 1
-    springStiffness: 0.01
-    springDeformationLimit: 0
-    plasticity: 0.05
-    highViscosity: 0
-    lowViscosity: 0.1
-  - interactionRadius: 6
-    gravity: -20
     mouseAttractiveness: 1
     mouseRadius: 1000
     collisionDamping: 0
     flow: 0
     maxParticles: -1
-    includeBody: 0
-    useParticlesAsBorder: 0
-    body:
-      radius: 10
-      position:
-        x: 70
-        y: 0
-      density: 3
-      densityResolution: 10
-      densityRadius: 2
-      upthrustStrength: 1
-      friction: 0
-      prevPosition:
-        x: 0
-        y: 0
-      rotation:
-        x: 0
-        y: 0
-      prevRotation:
-        x: 0
-        y: 0
-      velocity:
-        x: 0
-        y: 0
-      densityPoints: []
     stiffness: 200
     nearStiffness: 20
-    borderStiffness: 100
     restDensity: 5
     springInteractionRadius: 2
     springRadius: 1
@@ -914,7 +845,30 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0
     lowViscosity: 0.2
-  draw: 0
+    deformableBoundaryObject: 0
+    boundaryFriction: 10
+    boundaryObjectMass: 200
+  - interactionRadius: 6
+    gravity: -20
+    mouseAttractiveness: 0.5
+    mouseRadius: 1000
+    collisionDamping: 0.083
+    flow: 0
+    maxParticles: 5000
+    stiffness: 200
+    nearStiffness: 20
+    restDensity: 5
+    springInteractionRadius: 2
+    springRadius: 1
+    springStiffness: 0.01
+    springDeformationLimit: 0
+    plasticity: 0.05
+    highViscosity: 0
+    lowViscosity: 0.1
+    deformableBoundaryObject: 0
+    boundaryFriction: 10
+    boundaryObjectMass: 1000
+  draw: 1
   spawn: {fileID: 1165800424}
   render: {fileID: 1165800425}
   inputField: {fileID: 1902331580}
@@ -937,7 +891,7 @@ MonoBehaviour:
   spawnOffset:
     x: 0
     y: 0
-  spacing: 2
+  particleSpacing: 2
   useJitter: 0
   jitterStrength: 0.2
   boundingBoxSizeOffset:
@@ -991,7 +945,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!120 &1645362280
 LineRenderer:
   serializedVersion: 3

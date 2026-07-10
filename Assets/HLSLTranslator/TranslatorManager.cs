@@ -63,7 +63,7 @@ namespace Translator
             }
         }
 
-        [UnityEditor.Callbacks.DidReloadScripts]
+        // [UnityEditor.Callbacks.DidReloadScripts]
         public static void RestoreCode()
         {
             string txt = SessionState.GetString(CodeStoreName, null);
@@ -103,19 +103,19 @@ namespace Translator
             SessionState.SetString(CodeStoreName, "");
         }
 
-        [InitializeOnLoad]
+        // [InitializeOnLoad]
         public static class HlslTranslatorStartup
         {
-            [System.Obsolete]
-            static HlslTranslatorStartup()
-            {
-                CompilationPipeline.compilationStarted += _ => TranslateAll();
-                EditorApplication.playModeStateChanged += state =>
-                {
-                    if (state == PlayModeStateChange.ExitingEditMode)
-                        TranslateAllMenu();
-                };
-            }
+            // [System.Obsolete]
+            // static HlslTranslatorStartup()
+            // {
+            //     CompilationPipeline.compilationStarted += _ => TranslateAll();
+            //     EditorApplication.playModeStateChanged += state =>
+            //     {
+            //         if (state == PlayModeStateChange.ExitingEditMode)
+            //             TranslateAllMenu();
+            //     };
+            // }
         }
 
         internal static TranslatorConfig GetConfig()

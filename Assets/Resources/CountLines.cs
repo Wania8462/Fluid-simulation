@@ -11,7 +11,6 @@ public static class CountLines
         var filePaths = AssetDatabase.FindAssets("t:TextAsset", new[] { "Assets" })
             .Select(AssetDatabase.GUIDToAssetPath)
             .Where(p => p.EndsWith(".cs") || p.EndsWith(".compute") || p.EndsWith(".hlsl") || p.EndsWith(".shader"))
-            .Where(p => !p.EndsWith(".txt"))
             .ToArray();
 
         int count = 0;

@@ -26,7 +26,7 @@ namespace SimulationLogic
         [Header("References")]
         [SerializeField] private SimulationManager manager;
         [SerializeField] private InitializeParticles spawn;
-        public RenderManager renderManager; // MAKE THIS PRIVATE BEFORE PUSHING TO MAIN
+        [SerializeField] private RenderManager renderManager;
 
         [Header("Debug settings")]
         [SerializeField] private int trackParticle = -1;
@@ -39,7 +39,7 @@ namespace SimulationLogic
 
         private float2[] renderPositions;
         private float2[] renderVelocities;
-        // private float2[] renderBodyPositions;
+        private float2[] renderBoundaryPositions;
 
         private float[] densitiesSquares;
         private float[] densitiesMap;
@@ -51,25 +51,17 @@ namespace SimulationLogic
         // WARNING: Needs to be called after Simulation's SetScene
         public void Init(Simulation sim)
         {
-            if (CheckDependencies(sim))
-                return;
-
             simulation = sim;
-            (int, int) numSamplePoints = renderManager.InitAll(sim.maxParticles, spawn.GetBoundSize());
+            if (CheckDependencies())
+                return;
 
             renderPositions = new float2[sim.maxParticles];
             renderVelocities = new float2[sim.maxParticles];
-            densitiesSquares = new float[numSamplePoints.Item1];
-            densitiesMap = new float[numSamplePoints.Item2];
+            renderBoundaryPositions = new float2[sim._boundaryParticles.Count];
 
-            if (CheckSimSettings() && simulation.includeBody)
-                    renderManager.InitBody(manager.settings[0].body.position, manager.settings[0].body.radius, Color.antiqueWhite);
-
-            else
-                Debug.LogWarning("RenderDataBuilder: cannot init body particle — manager settings are missing");
-
-            if (simulation.useParticlesAsBorder)
-                renderManager.InitBorderParticles(sim._boundaryParticles.ForEach(p => p.position));
+            (int edges, int cells) = renderManager.InitAll(spawn.GetBoundSize(), sim.maxParticles, sim._boundaryParticles.Count);
+            densitiesSquares = new float[edges];
+            densitiesMap = new float[cells];
         }
 
         public void Draw()
@@ -99,25 +91,16 @@ namespace SimulationLogic
         #region Particles
         private void DrawParticles()
         {
-            HandleKeyInputs();
+            CheckDependencies();
+            HandleParticleInputs();
             greenParticles.Clear();
             yellowParticles.Clear();
             HighlghtParticlesForDebug();
 
-            if (manager != null && manager.settings != null && manager.settings.Length > 0 && manager.settings[0].includeBody)
-                HighlighParticlesBodyForDebug();
-
-            if (simulation.maxParticles != renderPositions.Length)
-            {
-                if (simulation.maxParticles > renderPositions.Length)
-                    renderManager.InitParticles(simulation.maxParticles - renderPositions.Length);
-
-                renderPositions = new float2[simulation.maxParticles];
-                renderVelocities = new float2[simulation.maxParticles];
-            }
-
+            EnsureBufferSize();
             SetPositions(simulation._particles.AsSpan(0, simulation.count));
             SetVelocities(simulation._particles.AsSpan(0, simulation.count));
+            SetBoundaryPositions(simulation._boundaryParticles.AsSpan());
 
             renderManager.DrawParticles(
                 renderPositions,
@@ -126,11 +109,8 @@ namespace SimulationLogic
                 greenParticles,
                 yellowParticles);
 
-            if (simulation.includeBody)
-                renderManager.DrawCustomParticle(simulation.body.position);
-
-            if (simulation.useParticlesAsBorder)
-                renderManager.DrawBorderParticles();
+            if (simulation._boundaryParticles.Count > 0)
+                renderManager.DrawBoundaryParticles(renderBoundaryPositions);
         }
 
         private void HighlghtParticlesForDebug()
@@ -146,7 +126,7 @@ namespace SimulationLogic
                 HighlightSingle();
             }
 
-            else if (trackPair1 != -1 ^ trackPair2 != -1)
+            else if (trackPair1 != -1 || trackPair2 != -1)
             {
                 var tracked = trackPair1 == -1 ? trackPair2 : trackPair1;
 
@@ -243,50 +223,6 @@ namespace SimulationLogic
             renderManager.DrawLine(firstPos, secondPos, width: 0.1f, Color.white);
         }
 
-        private void HighlighParticlesBodyForDebug()
-        {
-            if (!bodyDebug) return;
-
-            if (bodyDebugDisplay == DebugDisplay.SPBox)
-            {
-                foreach (var id in simulation.GetBodySPNeighbours())
-                    greenParticles.Add(simulation._sparse[id]);
-
-                var lineThickness = 0.2f;
-                var SPBox = simulation.GetBodySPDimentions();
-
-                renderManager.DrawLine(SPBox[0], SPBox[1], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[0], SPBox[2], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[1], SPBox[3], lineThickness, Color.white);
-                renderManager.DrawLine(SPBox[2], SPBox[3], lineThickness, Color.white);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.AllNeighbours)
-            {
-                foreach (var id in simulation.GetBodyNeighbours())
-                    greenParticles.Add(simulation._sparse[id]);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.Velocity)
-            {
-                var lineThickness = 0.5f;
-                var predictedPos = simulation.body.position + simulation.body.velocity;
-                renderManager.DrawLine(simulation.body.position, predictedPos, lineThickness, Color.white);
-            }
-
-            else if (bodyDebugDisplay == DebugDisplay.Force)
-                Debug.Log("Simulation manager: Body force isn't implemented");
-        }
-
-        private void HandleKeyInputs()
-        {
-            if (!Input.GetKey(KeyCode.LeftShift))
-                HandleParticleInputs();
-
-            else
-                HandleBodyInputs();
-        }
-
         private void HandleParticleInputs()
         {
             if (Input.GetKeyDown(KeyCode.B))
@@ -331,24 +267,6 @@ namespace SimulationLogic
                 trackPair1 = -1;
                 trackPair2 = -1;
             }
-        }
-
-        private void HandleBodyInputs()
-        {
-            if (Input.GetKeyDown(KeyCode.P))
-                bodyDebug = !bodyDebug;
-
-            else if (Input.GetKeyDown(KeyCode.B))
-                bodyDebugDisplay = DebugDisplay.SPBox;
-
-            else if (Input.GetKeyDown(KeyCode.A))
-                bodyDebugDisplay = DebugDisplay.AllNeighbours;
-
-            else if (Input.GetKeyDown(KeyCode.V))
-                bodyDebugDisplay = DebugDisplay.Velocity;
-
-            else if (Input.GetKeyDown(KeyCode.F))
-                bodyDebugDisplay = DebugDisplay.Force;
         }
         #endregion
 
@@ -434,9 +352,43 @@ namespace SimulationLogic
                 renderVelocities[i] = particles[i].velocity;
         }
 
-        private bool CheckDependencies(Simulation sim)
+        private void SetBoundaryPositions(Span<BoundaryParticle> particles)
         {
-            if (sim == null)
+            if (particles.Length > renderBoundaryPositions.Length)
+            {
+                Debug.LogWarning($"RenderDataBuilder: particles span ({particles.Length}) exceeds renderBoundaryPositions buffer ({renderBoundaryPositions.Length}), clamping");
+                particles = particles[..renderBoundaryPositions.Length];
+            }
+
+            for (int i = 0; i < particles.Length; i++)
+                renderBoundaryPositions[i] = particles[i].position;
+        }
+
+        private void EnsureBufferSize()
+        {
+            if (simulation.maxParticles != renderPositions.Length)
+            {
+                if (simulation.maxParticles > renderPositions.Length)
+                    renderManager.InitParticles(simulation.maxParticles - renderPositions.Length);
+
+                renderPositions = new float2[simulation.maxParticles];
+                renderVelocities = new float2[simulation.maxParticles];
+            }
+
+            int simCount = simulation._boundaryParticles.Count;
+            int bufferCount = renderBoundaryPositions.Length;
+            if (simCount != bufferCount)
+            {
+                if (simCount > bufferCount)
+                    renderManager.InitBoundaryParticles(simCount - bufferCount);
+
+                renderBoundaryPositions = new float2[simCount];
+            }
+        }
+
+        private bool CheckDependencies()
+        {
+            if (simulation == null)
             {
                 Debug.LogError("RenderDataBuilder: Init called with null simulation");
                 return true;

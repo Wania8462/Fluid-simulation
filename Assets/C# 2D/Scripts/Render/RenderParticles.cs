@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Mathematics;
+using System;
 
 namespace Rendering
 {
@@ -23,7 +24,7 @@ namespace Rendering
         [SerializeField] private Material mat;
 
         internal ParticlesBuffer fluidBuffer;
-        internal ParticlesBuffer borderBuffer;
+        internal ParticlesBuffer boundaryBuffer;
         internal ParticlesBuffer customBuffer;
         
         private readonly Vector4[] colorsBatch = new Vector4[batchSize];
@@ -42,7 +43,7 @@ namespace Rendering
         private Mesh lineMesh;
 
         # region Fluid particles
-        internal void InitParticles(int maxNumParticles = 100_000)
+        internal void InitParticles(int maxNbParticles = 100_000)
         {
             fluidBuffer.matrices ??= new();
             fluidBuffer.colorsBuffer ??= new();
@@ -50,10 +51,10 @@ namespace Rendering
             fluidBuffer.mpb ??= new MaterialPropertyBlock();
             fluidBuffer.mpb.SetVectorArray(colors, new Vector4[batchSize]);
 
-            for (int i = 0; i < maxNumParticles; i++)
+            for (int i = 0; i < maxNbParticles; i++)
             {
                 fluidBuffer.matrices.Add(Matrix4x4.TRS(
-                    new(0, 0),
+                    Vector3.zero,
                     Quaternion.identity,
                     scale
                 ));
@@ -133,51 +134,44 @@ namespace Rendering
         }
         # endregion
 
-        # region Border particles
-        internal void InitBorderParticles(float2[] positions)
+        # region Boundary particles
+        internal void InitBoundaryParticles(int nbParticles)
         {
-            borderBuffer.matrices ??= new();
-            borderBuffer.colorsBuffer ??= new();
-            borderBuffer.mesh ??= MeshGenerator.Circle(particleRadius, resolution);
-            borderBuffer.mpb ??= new MaterialPropertyBlock();
-            var grey = ColorToVector(Color.grey);
+            boundaryBuffer.matrices ??= new();
+            boundaryBuffer.mesh = boundaryBuffer.mesh != null ? boundaryBuffer.mesh : MeshGenerator.Circle(particleRadius, resolution);
+            boundaryBuffer.mpb ??= new MaterialPropertyBlock();
 
-            foreach (var pos in positions)
+            Vector4[] grayArr = new Vector4[batchSize];
+            Array.Fill(grayArr, ColorToVector(Color.gray));
+            boundaryBuffer.mpb.SetVectorArray(colors, grayArr);
+
+            for (int i = 0; i < nbParticles; i++)
             {
-                borderBuffer.matrices.Add(Matrix4x4.TRS(
-                    new(pos.x, pos.y),
+                boundaryBuffer.matrices.Add(Matrix4x4.TRS(
+                    Vector3.zero,
                     Quaternion.identity,
                     scale
                 ));
-                borderBuffer.colorsBuffer.Add(grey);
             }
-
-            borderBuffer.mpb.SetVectorArray(colors, borderBuffer.colorsBuffer);
         }
 
-        internal void DrawBorderParticles()
+        internal void DrawBoundaryParticles(float2[] positions)
         {
-            for (var i = 0; i < borderBuffer.matrices.Count; i += batchSize)
+            int nbParticles = boundaryBuffer.matrices.Count;
+            ParallelFor(nbParticles, i =>
             {
-                var count = Mathf.Min(batchSize, borderBuffer.matrices.Count - i);
-                borderBuffer.matrices.CopyTo(i, matricesBatch, 0, count);
-
-                Graphics.DrawMeshInstanced(
-                    borderBuffer.mesh,
-                    submeshIndex,
-                    mat,
-                    matricesBatch,
-                    count,
-                    borderBuffer.mpb
-                );
-            }
+                boundaryBuffer.matrices[i] = Matrix4x4.Translate(new(positions[i].x, positions[i].y));
+            });
+            DrawBoundaryBatches();
         }
 
-        internal void DeleteBorderParticles()
+        internal void DrawBoundaryParticles() => DrawBoundaryBatches();
+
+        internal void DeleteBoundaryParticles()
         {
-            borderBuffer.mpb = null;
-            borderBuffer.matrices?.Clear();
-            borderBuffer.colorsBuffer?.Clear();
+            boundaryBuffer.mpb = null;
+            boundaryBuffer.matrices?.Clear();
+            boundaryBuffer.colorsBuffer?.Clear();
         }
         # endregion
 
@@ -259,14 +253,14 @@ namespace Rendering
         internal void DeleteAllTypesOfParticles()
         {
             DeleteParticles();
-            DeleteBorderParticles();
-            // DeleteCustomParticles(); UNCOMMENT BEFORE PUSHING TO MAIN
+            DeleteBoundaryParticles();
+            DeleteCustomParticles();
         }
 
         void OnDestroy()
         {
             Destroy(fluidBuffer.mesh);
-            Destroy(borderBuffer.mesh);
+            Destroy(boundaryBuffer.mesh);
             Destroy(customBuffer.mesh);
         }
 
@@ -324,7 +318,7 @@ namespace Rendering
 
         #region Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ParallelFor(int count, System.Action<int> body)
+        private static void ParallelFor(int count, Action<int> body)
         {
             Parallel.ForEach(Partitioner.Create(0, count, parallelForBatchSize), range =>
             {
@@ -375,6 +369,25 @@ namespace Rendering
                     matricesBatch,
                     count,
                     fluidBuffer.mpb
+                );
+            }
+        }
+
+        private void DrawBoundaryBatches()
+        {
+            int nbParticles = boundaryBuffer.matrices.Count;
+            for (var i = 0; i < nbParticles; i += batchSize)
+            {
+                var count = Mathf.Min(batchSize, nbParticles - i);
+                boundaryBuffer.matrices.CopyTo(i, matricesBatch, 0, count);
+
+                Graphics.DrawMeshInstanced(
+                    boundaryBuffer.mesh,
+                    submeshIndex,
+                    mat,
+                    matricesBatch,
+                    count,
+                    boundaryBuffer.mpb
                 );
             }
         }

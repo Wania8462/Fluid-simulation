@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Translator;
+using System.IO;
 
 public static class ComputeHelper
 {
@@ -273,12 +274,12 @@ public static class ComputeHelper
     }
     #endregion
 
-    #region Shader reflection helpers
+    // Won't work in build!!!
+    #region Shader reflection helpers 
     public static Dictionary<string, int> GetKernels(ComputeShader compute)
     {
-        // Won't work in build!!!
         string path = AssetDatabase.GetAssetPath(compute);
-        string source = TranslatorManager.GetTranslatedVer(path);
+        string source = File.ReadAllText(path);
         string[] lines = source.Split('\n').Where(l => l.Contains("#pragma kernel")).ToArray();
         Dictionary<string, int> result = new();
 
@@ -291,13 +292,12 @@ public static class ComputeHelper
     public static Dictionary<string, ComputeBuffer> GetBuffers(ComputeShader compute)
     {
         string path = AssetDatabase.GetAssetPath(compute);
-        string source = TranslatorManager.GetTranslatedVer(path);
-        string[] lines = source.Split('\n');
-        string[] bufferLines = lines.Where(line => bufferTypes.Any(t => line.Contains(t))).ToArray();
+        string source = File.ReadAllText(path);
+        string[] lines = source.Split('\n').Where(line => bufferTypes.Any(t => line.Contains(t))).ToArray();
         Dictionary<string, ComputeBuffer> result = new();
 
-        for (int i = 0; i < bufferLines.Length; i++)
-            result.Add(bufferLines[i].Split(' ').Last()[..^1], null);
+        for (int i = 0; i < lines.Length; i++)
+            result.Add(lines[i].Split(' ').Last()[..^1], null);
 
         return result;
     }
@@ -305,13 +305,12 @@ public static class ComputeHelper
     public static Dictionary<string, RenderTexture> GetTextures(ComputeShader compute)
     {
         string path = AssetDatabase.GetAssetPath(compute);
-        string source = TranslatorManager.GetTranslatedVer(path);
-        string[] lines = source.Split('\n');
-        string[] bufferLines = lines.Where(line => textureTypes.Any(t => line.Contains(t))).ToArray();
+        string source = File.ReadAllText(path);
+        string[] lines = source.Split('\n').Where(line => textureTypes.Any(t => line.Contains(t))).ToArray();
         Dictionary<string, RenderTexture> result = new();
 
-        for (int i = 0; i < bufferLines.Length; i++)
-            result.Add(bufferLines[i].Split(' ').Last()[..^1], null);
+        for (int i = 0; i < lines.Length; i++)
+            result.Add(lines[i].Split(' ').Last()[..^1], null);
 
         return result;
     }

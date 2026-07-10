@@ -9,24 +9,6 @@ using UnityEngine.UI;
 namespace SimulationLogic
 {
     [Serializable]
-    public struct Body
-    {
-        public float radius;
-        public float2 position;
-        public float density;
-        public int densityResolution;
-        public int densityRadius;
-        public float upthrustStrength;
-        public float friction;
-
-        [HideInInspector] public float2 prevPosition;
-        [HideInInspector] public float2 rotation;
-        [HideInInspector] public float2 prevRotation;
-        [HideInInspector] public float2 velocity;
-        [HideInInspector] public float2[] densityPoints;
-    }
-
-    [Serializable]
     public class SimulationSettings
     {
         [Header("Simulation settings")]
@@ -37,11 +19,6 @@ namespace SimulationLogic
         public float collisionDamping;
         public bool flow;
         public int maxParticles = -1;
-        public bool includeBody;
-        public bool useParticlesAsBorder;
-
-        [Header("Body settings")]
-        public Body body;
 
         [Header("Density")]
         public float stiffness;
@@ -57,6 +34,11 @@ namespace SimulationLogic
         public float highViscosity;
         public float lowViscosity;
 
+        [Header("Boundary object")]
+        public bool deformableBoundaryObject;
+        public float boundaryFriction;
+        public float boundaryObjectMass;
+
         public SimulationSettings() { }
 
         public SimulationSettings(SimulationSettings settings)
@@ -67,9 +49,6 @@ namespace SimulationLogic
             mouseRadius = settings.mouseRadius;
             flow = settings.flow;
             collisionDamping = settings.collisionDamping;
-            useParticlesAsBorder = settings.useParticlesAsBorder;
-
-            body = settings.body;
 
             stiffness = settings.stiffness;
             nearStiffness = settings.nearStiffness;
@@ -82,6 +61,10 @@ namespace SimulationLogic
             plasticity = settings.plasticity;
             highViscosity = settings.highViscosity;
             lowViscosity = settings.lowViscosity;
+
+            deformableBoundaryObject = settings.deformableBoundaryObject;
+            boundaryFriction = settings.boundaryFriction;
+            boundaryObjectMass = settings.boundaryObjectMass;
         }
     }
 
@@ -162,10 +145,7 @@ namespace SimulationLogic
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
-                {
                     InitSimulationInstances();
-                    graph.Reset();
-                }
 
                 if (Input.GetKeyDown(KeyCode.Space))
                     pause = !pause;
@@ -176,7 +156,8 @@ namespace SimulationLogic
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 float maxDen = GetMaxDensity(simulations[0]._particles);
-                float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 40;
+                // float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 1 / 40f;
+                float dt = 1 / 60f;
                 previous = maxDen;
 
                 if (Camera.main == null)
@@ -217,7 +198,7 @@ namespace SimulationLogic
             if (!twoSim)
             {
                 simulations = new Simulation[1];
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
             }
 
             else
@@ -230,13 +211,13 @@ namespace SimulationLogic
                     settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
                 }
 
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
-                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn, render.renderManager); // DO NOT PUSH THIS INTO MAIN
+                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
             }
 
             for (var i = 0; i < simulations.Length; i++)
             {
-                simulations[i].SetSettings(settings[i]);
+                simulations[i].UpdateSettings(settings[i]);
                 simulations[i].SetScene();
             }
 
