@@ -17,6 +17,7 @@ public class ParticleRender : MonoBehaviour
     [SerializeField] private float maxSpeed;
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Material material;
+    [SerializeField] private Material boundaryMaterial;
 
     private Mesh mesh;
 
@@ -24,6 +25,10 @@ public class ParticleRender : MonoBehaviour
     private GraphicsBuffer commandBuf;
     private GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
     private RenderParams rp;
+
+    private GraphicsBuffer boundaryCommandBuf;
+    private GraphicsBuffer.IndirectDrawIndexedArgs[] boundaryCommandData;
+    private RenderParams boundaryRp;
 
     private int3 theradGroups;
 
@@ -52,12 +57,25 @@ public class ParticleRender : MonoBehaviour
 
         rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);
+
+        ComputeHelper.Release(boundaryCommandBuf);
+        boundaryCommandBuf = ComputeHelper.CreateCommandBuffer();
+        boundaryCommandData = ComputeHelper.CreateCommandData(mesh, sim.numBoundaryParticles);
+        boundaryCommandBuf.SetData(boundaryCommandData);
+
+        boundaryRp = ComputeHelper.CreateRenderParams(boundaryMaterial);
+        boundaryRp.matProps.SetBuffer("Positions", sim.Buffers["BoundaryPositions"]);
     }
 
     public void DrawParticles()
     {
         compute.Dispatch(CalculateColorsKernelID, theradGroups);
         Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
+    }
+
+    public void DrawBoundaryParticles()
+    {
+        Graphics.RenderMeshIndirect(boundaryRp, mesh, boundaryCommandBuf, commandCount: 1);
     }
 
     public void DrawParticles(List<int> indicesToHighlight)
@@ -91,6 +109,7 @@ public class ParticleRender : MonoBehaviour
     private void ReleaseBuffers()
     {
         ComputeHelper.Release(commandBuf);
+        ComputeHelper.Release(boundaryCommandBuf);
         ComputeHelper.Release(colorsBuffer);
     }
 

@@ -11,6 +11,12 @@ enum RenderingType
     MarchingSquares
 }
 
+public enum BoundaryShape
+{
+    Square,
+    Circle
+}
+
 public struct Spring
 {
     public int neighbourIndex;
@@ -43,6 +49,15 @@ public struct SimulationSettings
     public float plasticity;
     public float highViscosity;
     public float lowViscosity;
+
+    [Header("Boundary body")]
+    public BoundaryShape shape;
+    public float sampleDensity;
+    public float bodyRadius;
+    public float2 bodyPosition;
+    public float bodyRotationRad;
+    public float boundaryFriction;
+    public float boundaryBodyMass;
 }
 
 public class GPUSimulationManager : MonoBehaviour
@@ -69,13 +84,18 @@ public class GPUSimulationManager : MonoBehaviour
     private SPValues SP;
 
     [HideInInspector] public int numParticles;
+    [HideInInspector] public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
 
+    private float2[] boundaryPositions;
+    private float2 boundaryRestCenter;
+
     private int3 threadGropus;
     private int3 gridThreadGropus;
+    private int3 boundaryThreadGropus;
 
     private int clock;
 
@@ -109,7 +129,10 @@ public class GPUSimulationManager : MonoBehaviour
         }
 
         if (renderingType == RenderingType.Particles)
+        {
             render.DrawParticles();
+            render.DrawBoundaryParticles();
+        }
 
         else if (renderingType == RenderingType.DensityMap)
             densityMap.Draw();
@@ -130,22 +153,30 @@ public class GPUSimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
             compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
             compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+
+            compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
+            compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
+            compute.Dispatch(KernelIDs["SetBoundaryNeighbours"], threadGropus);
             clock = 0;
         }
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
+        compute.Dispatch(KernelIDs["BoundaryExternalForces"], boundaryThreadGropus);
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
 
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
+        compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
 
         for (int i = 0; i < 2; i++)
         {
             compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
+            compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
             compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
             compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+            compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
         }
 
         if (Input.GetMouseButton(0))
@@ -154,8 +185,21 @@ public class GPUSimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
         }
 
+        // Rigid boundary body: maintain the shape, then resolve wall contacts
+        compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
+        compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
+        compute.Dispatch(KernelIDs["RigidContactResolution"], 1);
+        compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
+
+        // Project fluid particles out of the body, then clamp to the borders last
+        string bodyCollisionKernel = settings.shape == BoundaryShape.Square
+            ? "ResolveSquareBodyCollision"
+            : "ResolveCircleBodyCollision";
+        compute.Dispatch(KernelIDs[bodyCollisionKernel], threadGropus);
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
+        compute.Dispatch(KernelIDs["BoundaryCalculateVelocity"], boundaryThreadGropus);
     }
 
     private void OnValidate()
@@ -188,6 +232,21 @@ public class GPUSimulationManager : MonoBehaviour
 
         numParticles = spawn.GetNumberOfParticles();
 
+        boundaryPositions = settings.shape == BoundaryShape.Square
+            ? spawn.InitRectangleOutlinePositions(
+                width: settings.bodyRadius * 2,
+                height: settings.bodyRadius * 2,
+                settings.sampleDensity,
+                settings.bodyPosition,
+                settings.bodyRotationRad)
+            : spawn.InitCircleOutlinePositions(
+                settings.bodyRadius,
+                settings.sampleDensity,
+                settings.bodyPosition);
+
+        numBoundaryParticles = boundaryPositions.Length;
+        boundaryRestCenter = ComputeBodyCenter(boundaryPositions);
+
         CreateBuffers();
 
         SetBuffers();
@@ -195,11 +254,25 @@ public class GPUSimulationManager : MonoBehaviour
 
         threadGropus = compute.GetThreadGroups(0, numParticles);
         gridThreadGropus = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.columns * SP.rows);
+        boundaryThreadGropus = compute.GetThreadGroups(0, numBoundaryParticles);
+
+        compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
+        compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
+        compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGropus);
 
         Camera.main.orthographicSize = math.max(spawn.GetRealHalfBoundSize(0).y + 2, spawn.GetRealHalfBoundSize(0).x - 237);
         render.Setup(this);
         densityMap.Setup(this, boundingBoxSize);
         marchingSquares.Setup(this, boundingBoxSize);
+    }
+
+    private float2 ComputeBodyCenter(float2[] positions)
+    {
+        float2 restCenter = float2.zero;
+        for (int i = 0; i < positions.Length; i++)
+            restCenter += positions[i];
+
+        return positions.Length > 0 ? restCenter / positions.Length : float2.zero;
     }
 
     #region Buffer helpers
@@ -223,6 +296,16 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("plasticity", settings.plasticity);
         compute.SetFloat("highViscosity", settings.highViscosity);
         compute.SetFloat("lowViscosity", settings.lowViscosity);
+
+        if (settings.boundaryFriction <= 0)
+            UnityEngine.Debug.LogWarning($"GPU simulation manager: boundaryFriction is {settings.boundaryFriction}, fluid particles won't be slowed near the boundary body and may tunnel through it");
+
+        if (settings.boundaryBodyMass <= 0)
+            UnityEngine.Debug.LogWarning($"GPU simulation manager: boundaryBodyMass is {settings.boundaryBodyMass}, falling back to the neutral response (mass = boundary particle count)");
+
+        compute.SetFloat("boundaryFriction", settings.boundaryFriction);
+        compute.SetFloat("invBodyMass", settings.boundaryBodyMass > 0 ? numBoundaryParticles / settings.boundaryBodyMass : 1f);
+        compute.SetFloat("bodyRadius", settings.bodyRadius);
     }
 
     private void SetComputeSettings()
@@ -238,9 +321,12 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetInt("maxParticlesPerCell", maxParticlesPerCell);
         compute.SetInt("maxSpringsPerParticle", maxSpringsPerParticle);
         compute.SetVector("offset", new(SP.offset.x, SP.offset.y));
-        compute.SetFloat("length", SP.length);
+        compute.SetFloat("cellLength", SP.length);
         compute.SetInt("columns", SP.columns);
         compute.SetInt("rows", SP.rows);
+
+        compute.SetInt("numBoundaryParticles", numBoundaryParticles);
+        compute.SetVector("boundaryRestCenter", new Vector4(boundaryRestCenter.x, boundaryRestCenter.y));
     }
 
     private void SetBuffers()
@@ -253,7 +339,7 @@ public class GPUSimulationManager : MonoBehaviour
     private void CreateBuffers()
     {
         if (numParticles == 0)
-            UnityEngine.Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
+            Debug.LogWarning("GPU simulation manager: there are 0 particles. Creating non-existant buffers.");
 
         Buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
         Buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
@@ -268,6 +354,21 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
         Buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
         Buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+
+        Buffers["BoundaryPositions"] = ComputeHelper.CreateStructuredBufferWithData(boundaryPositions);
+        Buffers["BoundaryPrevPositions"] = ComputeHelper.CreateStructuredBufferWithData(boundaryPositions);
+        Buffers["BoundaryRestPositions"] = ComputeHelper.CreateStructuredBufferWithData(boundaryPositions);
+        Buffers["BoundaryVelocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numBoundaryParticles);
+        Buffers["BoundaryVolumes"] = ComputeHelper.CreateStructuredBufferWithData<float>(numBoundaryParticles);
+        Buffers["BoundaryForceBuffersX"] = ComputeHelper.CreateStructuredBufferWithData<int>(numBoundaryParticles);
+        Buffers["BoundaryForceBuffersY"] = ComputeHelper.CreateStructuredBufferWithData<int>(numBoundaryParticles);
+
+        Buffers["BoundaryGrid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
+        Buffers["BoundaryCellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows);
+        Buffers["BoundaryNeighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 9);
+        Buffers["BoundaryNeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
+
+        Buffers["BodyState"] = ComputeHelper.CreateStructuredBufferWithData<float>(4);
 
         Buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
         Buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);

@@ -170,6 +170,7 @@ MonoBehaviour:
   maxSpeed: 100
   compute: {fileID: 7200000, guid: 5c64eeb1b7926a447bc1c5ea6422050d, type: 3}
   material: {fileID: 2100000, guid: 8cc1185d8071a4cc485fbff42d4c5f78, type: 2}
+  boundaryMaterial: {fileID: 2100000, guid: 4cf5bd3f275a5b2419342b14c8124e1f, type: 2}
 --- !u!114 &441569836
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -269,10 +270,19 @@ MonoBehaviour:
     plasticity: 0.05
     highViscosity: 0.2
     lowViscosity: 3
+    shape: 0
+    sampleDensity: 1
+    bodyRadius: 20
+    bodyPosition:
+      x: 250
+      y: -100
+    bodyRotationRad: 0
+    boundaryFriction: 10
+    boundaryBodyMass: 5000
   maxParticlesPerCell: 64
   maxSpringsPerParticle: 64
   particleRadius: 0.5
-  targetFrameRate: -1
+  targetFrameRate: 120
   useRealDeltaTime: 0
   fakeFramerate: 60
   renderingType: 0
@@ -283,6 +293,7 @@ MonoBehaviour:
   marchingSquares: {fileID: 441569837}
   debugMaterial: {fileID: 2100000, guid: 97d537b1176625d49b9b5e87cf503036, type: 2}
   numParticles: 0
+  numBoundaryParticles: 0
 --- !u!4 &1001776194
 Transform:
   m_ObjectHideFlags: 0

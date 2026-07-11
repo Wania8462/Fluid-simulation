@@ -1,6 +1,5 @@
 #pragma kernel CalculateColors
 
-
 RWStructuredBuffer<float2> Velocities;
 RWStructuredBuffer<float4> Colors;
 
