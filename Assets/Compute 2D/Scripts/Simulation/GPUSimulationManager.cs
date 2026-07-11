@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
@@ -185,11 +186,18 @@ public class GPUSimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
         }
 
+        if (Input.GetMouseButton(1))
+        {
+            compute.SetVector("mousePosition", GetMousePos());
+            compute.Dispatch(KernelIDs["AttractToMouseBoundary"], boundaryThreadGropus);
+        }
+
         // Rigid boundary body: maintain the shape, then resolve wall contacts
         compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["RigidContactResolution"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
+        compute.Dispatch(KernelIDs["CancelBoundaryBorderVelocity"], 1);
 
         // Project fluid particles out of the body, then clamp to the borders last
         string bodyCollisionKernel = settings.shape == BoundaryShape.Square
@@ -368,16 +376,29 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["BoundaryNeighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 9);
         Buffers["BoundaryNeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
-        Buffers["BodyState"] = ComputeHelper.CreateStructuredBufferWithData<float>(4);
+        Buffers["BodyState"] = ComputeHelper.CreateStructuredBufferWithData<float>(5);
 
         Buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
         Buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
+
+        // Read-only aliases: the same buffers bound under the SRV names that
+        // DoubleDensityRelaxation and ApplyViscosity read through (D3D11.0 UAV limit)
+        Buffers["PositionsRO"] = Buffers["Positions"];
+        Buffers["VelocitiesRO"] = Buffers["Velocities"];
+        Buffers["NeighboursRO"] = Buffers["Neighbours"];
+        Buffers["NeighboursLengthRO"] = Buffers["NeighboursLength"];
+        Buffers["BoundaryPositionsRO"] = Buffers["BoundaryPositions"];
+        Buffers["BoundaryVelocitiesRO"] = Buffers["BoundaryVelocities"];
+        Buffers["BoundaryVolumesRO"] = Buffers["BoundaryVolumes"];
+        Buffers["BoundaryNeighboursRO"] = Buffers["BoundaryNeighbours"];
+        Buffers["BoundaryNeighboursLengthRO"] = Buffers["BoundaryNeighboursLength"];
     }
 
     private void ReleaseBuffers()
     {
-        foreach (var buffer in Buffers)
-            ComputeHelper.Release(buffer.Value);
+        // Distinct: the RO aliases share buffer instances with their RW originals
+        foreach (var buffer in Buffers.Values.Distinct())
+            ComputeHelper.Release(buffer);
     }
 
     private void OnDestroy()

@@ -7,6 +7,7 @@
 #pragma kernel ResolveBoundaries
 #pragma kernel AdvancePredictedPositions
 #pragma kernel AttractToMouse
+#pragma kernel AttractToMouseBoundary
 #pragma kernel CalculateVelocity
 #pragma kernel ClearGrid
 #pragma kernel ClearNeighbours
@@ -26,6 +27,7 @@
 #pragma kernel RigidContactResolution
 #pragma kernel ResolveCircleBodyCollision
 #pragma kernel ResolveSquareBodyCollision
+#pragma kernel CancelBoundaryBorderVelocity
 
 #include "C:\Users\Ivan\Documents\GitHub\Fluid-simulation\Assets\Compute 2D\Scripts\Simulation\FluidMath.hlsl"
 
@@ -61,7 +63,19 @@ RWBuffer<uint> BoundaryCellsLength;
 RWBuffer<uint> BoundaryNeighbours;
 RWBuffer<uint> BoundaryNeighboursLength;
 
-// [0] = body center x, [1] = body center y, [2] = body angle
+// Read-only views bound to the same GPU buffers as the RW declarations above.
+StructuredBuffer<float2> PositionsRO;
+StructuredBuffer<float2> VelocitiesRO;
+Buffer<uint> NeighboursRO;
+Buffer<uint> NeighboursLengthRO;
+StructuredBuffer<float2> BoundaryPositionsRO;
+StructuredBuffer<float2> BoundaryVelocitiesRO;
+Buffer<float> BoundaryVolumesRO;
+Buffer<uint> BoundaryNeighboursRO;
+Buffer<uint> BoundaryNeighboursLengthRO;
+
+// [0] = body center x, [1] = body center y, [2] = body angle,
+// [3] = border contact on x axis, [4] = border contact on y axis
 RWStructuredBuffer<float> BodyState;
 
 RWBuffer<float> DebugFloat;
@@ -162,9 +176,9 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     Densities[id.x] = 0;
     NearDensities[id.x] = 0;
 
-    for (uint i = 0; i < NeighboursLength[id.x]; i++)
+    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
     {
-        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
+        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
 
@@ -173,16 +187,16 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
         NearDensities[id.x] += CubicSpikyKernel(q);
     }
 
-    for (uint b = 0; b < BoundaryNeighboursLength[id.x]; b++)
+    for (uint b = 0; b < BoundaryNeighboursLengthRO[id.x]; b++)
     {
-        uint bIndex = BoundaryNeighbours[id.x + b * numParticles];
-        float magSq = DistanceSq(Positions[id.x], BoundaryPositions[bIndex]);
+        uint bIndex = BoundaryNeighboursRO[id.x + b * numParticles];
+        float magSq = DistanceSq(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
         float mag = sqrt(magSq);
         float q = mag / interactionRadius;
 
         // Branchless mask: 0 when mag == 0 or q > 1, 1 otherwise
         float w = step(1e-12, magSq) * step(q, 1.0);
-        float psi = restDensity * BoundaryVolumes[bIndex];
+        float psi = restDensity * BoundaryVolumesRO[bIndex];
 
         Densities[id.x] += w * psi * QuadraticSpikyKernel(q);
         NearDensities[id.x] += w * psi * CubicSpikyKernel(q);
@@ -191,35 +205,35 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     float pressure = stiffness * (Densities[id.x] - restDensity);
     float nearPressure = nearStiffness * NearDensities[id.x];
 
-    for (uint j = 0; j < NeighboursLength[id.x]; j++)
+    for (uint j = 0; j < NeighboursLengthRO[id.x]; j++)
     {
-        float mag = DistanceSq(Positions[id.x], Positions[Neighbours[id.x + j * numParticles]]);
+        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
         if (mag == 0 || mag > interactionRadiusSq) continue;
         mag = sqrt(mag);
 
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[id.x + j * numParticles]], mag);
+        float2 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]], mag);
         float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
-        AtomicAddForceBuffer(Neighbours[id.x + j * numParticles], displacement);
+        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], displacement);
         AtomicAddForceBuffer(id.x, -displacement);
     }
 
     float boundaryPressure = max(pressure, 0.0);
     float boundaryNearPressure = max(nearPressure, 0.0);
 
-    for (uint k = 0; k < BoundaryNeighboursLength[id.x]; k++)
+    for (uint k = 0; k < BoundaryNeighboursLengthRO[id.x]; k++)
     {
-        uint bIndex = BoundaryNeighbours[id.x + k * numParticles];
-        float magSq = DistanceSq(Positions[id.x], BoundaryPositions[bIndex]);
+        uint bIndex = BoundaryNeighboursRO[id.x + k * numParticles];
+        float magSq = DistanceSq(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
         float mag = sqrt(magSq);
         float q = mag / interactionRadius;
 
         // Branchless mask: 0 when mag == 0 or q > 1, 1 otherwise
         float w = step(1e-12, magSq) * step(q, 1.0);
-        float2 r = (BoundaryPositions[bIndex] - Positions[id.x]) / max(mag, 1e-9);
+        float2 r = (BoundaryPositionsRO[bIndex] - PositionsRO[id.x]) / max(mag, 1e-9);
         float2 displacement = PressureDisplacement(dt, q, boundaryPressure, boundaryNearPressure, r);
-        float psi = restDensity * BoundaryVolumes[bIndex];
+        float psi = restDensity * BoundaryVolumesRO[bIndex];
 
         AtomicAddForceBuffer(id.x, -w * psi * displacement);
         AtomicAddBoundaryForceBuffer(bIndex, w * psi * displacement);
@@ -247,30 +261,30 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    for (uint i = 0; i < NeighboursLength[id.x]; i++)
+    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
     {
-        float mag = Distance(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]]);
+        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
         if (mag > interactionRadius || mag == 0) continue;
 
         float q = mag / interactionRadius;
-        float2 r = UnitVector(Positions[id.x], Positions[Neighbours[id.x + i * numParticles]], mag);
-        float inwardVelocity = dot(Velocities[id.x] - Velocities[Neighbours[id.x + i * numParticles]], r);
+        float2 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]], mag);
+        float inwardVelocity = dot(VelocitiesRO[id.x] - VelocitiesRO[NeighboursRO[id.x + i * numParticles]], r);
         if(inwardVelocity <= 0) continue;
 
         float2 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
         AtomicAddForceBuffer(id.x, -impulse);
-        AtomicAddForceBuffer(Neighbours[id.x + i * numParticles], impulse);
+        AtomicAddForceBuffer(NeighboursRO[id.x + i * numParticles], impulse);
     }
 
-    for (uint b = 0; b < BoundaryNeighboursLength[id.x]; b++)
+    for (uint b = 0; b < BoundaryNeighboursLengthRO[id.x]; b++)
     {
-        uint bIndex = BoundaryNeighbours[id.x + b * numParticles];
-        float magSq = DistanceSq(Positions[id.x], BoundaryPositions[bIndex]);
+        uint bIndex = BoundaryNeighboursRO[id.x + b * numParticles];
+        float magSq = DistanceSq(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
         float mag = sqrt(magSq);
         float q = mag / interactionRadius;
 
-        float2 r = (BoundaryPositions[bIndex] - Positions[id.x]) / max(mag, 1e-9);
-        float inwardVelocity = dot(Velocities[id.x] - BoundaryVelocities[bIndex], r);
+        float2 r = (BoundaryPositionsRO[bIndex] - PositionsRO[id.x]) / max(mag, 1e-9);
+        float inwardVelocity = dot(VelocitiesRO[id.x] - BoundaryVelocitiesRO[bIndex], r);
 
         // Branchless mask: 0 when mag == 0, q > 1 or the particles are separating
         float w = step(1e-12, magSq) * step(q, 1.0) * step(0.0, inwardVelocity);
@@ -319,6 +333,18 @@ void AttractToMouse (uint3 id : SV_DispatchThreadID)
 
     float2 r = UnitVector(Positions[id.x], mousePosition, mag);
     Positions[id.x] += dt * mouseAttractiveness * r;
+}
+
+[numthreads(64,1,1)]
+void AttractToMouseBoundary (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numBoundaryParticles) return;
+
+    float mag = Distance(BoundaryPositions[id.x], mousePosition);
+    if (mag > mouseRadius) return;
+
+    float2 r = UnitVector(BoundaryPositions[id.x], mousePosition, mag);
+    BoundaryPositions[id.x] += dt * mouseAttractiveness * r;
 }
 
 [numthreads(64,1,1)]
@@ -710,6 +736,11 @@ void RigidContactResolution (uint3 id : SV_GroupThreadID)
         BodyState[0] = center.x;
         BodyState[1] = center.y;
         BodyState[2] += deltaAngle;
+
+        // Per-axis contact flags: 1 when the body was pushed back by a border on that
+        // axis this frame, consumed by CancelBoundaryBorderVelocity
+        BodyState[3] = step(1e-12, abs(totalDelta.x));
+        BodyState[4] = step(1e-12, abs(totalDelta.y));
     }
 }
 
@@ -772,4 +803,32 @@ void ResolveSquareBodyCollision (uint3 id : SV_DispatchThreadID)
     float2 deltaLocal = (pushed - local) * inside;
     Positions[id.x] += float2(cosA * deltaLocal.x - sinA * deltaLocal.y,
                               sinA * deltaLocal.x + cosA * deltaLocal.y);
+}
+
+// Cancels only the TRANSLATIONAL (mean) velocity into a contacted border: shifting every
+// previous position by the mean displacement zeroes the average of (pos - prev) on the
+// contact axes while keeping each particle's rotational component, so a square balancing
+// on its corner keeps its tipping momentum instead of sliding along the border
+[numthreads(ReductionThreads,1,1)]
+void CancelBoundaryBorderVelocity (uint3 id : SV_GroupThreadID)
+{
+    // Mean displacement over the frame = the body's translational motion
+    float2 sum = float2(0, 0);
+    for (uint i = id.x; i < numBoundaryParticles; i += ReductionThreads)
+        sum += BoundaryPositions[i] - BoundaryPrevPositions[i];
+
+    gsFloat2A[id.x] = sum;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint s = ReductionThreads / 2; s > 0; s >>= 1)
+    {
+        if (id.x < s) gsFloat2A[id.x] += gsFloat2A[id.x + s];
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    float2 meanDisp = gsFloat2A[0] / numBoundaryParticles;
+    float2 contactMask = float2(BodyState[3], BodyState[4]);
+
+    for (uint j = id.x; j < numBoundaryParticles; j += ReductionThreads)
+        BoundaryPrevPositions[j] += meanDisp * contactMask;
 }
