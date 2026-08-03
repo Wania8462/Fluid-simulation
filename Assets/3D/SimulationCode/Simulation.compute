@@ -1,0 +1,312 @@
+#pragma kernel ExternalForces
+#pragma kernel ClearForceBuffers
+#pragma kernel DoubleDensityRelaxation
+#pragma kernel ApplyForceBuffers
+#pragma kernel ApplyForceBuffersToVelocities
+#pragma kernel ApplyViscosity
+#pragma kernel ResolveBoundaries
+#pragma kernel AdvancePredictedPositions
+#pragma kernel AttractToMouse
+#pragma kernel CalculateVelocity
+#pragma kernel ClearGrid
+#pragma kernel ClearNeighbours
+#pragma kernel InitSpatialPartitoning
+#pragma kernel SetNeighbours
+
+#include "FluidMath3D.hlsl"
+
+static const float4 ZeroImpulse = float4(0, 0, 0, 0);
+static const int FloatScale = 1000000;
+
+
+RWStructuredBuffer<float4> Positions;
+RWStructuredBuffer<float4> PrevPositions;
+RWBuffer<int> ForceBuffersX;
+RWBuffer<int> ForceBuffersY;
+RWBuffer<int> ForceBuffersZ;
+RWStructuredBuffer<float4> Velocities;
+
+RWBuffer<float> Densities;
+RWBuffer<float> NearDensities;
+
+
+RWBuffer<uint> Grid;
+RWBuffer<uint> Neighbours;
+RWBuffer<uint> CellsLength;
+RWBuffer<uint> NeighboursLength;
+
+// Read-only views bound to the same GPU resources as the RW declarations above.
+StructuredBuffer<float4> PositionsRO;
+StructuredBuffer<float4> VelocitiesRO;
+Buffer<uint> NeighboursRO;
+Buffer<uint> NeighboursLengthRO;
+
+const uint numParticles;
+const float particleRadius;
+const float interactionRadius;
+const float interactionRadiusSq;
+
+const float gravity;
+const float mouseAttractiveness;
+const float mouseRadius;
+
+const float stiffness;
+const float nearStiffness;
+const float restDensity;
+
+const float highViscosity;
+const float lowViscosity;
+
+const float collisionDamp;
+const float4 realHalfBoundSize;
+
+const float4 mousePosition;
+const float dt;
+
+const uint numCells;
+const uint maxParticlesPerCell;
+const float4 offset;
+const float cellLength;
+const uint columns;
+const uint rows;
+const uint layers;
+
+void SetForceBuffer(uint index, float4 value)
+{
+    ForceBuffersX[index] = (int)(value.x * FloatScale);
+    ForceBuffersY[index] = (int)(value.y * FloatScale);
+    ForceBuffersZ[index] = (int)(value.z * FloatScale);
+}
+
+void AtomicAddForceBuffer(uint index, float4 value)
+{
+    InterlockedAdd(ForceBuffersX[index], (int)(value.x * FloatScale));
+    InterlockedAdd(ForceBuffersY[index], (int)(value.y * FloatScale));
+    InterlockedAdd(ForceBuffersZ[index], (int)(value.z * FloatScale));
+}
+
+float4 ReadForceBuffer(uint index)
+{
+    return float4((float)ForceBuffersX[index] / FloatScale,
+    (float)ForceBuffersY[index] / FloatScale,
+    (float)ForceBuffersZ[index] / FloatScale,
+    0);
+}
+
+[numthreads(64,1,1)]
+void ExternalForces (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    Velocities[id.x].y += dt * gravity;
+}
+
+[numthreads(64,1,1)]
+void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    SetForceBuffer(id.x, ZeroImpulse);
+}
+
+[numthreads(64,1,1)]
+void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    Densities[id.x] = 0;
+    NearDensities[id.x] = 0;
+
+    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
+    {
+        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        mag = sqrt(mag);
+
+        float q = mag / interactionRadius;
+        Densities[id.x] += QuadraticSpikyKernel(q);
+        NearDensities[id.x] += CubicSpikyKernel(q);
+    }
+
+    float pressure = stiffness * (Densities[id.x] - restDensity);
+    float nearPressure = nearStiffness * NearDensities[id.x];
+
+    for (uint j = 0; j < NeighboursLengthRO[id.x]; j++)
+    {
+        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
+        if (mag == 0 || mag > interactionRadiusSq) continue;
+        mag = sqrt(mag);
+
+        float q = mag / interactionRadius;
+        float4 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]], mag);
+        float4 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
+
+        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], displacement);
+        AtomicAddForceBuffer(id.x, -displacement);
+    }
+}
+
+[numthreads(64,1,1)]
+void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    Positions[id.x] += ReadForceBuffer(id.x);
+}
+
+[numthreads(64,1,1)]
+void ApplyForceBuffersToVelocities (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    Velocities[id.x] += ReadForceBuffer(id.x);
+}
+
+[numthreads(64,1,1)]
+void ApplyViscosity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
+    {
+        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
+        if (mag > interactionRadius || mag == 0) continue;
+
+        float q = mag / interactionRadius;
+        float4 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]], mag);
+        float inwardVelocity = dot(VelocitiesRO[id.x] - VelocitiesRO[NeighboursRO[id.x + i * numParticles]], r);
+        if(inwardVelocity <= 0) continue;
+
+        float4 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
+        AtomicAddForceBuffer(id.x, -impulse);
+        AtomicAddForceBuffer(NeighboursRO[id.x + i * numParticles], impulse);
+    }
+}
+
+[numthreads(64,1,1)]
+void ResolveBoundaries (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    if (abs(Positions[id.x].x) >= realHalfBoundSize.x)
+    {
+        int signOfPos = sign(Positions[id.x].x);
+        Positions[id.x].x = realHalfBoundSize.x * signOfPos;
+        Positions[id.x].x -= signOfPos * collisionDamp;
+    }
+
+    if (abs(Positions[id.x].y) >= realHalfBoundSize.y)
+    {
+        int signOfPos = sign(Positions[id.x].y);
+        Positions[id.x].y = realHalfBoundSize.y * signOfPos;
+        Positions[id.x].y -= signOfPos * collisionDamp;
+    }
+
+    if (abs(Positions[id.x].z) >= realHalfBoundSize.z)
+    {
+        int signOfPos = sign(Positions[id.x].z);
+        Positions[id.x].z = realHalfBoundSize.z * signOfPos;
+        Positions[id.x].z -= signOfPos * collisionDamp;
+    }
+}
+
+[numthreads(64,1,1)]
+void AdvancePredictedPositions (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    PrevPositions[id.x] = Positions[id.x];
+    Positions[id.x] += dt * Velocities[id.x];
+}
+
+[numthreads(64,1,1)]
+void AttractToMouse (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    float mag = Distance(Positions[id.x], mousePosition);
+    if (mag > mouseRadius) return;
+
+    float4 r = UnitVector(Positions[id.x], mousePosition, mag);
+    Positions[id.x] += dt * mouseAttractiveness * r;
+}
+
+[numthreads(64,1,1)]
+void CalculateVelocity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
+}
+
+// ---------- Spatial partitioning (3D: cubic cells, 27 adjacent cells) ----------
+
+uint3 GetCellPosition(float4 position)
+{
+    float3 scaled = (position.xyz - offset.xyz) / cellLength;
+    return uint3((uint)clamp(scaled.x, 0, columns - 1),
+    (uint)clamp(scaled.y, 0, rows - 1),
+    (uint)clamp(scaled.z, 0, layers - 1));
+}
+
+uint GetCellIndex(uint3 cellPosition)
+{
+    return cellPosition.x + cellPosition.y * columns + cellPosition.z * columns * rows;
+}
+
+[numthreads(64,1,1)]
+void ClearGrid (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numCells) return;
+
+    CellsLength[id.x] = 0;
+}
+
+[numthreads(64,1,1)]
+void ClearNeighbours (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    NeighboursLength[id.x] = 0;
+}
+
+[numthreads(64,1,1)]
+void InitSpatialPartitoning (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
+    uint ret;
+    InterlockedAdd(CellsLength[cellIndex], 1, ret);
+
+    if (ret < maxParticlesPerCell)
+        Grid[cellIndex + ret * numCells] = id.x;
+}
+
+[numthreads(64,1,1)]
+void SetNeighbours (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    uint3 cellPosition = GetCellPosition(Positions[id.x]);
+
+    // 27 adjacent cells: the 3x3x3 block centred on the particle's cell
+    for (uint i = 0; i < 27; i++)
+    {
+        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
+        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
+        uint neighbourIndex = GetCellIndex(neighbourPos);
+
+        for (uint j = 0; j < CellsLength[neighbourIndex]; j++)
+        {
+            if (j >= maxParticlesPerCell)
+            continue;
+
+            uint index;
+            InterlockedAdd(NeighboursLength[id.x], 1, index);
+
+            Neighbours[id.x + index * numParticles] = Grid[neighbourIndex + j * numCells];
+        }
+    }
+}

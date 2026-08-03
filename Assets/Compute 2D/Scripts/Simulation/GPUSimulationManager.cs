@@ -18,12 +18,6 @@ public enum BoundaryShape
     Circle
 }
 
-public struct Spring
-{
-    public int neighbourIndex;
-    public float restLength;
-}
-
 [Serializable]
 public struct SimulationSettings
 {
@@ -34,19 +28,12 @@ public struct SimulationSettings
     public float mouseRadius;
     public float collisionDamping;
 
-    // [Header("Body settings")]
-    // public Body body;
-
     [Header("Density")]
     public float stiffness;
     public float nearStiffness;
     public float restDensity;
 
     [Header("Springs")]
-    public float springInteractionRadius;
-    public float springRadius;
-    public float springStiffness;
-    public float springDeformationLimit;
     public float plasticity;
     public float highViscosity;
     public float lowViscosity;
@@ -297,10 +284,6 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("nearStiffness", settings.nearStiffness);
         compute.SetFloat("restDensity", settings.restDensity);
 
-        compute.SetFloat("springInteractionRadius", settings.springInteractionRadius);
-        compute.SetFloat("springRadius", settings.springRadius);
-        compute.SetFloat("springStiffness", settings.springStiffness);
-        compute.SetFloat("springDeformationLimit", settings.springDeformationLimit);
         compute.SetFloat("plasticity", settings.plasticity);
         compute.SetFloat("highViscosity", settings.highViscosity);
         compute.SetFloat("lowViscosity", settings.lowViscosity);

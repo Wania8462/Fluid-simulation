@@ -178,24 +178,21 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 
     for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
     {
-        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
-        if (mag == 0 || mag > interactionRadiusSq) continue;
-        mag = sqrt(mag);
-
+        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
         float q = mag / interactionRadius;
-        Densities[id.x] += QuadraticSpikyKernel(q);
-        NearDensities[id.x] += CubicSpikyKernel(q);
+        float w = step(1e-12, mag) * step(q, 1.0);
+
+        Densities[id.x] += w * QuadraticSpikyKernel(q);
+        NearDensities[id.x] += w * CubicSpikyKernel(q);
     }
 
     for (uint b = 0; b < BoundaryNeighboursLengthRO[id.x]; b++)
     {
         uint bIndex = BoundaryNeighboursRO[id.x + b * numParticles];
-        float magSq = DistanceSq(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
-        float mag = sqrt(magSq);
+        float mag = Distance(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
         float q = mag / interactionRadius;
+        float w = step(1e-12, mag) * step(q, 1.0);
 
-        // Branchless mask: 0 when mag == 0 or q > 1, 1 otherwise
-        float w = step(1e-12, magSq) * step(q, 1.0);
         float psi = restDensity * BoundaryVolumesRO[bIndex];
 
         Densities[id.x] += w * psi * QuadraticSpikyKernel(q);
@@ -207,16 +204,15 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 
     for (uint j = 0; j < NeighboursLengthRO[id.x]; j++)
     {
-        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
-        if (mag == 0 || mag > interactionRadiusSq) continue;
-        mag = sqrt(mag);
-
+        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
         float q = mag / interactionRadius;
+        float w = step(1e-12, mag) * step(q, 1.0);
+
         float2 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]], mag);
         float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
-        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], displacement);
-        AtomicAddForceBuffer(id.x, -displacement);
+        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], w * displacement);
+        AtomicAddForceBuffer(id.x, w * -displacement);
     }
 
     float boundaryPressure = max(pressure, 0.0);
@@ -225,13 +221,11 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     for (uint k = 0; k < BoundaryNeighboursLengthRO[id.x]; k++)
     {
         uint bIndex = BoundaryNeighboursRO[id.x + k * numParticles];
-        float magSq = DistanceSq(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
-        float mag = sqrt(magSq);
+        float mag = Distance(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
         float q = mag / interactionRadius;
+        float w = step(1e-12, mag) * step(q, 1.0);
 
-        // Branchless mask: 0 when mag == 0 or q > 1, 1 otherwise
-        float w = step(1e-12, magSq) * step(q, 1.0);
-        float2 r = (BoundaryPositionsRO[bIndex] - PositionsRO[id.x]) / max(mag, 1e-9);
+        float2 r = (BoundaryPositionsRO[bIndex] - PositionsRO[id.x]) / mag;
         float2 displacement = PressureDisplacement(dt, q, boundaryPressure, boundaryNearPressure, r);
         float psi = restDensity * BoundaryVolumesRO[bIndex];
 
