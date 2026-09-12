@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -29,7 +28,6 @@ public class SimulationManager : MonoBehaviour
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
     [SerializeField] private SimulationSettings3D settings;
-    [SerializeField] private int maxParticlesPerCell = 64;
     [SerializeField] public float particleRadius = 0.5f;
     [SerializeField] private int targetFrameRate = 120;
     [SerializeField] private bool useRealDeltaTime;
@@ -49,6 +47,7 @@ public class SimulationManager : MonoBehaviour
 
     private int3 threadGroups;
     private int3 gridThreadGroups;
+    private int numScanSteps;
 
     private int clock;
 
@@ -84,10 +83,7 @@ public class SimulationManager : MonoBehaviour
 
         if (clock % 4 == 0)
         {
-            compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGroups);
-            compute.Dispatch(KernelIDs["ClearNeighbours"], threadGroups);
-            compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGroups);
-            compute.Dispatch(KernelIDs["SetNeighbours"], threadGroups);
+            BuildGrid();
             clock = 0;
         }
         clock++;
@@ -116,6 +112,24 @@ public class SimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGroups);
 
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGroups);
+    }
+
+    // Counting sort: count per cell, prefix sum the counts into start offsets, then
+    // scatter. Leaves cell c's particles in SortedIndices[CellStart[c]..CellStart[c + 1])
+    private void BuildGrid()
+    {
+        compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGroups);
+        compute.Dispatch(KernelIDs["CountParticles"], threadGroups);
+
+        for (int i = 0; i < numScanSteps; i++)
+        {
+            compute.SetInt("scanStride", 1 << i);
+            compute.SetInt("scanFlip", i % 2);
+            compute.Dispatch(KernelIDs["ScanStep"], gridThreadGroups);
+        }
+
+        compute.Dispatch(KernelIDs["ResetCursor"], gridThreadGroups);
+        compute.Dispatch(KernelIDs["Scatter"], threadGroups);
     }
 
     private void OnValidate()
@@ -150,7 +164,14 @@ public class SimulationManager : MonoBehaviour
         SetComputeSettings();
 
         threadGroups = compute.GetThreadGroups(0, numParticles);
-        gridThreadGroups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.NumCells);
+        gridThreadGroups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.NumCells + 1);
+
+        // Hillis-Steele needs ceil(log2(n)) passes. Rounding up to an even count makes
+        // the ping-pong always land back in CellStart: the extra pass has a stride past
+        // the end of the array, so every entry carries nothing and it is a plain copy.
+        numScanSteps = 0;
+        while ((1 << numScanSteps) < SP.NumCells + 1) numScanSteps++;
+        if (numScanSteps % 2 == 1) numScanSteps++;
 
         clock = 0;
 
@@ -185,7 +206,6 @@ public class SimulationManager : MonoBehaviour
         compute.SetFloat("particleRadius", particleRadius);
 
         compute.SetInt("numCells", SP.NumCells);
-        compute.SetInt("maxParticlesPerCell", maxParticlesPerCell);
         compute.SetVector("offset", new(SP.offset.x, SP.offset.y, SP.offset.z, 0));
         compute.SetFloat("cellLength", SP.length);
         compute.SetInt("columns", SP.columns);
@@ -205,11 +225,10 @@ public class SimulationManager : MonoBehaviour
         if (numParticles == 0)
             Debug.LogWarning("Simulation manager: there are 0 particles. Creating non-existant buffers.");
 
-        // 3D counts grow cubically: 8M particles overflow the Neighbours size (numParticles * maxParticlesPerCell * 9)
-        // past int.MaxValue and the allocations reach gigabytes, which aborts Setup before any buffer is bound
-        long neighboursCount = (long)numParticles * maxParticlesPerCell * 9;
-        if (neighboursCount > int.MaxValue)
-            Debug.LogError($"Simulation manager: Neighbours buffer would need {neighboursCount} elements (> int.MaxValue). Reduce particleCubeLength or maxParticlesPerCell or every kernel will report unset properties.");
+        // Cell counts grow cubically as interactionRadius shrinks; columns * rows * layers
+        // silently overflows int well before the allocation itself becomes a problem
+        if (SP.NumCells <= 0)
+            Debug.LogError($"Simulation manager: grid has {SP.NumCells} cells. interactionRadius is too small for the bounding box, so every neighbour query will read out of range.");
 
         Buffers["Positions"] = ComputeHelper.CreateStructuredBufferWithData(spawn.InitializePositions());
         Buffers["PrevPositions"] = ComputeHelper.CreateStructuredBufferWithData<float4>(numParticles);
@@ -221,23 +240,17 @@ public class SimulationManager : MonoBehaviour
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
         Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
 
-        Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells * maxParticlesPerCell);
-        Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 9);
-        Buffers["CellsLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells);
-        Buffers["NeighboursLength"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
-
-        // Read-only aliases: the same buffers bound under the SRV names that
-        // DoubleDensityRelaxation and ApplyViscosity read through (D3D11.0 UAV limit)
-        Buffers["PositionsRO"] = Buffers["Positions"];
-        Buffers["VelocitiesRO"] = Buffers["Velocities"];
-        Buffers["NeighboursRO"] = Buffers["Neighbours"];
-        Buffers["NeighboursLengthRO"] = Buffers["NeighboursLength"];
+        // One uint per cell for the offsets, one per particle for the grid contents.
+        // ScanTemp is the prefix sum's ping-pong partner, CellCursor the scatter write head.
+        Buffers["CellStart"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
+        Buffers["ScanTemp"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
+        Buffers["CellCursor"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
+        Buffers["SortedIndices"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
     }
 
     private void ReleaseBuffers()
     {
-        // Distinct: the RO aliases share buffer instances with their RW originals
-        foreach (var buffer in Buffers.Values.Distinct())
+        foreach (var buffer in Buffers.Values)
             ComputeHelper.Release(buffer);
     }
 

@@ -9,9 +9,10 @@
 #pragma kernel AttractToMouse
 #pragma kernel CalculateVelocity
 #pragma kernel ClearGrid
-#pragma kernel ClearNeighbours
-#pragma kernel InitSpatialPartitoning
-#pragma kernel SetNeighbours
+#pragma kernel CountParticles
+#pragma kernel ScanStep
+#pragma kernel ResetCursor
+#pragma kernel Scatter
 
 #include "FluidMath3D.hlsl"
 
@@ -21,25 +22,20 @@ static const int FloatScale = 1000000;
 
 RWStructuredBuffer<float4> Positions;
 RWStructuredBuffer<float4> PrevPositions;
-RWBuffer<int> ForceBuffersX;
-RWBuffer<int> ForceBuffersY;
-RWBuffer<int> ForceBuffersZ;
+RWStructuredBuffer<int> ForceBuffersX;
+RWStructuredBuffer<int> ForceBuffersY;
+RWStructuredBuffer<int> ForceBuffersZ;
 RWStructuredBuffer<float4> Velocities;
 
-RWBuffer<float> Densities;
-RWBuffer<float> NearDensities;
+RWStructuredBuffer<float> Densities;
+RWStructuredBuffer<float> NearDensities;
 
-
-RWBuffer<uint> Grid;
-RWBuffer<uint> Neighbours;
-RWBuffer<uint> CellsLength;
-RWBuffer<uint> NeighboursLength;
-
-// Read-only views bound to the same GPU resources as the RW declarations above.
-StructuredBuffer<float4> PositionsRO;
-StructuredBuffer<float4> VelocitiesRO;
-Buffer<uint> NeighboursRO;
-Buffer<uint> NeighboursLengthRO;
+// Compact grid: particle indices grouped by cell in one contiguous buffer.
+// Cell c occupies SortedIndices[CellStart[c] .. CellStart[c + 1]).
+RWStructuredBuffer<uint> CellStart;
+RWStructuredBuffer<uint> ScanTemp;
+RWStructuredBuffer<uint> CellCursor;
+RWStructuredBuffer<uint> SortedIndices;
 
 const uint numParticles;
 const float particleRadius;
@@ -64,12 +60,16 @@ const float4 mousePosition;
 const float dt;
 
 const uint numCells;
-const uint maxParticlesPerCell;
 const float4 offset;
 const float cellLength;
 const uint columns;
 const uint rows;
 const uint layers;
+
+// Hillis-Steele scan step: stride doubles each pass, flip alternates the
+// ping-pong direction. Both are uniform, so the branch on flip never diverges.
+const uint scanStride;
+const uint scanFlip;
 
 void SetForceBuffer(uint index, float4 value)
 {
@@ -93,6 +93,10 @@ float4 ReadForceBuffer(uint index)
     0);
 }
 
+// Defined in the spatial partitioning section below
+uint3 GetCellPosition(float4 position);
+uint GetCellIndex(uint3 cellPosition);
+
 [numthreads(64,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
 {
@@ -114,35 +118,58 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    Densities[id.x] = 0;
-    NearDensities[id.x] = 0;
+    float4 position = Positions[id.x];
+    uint3 cellPosition = GetCellPosition(position);
 
-    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
+    float density = 0;
+    float nearDensity = 0;
+
+    for (uint i = 0; i < 27; i++)
     {
-        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
-        if (mag == 0 || mag > interactionRadiusSq) continue;
-        mag = sqrt(mag);
+        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
+        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
+        uint cell = GetCellIndex(neighbourPos);
 
-        float q = mag / interactionRadius;
-        Densities[id.x] += QuadraticSpikyKernel(q);
-        NearDensities[id.x] += CubicSpikyKernel(q);
+        for (uint j = CellStart[cell]; j < CellStart[cell + 1]; j++)
+        {
+            float mag = DistanceSq(position, Positions[SortedIndices[j]]);
+            if (mag == 0 || mag > interactionRadiusSq) continue;
+            mag = sqrt(mag);
+
+            float q = mag / interactionRadius;
+            density += QuadraticSpikyKernel(q);
+            nearDensity += CubicSpikyKernel(q);
+        }
     }
 
-    float pressure = stiffness * (Densities[id.x] - restDensity);
-    float nearPressure = nearStiffness * NearDensities[id.x];
+    Densities[id.x] = density;
+    NearDensities[id.x] = nearDensity;
 
-    for (uint j = 0; j < NeighboursLengthRO[id.x]; j++)
+    float pressure = stiffness * (density - restDensity);
+    float nearPressure = nearStiffness * nearDensity;
+
+    for (uint k = 0; k < 27; k++)
     {
-        float mag = DistanceSq(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
-        if (mag == 0 || mag > interactionRadiusSq) continue;
-        mag = sqrt(mag);
+        int3 cellOffset = int3(k % 3, (k / 3) % 3, k / 9) - 1;
+        uint3 neighbourPos = cellPosition + cellOffset;
+        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
+        uint cell = GetCellIndex(neighbourPos);
 
-        float q = mag / interactionRadius;
-        float4 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]], mag);
-        float4 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
+        for (uint l = CellStart[cell]; l < CellStart[cell + 1]; l++)
+        {
+            uint neighbour = SortedIndices[l];
+            float mag = DistanceSq(position, Positions[neighbour]);
+            if (mag == 0 || mag > interactionRadiusSq) continue;
+            mag = sqrt(mag);
 
-        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], displacement);
-        AtomicAddForceBuffer(id.x, -displacement);
+            float q = mag / interactionRadius;
+            float4 r = UnitVector(position, Positions[neighbour], mag);
+            float4 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
+
+            AtomicAddForceBuffer(neighbour, displacement);
+            AtomicAddForceBuffer(id.x, -displacement);
+        }
     }
 }
 
@@ -167,19 +194,32 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
+    float4 position = Positions[id.x];
+    float4 velocity = Velocities[id.x];
+    uint3 cellPosition = GetCellPosition(position);
+
+    for (uint i = 0; i < 27; i++)
     {
-        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
-        if (mag > interactionRadius || mag == 0) continue;
+        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
+        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
+        uint cell = GetCellIndex(neighbourPos);
 
-        float q = mag / interactionRadius;
-        float4 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]], mag);
-        float inwardVelocity = dot(VelocitiesRO[id.x] - VelocitiesRO[NeighboursRO[id.x + i * numParticles]], r);
-        if(inwardVelocity <= 0) continue;
+        for (uint j = CellStart[cell]; j < CellStart[cell + 1]; j++)
+        {
+            uint neighbour = SortedIndices[j];
+            float mag = Distance(position, Positions[neighbour]);
+            if (mag > interactionRadius || mag == 0) continue;
 
-        float4 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
-        AtomicAddForceBuffer(id.x, -impulse);
-        AtomicAddForceBuffer(NeighboursRO[id.x + i * numParticles], impulse);
+            float q = mag / interactionRadius;
+            float4 r = UnitVector(position, Positions[neighbour], mag);
+            float inwardVelocity = dot(velocity - Velocities[neighbour], r);
+            if(inwardVelocity <= 0) continue;
+
+            float4 impulse = ViscosityImpulse(dt, highViscosity, lowViscosity, q, inwardVelocity, r) * 0.5f;
+            AtomicAddForceBuffer(id.x, -impulse);
+            AtomicAddForceBuffer(neighbour, impulse);
+        }
     }
 }
 
@@ -254,59 +294,60 @@ uint GetCellIndex(uint3 cellPosition)
     return cellPosition.x + cellPosition.y * columns + cellPosition.z * columns * rows;
 }
 
+// The grid is built by counting sort: count per cell, prefix sum the counts into
+// start offsets, then scatter particle indices into their cell's slice. There is
+// no per-cell capacity, so no particle is ever dropped.
+
+// CellStart holds the counts first, shifted up one slot so the inclusive scan
+// below turns them straight into exclusive start offsets.
 [numthreads(64,1,1)]
 void ClearGrid (uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numCells) return;
+    if (id.x > numCells) return;
 
-    CellsLength[id.x] = 0;
+    CellStart[id.x] = 0;
 }
 
 [numthreads(64,1,1)]
-void ClearNeighbours (uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles) return;
-
-    NeighboursLength[id.x] = 0;
-}
-
-[numthreads(64,1,1)]
-void InitSpatialPartitoning (uint3 id : SV_DispatchThreadID)
+void CountParticles (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
     uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
-    uint ret;
-    InterlockedAdd(CellsLength[cellIndex], 1, ret);
-
-    if (ret < maxParticlesPerCell)
-        Grid[cellIndex + ret * numCells] = id.x;
+    InterlockedAdd(CellStart[cellIndex + 1], 1);
 }
 
 [numthreads(64,1,1)]
-void SetNeighbours (uint3 id : SV_DispatchThreadID)
+void ScanStep (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x > numCells) return;
+
+    uint previous = max((int)id.x - (int)scanStride, 0);
+    uint mask = id.x >= scanStride; // 0 for the first stride entries, which carry nothing
+
+    // scanFlip is uniform across the dispatch, so this costs no divergence
+    if (scanFlip == 0)
+        ScanTemp[id.x] = CellStart[id.x] + CellStart[previous] * mask;
+    else
+        CellStart[id.x] = ScanTemp[id.x] + ScanTemp[previous] * mask;
+}
+
+[numthreads(64,1,1)]
+void ResetCursor (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x > numCells) return;
+
+    CellCursor[id.x] = CellStart[id.x];
+}
+
+[numthreads(64,1,1)]
+void Scatter (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    uint3 cellPosition = GetCellPosition(Positions[id.x]);
+    uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
+    uint destination;
+    InterlockedAdd(CellCursor[cellIndex], 1, destination);
 
-    // 27 adjacent cells: the 3x3x3 block centred on the particle's cell
-    for (uint i = 0; i < 27; i++)
-    {
-        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
-        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
-        uint neighbourIndex = GetCellIndex(neighbourPos);
-
-        for (uint j = 0; j < CellsLength[neighbourIndex]; j++)
-        {
-            if (j >= maxParticlesPerCell)
-            continue;
-
-            uint index;
-            InterlockedAdd(NeighboursLength[id.x], 1, index);
-
-            Neighbours[id.x + index * numParticles] = Grid[neighbourIndex + j * numCells];
-        }
-    }
+    SortedIndices[destination] = id.x;
 }
