@@ -153,6 +153,7 @@ MonoBehaviour:
   maxSpeed: 100
   compute: {fileID: 7200000, guid: 523a616c9b50c494cad05100c7739a85, type: 3}
   material: {fileID: 2100000, guid: cc125b897d889ea4ab3b76ac87066207, type: 2}
+  boundaryMaterial: {fileID: 2100000, guid: 59c62d33c7f373f43866b0477c28a985, type: 2}
 --- !u!4 &277284706
 Transform:
   m_ObjectHideFlags: 0
@@ -307,6 +308,33 @@ MonoBehaviour:
     restDensity: 5
     highViscosity: 0.2
     lowViscosity: 3
+    boundaryFriction: 1
+    bodyFriction: 1
+    bodies:
+    - shape: 0
+      bodyRadius: 10
+      sampleDensity: 1
+      bodyPosition:
+        x: 80
+        y: 0
+        z: 100
+      bodyRotation:
+        x: 0
+        y: 0
+        z: 0
+      boundaryBodyMass: 500
+    - shape: 1
+      bodyRadius: 10
+      sampleDensity: 1
+      bodyPosition:
+        x: 125
+        y: 0
+        z: 100
+      bodyRotation:
+        x: 0
+        y: 0
+        z: 0
+      boundaryBodyMass: 500
   particleRadius: 0.5
   targetFrameRate: 120
   useRealDeltaTime: 0
@@ -315,6 +343,7 @@ MonoBehaviour:
   spawn: {fileID: 642951341}
   render: {fileID: 277284705}
   numParticles: 0
+  numBoundaryParticles: 0
 --- !u!4 &642951340
 Transform:
   m_ObjectHideFlags: 0

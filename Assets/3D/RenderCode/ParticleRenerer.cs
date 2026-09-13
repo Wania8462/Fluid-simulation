@@ -15,6 +15,7 @@ public class ParticleRenerer : MonoBehaviour
     [SerializeField] private float maxSpeed = 100;
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Material material;
+    [SerializeField] private Material boundaryMaterial;
 
     private Mesh mesh;
 
@@ -22,6 +23,10 @@ public class ParticleRenerer : MonoBehaviour
     private GraphicsBuffer commandBuf;
     private GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
     private RenderParams rp;
+
+    private GraphicsBuffer boundaryCommandBuf;
+    private RenderParams boundaryRp;
+    private bool drawBoundaryParticles;
 
     private int3 threadGroups;
 
@@ -50,12 +55,42 @@ public class ParticleRenerer : MonoBehaviour
 
         rp.matProps.SetBuffer("Positions", sim.Buffers["Positions"]);
         rp.matProps.SetBuffer("Colors", colorsBuffer);
+
+        SetupBoundaryParticles(sim);
+    }
+
+    // Rigid bodies are drawn as their boundary particles in a solid colour, like in the 2D renderer
+    private void SetupBoundaryParticles(SimulationManager sim)
+    {
+        ComputeHelper.Release(boundaryCommandBuf);
+        boundaryCommandBuf = null;
+        drawBoundaryParticles = false;
+
+        if (sim.numBoundaryParticles == 0) return;
+
+        if (boundaryMaterial == null)
+        {
+            Debug.LogWarning("Particle renderer: no boundary material assigned, so rigid bodies won't be drawn. Create one with the Custom/SolidParticle3D shader");
+            return;
+        }
+
+        boundaryCommandBuf = ComputeHelper.CreateCommandBuffer();
+        boundaryCommandBuf.SetData(ComputeHelper.CreateCommandData(mesh, sim.numBoundaryParticles));
+        boundaryRp = ComputeHelper.CreateRenderParams(boundaryMaterial);
+        boundaryRp.matProps.SetBuffer("Positions", sim.Buffers["BoundaryPositions"]);
+        drawBoundaryParticles = true;
     }
 
     public void DrawParticles()
     {
         compute.Dispatch(CalculateColorsKernelID, threadGroups);
         Graphics.RenderMeshIndirect(rp, mesh, commandBuf, commandCount: 1);
+    }
+
+    public void DrawBoundaryParticles()
+    {
+        if (drawBoundaryParticles)
+            Graphics.RenderMeshIndirect(boundaryRp, mesh, boundaryCommandBuf, commandCount: 1);
     }
 
     private float4[] GetDefaultColors(int length)
@@ -71,6 +106,7 @@ public class ParticleRenerer : MonoBehaviour
     private void ReleaseBuffers()
     {
         ComputeHelper.Release(commandBuf);
+        ComputeHelper.Release(boundaryCommandBuf);
         ComputeHelper.Release(colorsBuffer);
     }
 
