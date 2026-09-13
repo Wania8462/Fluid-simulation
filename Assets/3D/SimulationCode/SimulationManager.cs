@@ -26,6 +26,7 @@ public struct SimulationSettings3D
     [Header("Rigid bodies")]
     public float boundaryFriction;
     public float bodyFriction;
+    // One slot per body, empty slots have bodyRadius 0. A body's SimulationAPI id is the index of its slot
     public RigidBodySettings3D[] bodies;
 }
 
@@ -33,7 +34,7 @@ public class SimulationManager : MonoBehaviour
 {
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
-    [SerializeField] private SimulationSettings3D settings;
+    [SerializeField] internal SimulationSettings3D settings;
     [SerializeField] public float particleRadius = 0.5f;
     [SerializeField] private int targetFrameRate = 120;
     [SerializeField] private bool useRealDeltaTime;
@@ -45,15 +46,21 @@ public class SimulationManager : MonoBehaviour
     [SerializeField] private ParticleRenerer render;
     private SPValues3D SP;
 
+    public bool Running { get; private set; }
+
     [HideInInspector] public int numParticles;
     [HideInInspector] public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
+    internal float3 RealHalfBoundSize => spawn.GetRealHalfBoundSize(particleRadius);
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
 
     private RigidBodyData3D bodies;
     private int numBodies;
+
+    // Body buffers that AddBody or RemoveBody replaced, released at the start of the next Update
+    private readonly List<ComputeBuffer> replacedBuffers = new();
 
     private int3 threadGroups;
     private int3 gridThreadGroups;
@@ -72,20 +79,39 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R))
             Setup();
 
+        // Draws queued before AddBody or RemoveBody may use the buffers they replaced until that frame has rendered, so
+        // the buffers are released here, before this frame's draws, and the renderer switches to the new ones
+        if (replacedBuffers.Count > 0)
+        {
+            foreach (ComputeBuffer buffer in replacedBuffers)
+                ComputeHelper.Release(buffer);
+
+            replacedBuffers.Clear();
+            render.Setup(this);
+        }
+
         if (Input.GetKeyDown(KeyCode.Space))
             paused = !paused;
 
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
-            Watcher.ExecuteWithTimer("1. Time step", SimulationStep);
+            ExecuteStep();
 
         else if (Input.GetKeyDown(KeyCode.PageDown))
         {
             for (int i = 0; i < 10; i++)
-                Watcher.ExecuteWithTimer("1. Time step", SimulationStep);
+                ExecuteStep();
         }
 
+        UpdateComputeSettings();
         render.DrawParticles();
         render.DrawBoundaryParticles();
+    }
+
+    private void ExecuteStep()
+    {
+        Running = true;
+        Watcher.ExecuteWithTimer("1. Time step", SimulationStep);
+        Running = false;
     }
 
     private void SimulationStep()
@@ -124,7 +150,6 @@ public class SimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGroups);
         }
 
-        // Both relaxation iterations push on the bodies through the boundary force buffers, applied once here
         if (numBodies > 0)
         {
             DispatchPerBody("SumCouplingForces");
@@ -145,7 +170,6 @@ public class SimulationManager : MonoBehaviour
                 DispatchPerBody("AttractBodiesToMouse");
             }
 
-            // Resolve contacts, then project the fluid out of the bodies before clamping it to the borders
             DispatchPerBody("SumContacts");
             DispatchPerBody("ApplyContacts");
             DispatchPerBody("BodyCalculateVelocity");
@@ -257,6 +281,86 @@ public class SimulationManager : MonoBehaviour
         render.Setup(this);
     }
 
+    // Puts a body in the first empty slot of settings.bodies, or a new slot at the end, and returns the slot as its id.
+    // The other bodies keep their slots, positions and motion
+    internal int AddBody(RigidBodySettings3D body)
+    {
+        if (settings.bodies.Count(slot => !slot.IsEmpty) >= RigidBodies3D.MaxBodies)
+            throw new InvalidOperationException($"At most {RigidBodies3D.MaxBodies} rigid bodies are supported.");
+
+        int id = Array.FindIndex(settings.bodies, slot => slot.IsEmpty);
+        if (id < 0)
+        {
+            id = settings.bodies.Length;
+            Array.Resize(ref settings.bodies, id + 1);
+        }
+
+        settings.bodies[id] = body;
+
+        // Before Setup there is no body data yet, and Setup builds every body in the array
+        if (bodies == null) return id;
+
+        ReadBodyStates();
+        RigidBodies3D.AddBody(bodies, body, id, spawn);
+        RebuildBodies();
+        return id;
+    }
+
+    // Empties the slot of a body. The other bodies keep their slots, positions and motion
+    internal void RemoveBody(int id)
+    {
+        if (id < 0 || id >= settings.bodies.Length || settings.bodies[id].IsEmpty)
+            throw new ArgumentException($"There is no rigid body with id {id}.", nameof(id));
+
+        settings.bodies[id] = default;
+
+        // Before Setup there is no body data yet
+        if (bodies == null) return;
+
+        ReadBodyStates();
+        RigidBodies3D.RemoveBody(bodies, id);
+        RebuildBodies();
+    }
+
+    // The GPU moves the bodies, so the CPU only has their start poses until the current states are copied back
+    private void ReadBodyStates()
+    {
+        if (numBodies == 0) return;
+
+        RigidBodyState3D[] states = new RigidBodyState3D[numBodies];
+        Buffers["BodyStates"].GetData(states);
+        bodies.states.Clear();
+        bodies.states.AddRange(states);
+    }
+
+    // Recreates the body buffers for the current bodies and places the bodies where they are now. The fluid buffers stay
+    private void RebuildBodies()
+    {
+        // Except finds the buffers CreateBuffers replaced, each once, even though the read-only aliases share them.
+        // This frame's draws may already be queued with them, so Update releases them before the next draws
+        List<ComputeBuffer> previous = Buffers.Values.ToList();
+        RigidBodies3D.CreateBuffers(Buffers, bodies, SP.NumCells);
+        replacedBuffers.AddRange(previous.Except(Buffers.Values));
+
+        numBodies = bodies.NumBodies;
+        numBoundaryParticles = bodies.NumBoundaryParticles;
+        boundaryThreadGroups = compute.GetThreadGroups(0, numBoundaryParticles);
+        SetBuffers();
+        UpdateComputeSettings();
+
+        if (numBodies > 0)
+        {
+            // The uploaded boundary positions are where the bodies started, the grid and the volumes need where they are
+            compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGroups);
+            BuildBoundaryGrid();
+            compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGroups);
+
+            // Fluid inside a new body is pushed out now, before the next step saves PrevPositions, so the push doesn't
+            // turn into velocity
+            compute.Dispatch(KernelIDs["ResolveBodyCollisions"], threadGroups);
+        }
+    }
+
     #region Buffer helpers
     private void UpdateComputeSettings()
     {
@@ -284,6 +388,9 @@ public class SimulationManager : MonoBehaviour
 
         compute.SetFloat("boundaryFriction", settings.boundaryFriction);
         compute.SetFloat("bodyFriction", settings.bodyFriction);
+
+        compute.SetInt("numBoundaryParticles", numBoundaryParticles);
+        compute.SetInt("numBodies", numBodies);
     }
 
     private void SetComputeSettings()
@@ -301,9 +408,6 @@ public class SimulationManager : MonoBehaviour
         compute.SetInt("columns", SP.columns);
         compute.SetInt("rows", SP.rows);
         compute.SetInt("layers", SP.layers);
-
-        compute.SetInt("numBoundaryParticles", numBoundaryParticles);
-        compute.SetInt("numBodies", numBodies);
     }
 
     private void SetBuffers()
@@ -353,8 +457,10 @@ public class SimulationManager : MonoBehaviour
     private void ReleaseBuffers()
     {
         // Distinct: the read-only aliases share buffer instances with their read-write originals
-        foreach (var buffer in Buffers.Values.Distinct())
+        foreach (var buffer in Buffers.Values.Concat(replacedBuffers).Distinct())
             ComputeHelper.Release(buffer);
+
+        replacedBuffers.Clear();
     }
 
     private void OnDestroy()
