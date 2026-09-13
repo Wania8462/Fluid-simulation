@@ -4,10 +4,10 @@
 // A reduction slot of SumCouplingForces holds a force and a torque
 #define CouplingSlotSize 2
 
-// SumContacts groups contacts per wall axis (x, y, z) plus one group for all other bodies. A reduction slot
-// holds an impulse (w = number of contacts) and a torque per group
+// SumContacts groups contacts per wall axis (x, y, z) plus one group for all other bodies. For each group a
+// reduction slot holds the push out (w = number of contacts), the friction, the torque and the approach
 #define ContactGroups 4
-#define ContactSlotSize 8
+#define ContactSlotSize 16
 
 // ---------- Boundary force buffers: atomic fixed-point accumulators, like the fluid ones ----------
 
@@ -329,10 +329,12 @@ float3 WallPushOut(float3 position)
     return (sign(position) * realHalfBoundSize.xyz - position) * outside;
 }
 
-// One positional contact at offset r from the centre of mass: push out by depth along normal, plus friction
-// that undoes the contact point's tangential motion, capped at bodyFriction times the push
-void AccumulateContact(inout float4 impulseSum, inout float4 torqueSum, float invMass, float3x3 invInertiaWorld,
-                       float3 r, float3 normal, float depth, float3 contactDisplacement)
+// One positional contact at offset r from the centre of mass. It adds the push out by depth along normal, the friction
+// that undoes the contact point's tangential motion (capped at bodyFriction times the push), and the motion into the
+// contact scaled by this body's share of it, which ApplyContacts takes out of the velocity
+void AccumulateContact(inout float4 pushSum, inout float4 frictionSum, inout float4 torqueSum, inout float4 approachSum,
+                       float invMass, float3x3 invInertiaWorld, float3 r, float3 normal, float depth,
+                       float3 contactDisplacement, float share)
 {
     float isContact = step(1e-9, depth);
     float normalLambda = depth / GeneralizedInverseMass(invMass, invInertiaWorld, r, normal);
@@ -343,9 +345,13 @@ void AccumulateContact(inout float4 impulseSum, inout float4 torqueSum, float in
     float tangentLambda = tangentialLength / GeneralizedInverseMass(invMass, invInertiaWorld, r, tangent);
     float frictionLambda = min(tangentLambda, bodyFriction * normalLambda);
 
-    float3 impulse = (normalLambda * normal + frictionLambda * tangent) * isContact;
-    impulseSum += float4(impulse, isContact);
-    torqueSum.xyz += cross(r, impulse);
+    float3 push = normalLambda * normal * isContact;
+    float3 friction = frictionLambda * tangent * isContact;
+
+    pushSum += float4(push, isContact);
+    frictionSum.xyz += friction;
+    torqueSum.xyz += cross(r, push + friction);
+    approachSum.xyz += normal * min(dot(contactDisplacement, normal), 0.0) * share * isContact;
 }
 
 // Strided reduction of every contact of a body's boundary particles, sorted into contact groups
@@ -359,12 +365,16 @@ void SumContacts (uint3 groupId : SV_GroupID, uint3 threadId : SV_GroupThreadID)
     RigidBodyState state = BodyStates[body];
     float3x3 invInertiaWorld = InverseInertiaWorld(state.rotation, properties.invInertia.xyz);
 
-    float4 impulses[ContactGroups];
+    float4 pushes[ContactGroups];
+    float4 frictions[ContactGroups];
     float4 torques[ContactGroups];
+    float4 approaches[ContactGroups];
     for (uint g = 0; g < ContactGroups; g++)
     {
-        impulses[g] = 0;
+        pushes[g] = 0;
+        frictions[g] = 0;
         torques[g] = 0;
+        approaches[g] = 0;
     }
 
     for (uint i = properties.start + threadId.x; i < properties.start + properties.count; i += BodyReductionThreads)
@@ -374,17 +384,22 @@ void SumContacts (uint3 groupId : SV_GroupID, uint3 threadId : SV_GroupThreadID)
         float3 contactPosition = state.position.xyz + r;
         float3 displacement = contactPosition - (state.prevPosition.xyz + QuaternionRotate(state.prevRotation, restOffset));
 
-        // The walls are axis-aligned, so each axis is its own constraint
+        // The walls are axis-aligned, so each axis is its own constraint, and they never move, so this body takes
+        // the whole correction
         float3 wallPush = WallPushOut(contactPosition);
-        AccumulateContact(impulses[0], torques[0], properties.invMass, invInertiaWorld, r, float3(sign(wallPush.x), 0, 0), abs(wallPush.x), displacement);
-        AccumulateContact(impulses[1], torques[1], properties.invMass, invInertiaWorld, r, float3(0, sign(wallPush.y), 0), abs(wallPush.y), displacement);
-        AccumulateContact(impulses[2], torques[2], properties.invMass, invInertiaWorld, r, float3(0, 0, sign(wallPush.z)), abs(wallPush.z), displacement);
+        AccumulateContact(pushes[0], frictions[0], torques[0], approaches[0], properties.invMass, invInertiaWorld,
+                          r, float3(sign(wallPush.x), 0, 0), abs(wallPush.x), displacement, 1.0);
+        AccumulateContact(pushes[1], frictions[1], torques[1], approaches[1], properties.invMass, invInertiaWorld,
+                          r, float3(0, sign(wallPush.y), 0), abs(wallPush.y), displacement, 1.0);
+        AccumulateContact(pushes[2], frictions[2], torques[2], approaches[2], properties.invMass, invInertiaWorld,
+                          r, float3(0, 0, sign(wallPush.z)), abs(wallPush.z), displacement, 1.0);
 
         // Other bodies: push out along their surface normals, keeping the share of the correction the masses give
-        // this body. Friction works on the motion relative to the other body's surface
+        // this body. Friction and the approach use the motion relative to the other body's surface
         float3 bodyPush = 0;
         float3 otherDisplacement = 0;
         float touching = 0;
+        float shareSum = 0;
         for (uint other = 0; other < numBodies; other++)
         {
             RigidBodyProperties otherProperties = BodyProperties[other];
@@ -402,23 +417,32 @@ void SumContacts (uint3 groupId : SV_GroupID, uint3 threadId : SV_GroupThreadID)
             bodyPush += otherNormal * (particleRadius - otherDistance) * share * inside;
             otherDisplacement += BodyPointDisplacement(otherState, contactPosition) * inside;
             touching += inside;
+            shareSum += share * inside;
         }
 
         float bodyDepth = length(bodyPush);
-        float3 relativeDisplacement = displacement - otherDisplacement / max(touching, 1.0);
-        AccumulateContact(impulses[3], torques[3], properties.invMass, invInertiaWorld, r, bodyPush / max(bodyDepth, 1e-9), bodyDepth, relativeDisplacement);
+        float touchingCount = max(touching, 1.0);
+        AccumulateContact(pushes[3], frictions[3], torques[3], approaches[3], properties.invMass, invInertiaWorld,
+                          r, bodyPush / max(bodyDepth, 1e-9), bodyDepth, displacement - otherDisplacement / touchingCount,
+                          shareSum / touchingCount);
     }
 
     uint slot = (body * BodyReductionThreads + threadId.x) * ContactSlotSize;
     for (uint c = 0; c < ContactGroups; c++)
     {
-        BodyContactSums[slot + c * 2] = impulses[c];
-        BodyContactSums[slot + c * 2 + 1] = torques[c];
+        BodyContactSums[slot + c * 4] = pushes[c];
+        BodyContactSums[slot + c * 4 + 1] = frictions[c];
+        BodyContactSums[slot + c * 4 + 2] = torques[c];
+        BodyContactSums[slot + c * 4 + 3] = approaches[c];
     }
 }
 
-// Adds up a body's contact slots and applies each group's average correction (Jacobi averaging), so hundreds of
-// floor contacts neither overshoot nor dilute a handful of wall contacts
+// Adds up a body's contact slots and applies each group's average (Jacobi averaging), so hundreds of floor contacts
+// neither overshoot nor dilute a handful of wall contacts.
+// Velocity comes from the change in position, so the push out moves the previous position as well: resolving a
+// penetration must not become velocity, or a body starting inside a wall is fired out of it. The motion into the
+// contacts is removed from the velocity instead, which makes contacts inelastic, and friction moves the position
+// alone so that it slows the body down
 [numthreads(1,1,1)]
 void ApplyContacts (uint3 id : SV_DispatchThreadID)
 {
@@ -428,25 +452,34 @@ void ApplyContacts (uint3 id : SV_DispatchThreadID)
     RigidBodyState state = BodyStates[id.x];
     float3x3 invInertiaWorld = InverseInertiaWorld(state.rotation, properties.invInertia.xyz);
 
-    float3 positionChange = 0;
+    float3 pushChange = 0;
+    float3 frictionChange = 0;
+    float3 approachChange = 0;
     float3 angleChange = 0;
     for (uint g = 0; g < ContactGroups; g++)
     {
-        float4 impulse = 0;
+        float4 push = 0;
+        float3 friction = 0;
         float3 torque = 0;
+        float3 approach = 0;
         [loop] for (uint s = 0; s < BodyReductionThreads; s++)
         {
-            uint slot = (id.x * BodyReductionThreads + s) * ContactSlotSize + g * 2;
-            impulse += BodyContactSums[slot];
-            torque += BodyContactSums[slot + 1].xyz;
+            uint slot = (id.x * BodyReductionThreads + s) * ContactSlotSize + g * 4;
+            push += BodyContactSums[slot];
+            friction += BodyContactSums[slot + 1].xyz;
+            torque += BodyContactSums[slot + 2].xyz;
+            approach += BodyContactSums[slot + 3].xyz;
         }
 
-        float contacts = max(impulse.w, 1.0);
-        positionChange += properties.invMass * impulse.xyz / contacts;
+        float contacts = max(push.w, 1.0);
+        pushChange += properties.invMass * push.xyz / contacts;
+        frictionChange += properties.invMass * friction / contacts;
         angleChange += mul(invInertiaWorld, torque) / contacts;
+        approachChange += approach / contacts;
     }
 
-    state.position.xyz += positionChange;
+    state.position.xyz += pushChange + frictionChange;
+    state.prevPosition.xyz += pushChange + approachChange;
     state.rotation = IntegrateRotation(state.rotation, ClampRotation(angleChange, MaxCorrectionAngle));
 
     BodyStates[id.x] = state;

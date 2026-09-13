@@ -327,7 +327,7 @@ MonoBehaviour:
       bodyRadius: 10
       sampleDensity: 1
       bodyPosition:
-        x: 125
+        x: 105
         y: 0
         z: 100
       bodyRotation:

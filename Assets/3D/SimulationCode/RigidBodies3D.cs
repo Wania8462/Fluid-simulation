@@ -76,9 +76,9 @@ public static class RigidBodies3D
 
     // float4s per reduction slot, matching CouplingSlotSize and ContactSlotSize in RigidBodyKernels3D.hlsl
     public const int CouplingSlotSize = 2;
-    public const int ContactSlotSize = 8;
+    public const int ContactSlotSize = 16;
 
-    public static RigidBodyData3D Build(RigidBodySettings3D[] inspectorBodies, Spawn3DParticles spawn, float interactionRadius)
+    public static RigidBodyData3D Build(RigidBodySettings3D[] inspectorBodies, Spawn3DParticles spawn, float interactionRadius, float3 realHalfBoundSize)
     {
         List<RigidBodySettings3D> settings = new();
         List<int> inspectorIndices = new();
@@ -155,6 +155,7 @@ public static class RigidBodies3D
             boundaryBodyIndices = bodyIndices.ToArray()
         };
 
+        WarnAboutWalls(data, realHalfBoundSize);
         WarnAboutOverlaps(data);
         return data;
     }
@@ -254,6 +255,23 @@ public static class RigidBodies3D
         }
 
         return kept.ToArray();
+    }
+
+    // The box isn't drawn, so a body placed partly outside it is easy to miss. It gets pushed back in over the first
+    // frames, which moves it away from where it was placed
+    private static void WarnAboutWalls(RigidBodyData3D data, float3 realHalfBoundSize)
+    {
+        for (int b = 0; b < data.NumBodies; b++)
+        {
+            RigidBodyProperties3D body = data.properties[b];
+            float3 extent = float3.zero;
+
+            for (uint i = body.start; i < body.start + body.count; i++)
+                extent = math.max(extent, math.abs(data.boundaryPositions[i].xyz));
+
+            if (math.any(extent > realHalfBoundSize))
+                Debug.LogWarning($"Rigid bodies: body {data.inspectorIndices[b]} starts partly outside the simulation box and will be pushed back in. Its surface has to stay within x ±{realHalfBoundSize.x}, y ±{realHalfBoundSize.y}, z ±{realHalfBoundSize.z}");
+        }
     }
 
     // Bodies that start inside each other can't be pushed apart cleanly, so point them out. Adding an element to the

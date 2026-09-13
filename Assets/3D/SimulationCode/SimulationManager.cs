@@ -220,7 +220,7 @@ public class SimulationManager : MonoBehaviour
         float3 boundingBoxSize = spawn.GetBoundingBoxSize();
         SP = new(-boundingBoxSize / 2, boundingBoxSize / 2, settings.interactionRadius);
 
-        bodies = RigidBodies3D.Build(settings.bodies, spawn, settings.interactionRadius);
+        bodies = RigidBodies3D.Build(settings.bodies, spawn, settings.interactionRadius, spawn.GetRealHalfBoundSize(particleRadius));
         numBodies = bodies.NumBodies;
         numBoundaryParticles = bodies.NumBoundaryParticles;
 
