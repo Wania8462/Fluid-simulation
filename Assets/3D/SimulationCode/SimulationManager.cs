@@ -55,7 +55,7 @@ public class SimulationManager : MonoBehaviour
     [HideInInspector] public int numParticles;
     [HideInInspector] public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
-    internal float3 RealHalfBoundSize => spawn.GetRealHalfBoundSize(particleRadius);
+    internal Tank Tank => spawn.GetTank(particleRadius);
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
@@ -244,10 +244,10 @@ public class SimulationManager : MonoBehaviour
 
         Application.targetFrameRate = targetFrameRate;
 
-        float3 boundingBoxSize = spawn.GetBoundingBoxSize();
-        SP = new(-boundingBoxSize / 2, boundingBoxSize / 2, settings.interactionRadius);
+        Tank tank = Tank;
+        SP = new(-tank.halfSize, tank.halfSize, settings.interactionRadius);
 
-        bodies = RigidBodies3D.Build(settings.bodies, spawn, settings.interactionRadius, spawn.GetRealHalfBoundSize(particleRadius));
+        bodies = RigidBodies3D.Build(settings.bodies, spawn, settings.interactionRadius, tank);
         numBodies = bodies.NumBodies;
         numBoundaryParticles = bodies.NumBoundaryParticles;
 
@@ -401,8 +401,8 @@ public class SimulationManager : MonoBehaviour
         compute.SetInt("numParticles", numParticles);
         UpdateComputeSettings();
 
-        float3 rhbs = spawn.GetRealHalfBoundSize(particleRadius);
-        compute.SetVector("realHalfBoundSize", new Vector4(rhbs.x, rhbs.y, rhbs.z));
+        float3 innerHalfSize = Tank.innerHalfSize;
+        compute.SetVector("realHalfBoundSize", new Vector4(innerHalfSize.x, innerHalfSize.y, innerHalfSize.z));
         compute.SetFloat("particleRadius", particleRadius);
 
         compute.SetInt("numCells", SP.NumCells);

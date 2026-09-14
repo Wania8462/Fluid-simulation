@@ -1,6 +1,25 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Serialization;
+
+// The box the fluid is simulated in, centred on the origin
+public readonly struct Tank
+{
+    // Wall to wall
+    public readonly float3 size;
+    // Origin to wall
+    public readonly float3 halfSize;
+    // Origin to where a particle centre touches the wall
+    public readonly float3 innerHalfSize;
+
+    public Tank(float3 size, float particleRadius)
+    {
+        this.size = size;
+        halfSize = size / 2;
+        innerHalfSize = halfSize - particleRadius;
+    }
+}
 
 public class Spawn3DParticles : MonoBehaviour
 {
@@ -9,8 +28,8 @@ public class Spawn3DParticles : MonoBehaviour
     [SerializeField] private float spacing = 2;
     [SerializeField] private bool useJitter = true;
     [SerializeField] private float jitterStrength = 0.2f;
-    [SerializeField] private float3 boundingBoxSizeOffset = new(40, 40, 40);
-    private float3 boundingBoxSize;
+    [Tooltip("Space between the particle cube and each tank wall")]
+    [SerializeField, FormerlySerializedAs("boundingBoxSizeOffset")] private float3 tankPadding = new(40, 40, 40);
 
     public int GetNumberOfParticles() => particleCubeLength * particleCubeLength * particleCubeLength;
 
@@ -34,11 +53,6 @@ public class Spawn3DParticles : MonoBehaviour
                 }
             }
         }
-
-        boundingBoxSize = new float3(particleCubeLength) + boundingBoxSizeOffset * 2;
-
-        if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0 || boundingBoxSize.z == 0)
-            Debug.LogWarning($"Bounding box size is {boundingBoxSize}");
 
         return pos;
     }
@@ -93,16 +107,13 @@ public class Spawn3DParticles : MonoBehaviour
         return positions;
     }
 
-    public float3 GetRealHalfBoundSize(float radius)
+    public Tank GetTank(float particleRadius)
     {
-        return GetBoundingBoxSize() / 2 - radius;
-    }
+        float3 size = new float3(particleCubeLength) + tankPadding * 2;
 
-    public float3 GetBoundingBoxSize()
-    {
-        if (boundingBoxSize.x == 0 || boundingBoxSize.y == 0 || boundingBoxSize.z == 0)
-            boundingBoxSize = new float3(particleCubeLength) + boundingBoxSizeOffset * 2;
+        if (math.any(size <= 0))
+            Debug.LogWarning($"Spawn particles: tank size is {size}");
 
-        return boundingBoxSize;
+        return new Tank(size, particleRadius);
     }
 }

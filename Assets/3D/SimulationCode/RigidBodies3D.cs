@@ -82,7 +82,7 @@ public static class RigidBodies3D
     public const int CouplingSlotSize = 2;
     public const int ContactSlotSize = 16;
 
-    public static RigidBodyData3D Build(RigidBodySettings3D[] inspectorBodies, Spawn3DParticles spawn, float interactionRadius, float3 realHalfBoundSize)
+    public static RigidBodyData3D Build(RigidBodySettings3D[] inspectorBodies, Spawn3DParticles spawn, float interactionRadius, Tank tank)
     {
         RigidBodyData3D data = new();
 
@@ -112,7 +112,7 @@ public static class RigidBodies3D
             AddBody(data, body, i, spawn);
         }
 
-        WarnAboutWalls(data, realHalfBoundSize);
+        WarnAboutWalls(data, tank.innerHalfSize);
         WarnAboutOverlaps(data);
         return data;
     }
@@ -296,7 +296,7 @@ public static class RigidBodies3D
 
     // The box isn't drawn, so a body placed partly outside it is easy to miss. It gets pushed back in over the first
     // frames, which moves it away from where it was placed
-    private static void WarnAboutWalls(RigidBodyData3D data, float3 realHalfBoundSize)
+    private static void WarnAboutWalls(RigidBodyData3D data, float3 innerHalfSize)
     {
         for (int b = 0; b < data.NumBodies; b++)
         {
@@ -306,8 +306,8 @@ public static class RigidBodies3D
             for (int i = (int)body.start; i < body.start + body.count; i++)
                 extent = math.max(extent, math.abs(data.boundaryPositions[i].xyz));
 
-            if (math.any(extent > realHalfBoundSize))
-                Debug.LogWarning($"Rigid bodies: body {data.inspectorIndices[b]} starts partly outside the simulation box and will be pushed back in. Its surface has to stay within x ±{realHalfBoundSize.x}, y ±{realHalfBoundSize.y}, z ±{realHalfBoundSize.z}");
+            if (math.any(extent > innerHalfSize))
+                Debug.LogWarning($"Rigid bodies: body {data.inspectorIndices[b]} starts partly outside the tank and will be pushed back in. Its surface has to stay within x ±{innerHalfSize.x}, y ±{innerHalfSize.y}, z ±{innerHalfSize.z}");
         }
     }
 
