@@ -2,7 +2,6 @@ using UnityEngine;
 
 public class EnvironmentRenderer : MonoBehaviour
 {
-    [SerializeField] private SimulationManager sim;
     [SerializeField] private Color tankColor = Color.white;
 
     private Mesh tankMesh;
@@ -30,18 +29,5 @@ public class EnvironmentRenderer : MonoBehaviour
     {
         Destroy(tankMesh);
         Destroy(material);
-    }
-
-    // Runs before SimulationManager.Start, so the first BuffersChanged isn't missed
-    private void OnEnable()
-    {
-        sim.BuffersChanged += Setup;
-        sim.StepFinished += DrawTank;
-    }
-
-    private void OnDisable()
-    {
-        sim.BuffersChanged -= Setup;
-        sim.StepFinished -= DrawTank;
     }
 }

@@ -128,7 +128,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 277284706}
+  - component: {fileID: 277284709}
   - component: {fileID: 277284705}
+  - component: {fileID: 277284708}
   - component: {fileID: 277284707}
   m_Layer: 0
   m_Name: Render
@@ -149,7 +151,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3bd04d508d6b2b4db5d732fddf7f47e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleRenerer
-  sim: {fileID: 642951339}
   particleQuality: 5
   color: 2
   maxSpeed: 100
@@ -183,8 +184,41 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d65afcb5b1d62d6418d871fa2d230234, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 3DRender::EnvironmentRenderer
-  sim: {fileID: 642951339}
   tankColor: {r: 1, g: 1, b: 1, a: 1}
+--- !u!114 &277284708
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277284704}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c61f01de03846ec44a5e02c456c47210, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 3DRender::BodyRenderer
+  cubeMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  sphereMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  material: {fileID: 2100000, guid: df7c08704d74be24a8144080bf1365c5, type: 2}
+  color: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+--- !u!114 &277284709
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277284704}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 98e3345ee03cc8c4cb77fff3a7349c2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 3DRender::RenderManager
+  sim: {fileID: 642951339}
+  environmentRenderer: {fileID: 277284707}
+  particleRenderer: {fileID: 277284705}
+  bodyRenderer: {fileID: 277284708}
+  drawSolidBodies: 1
+  lightDirection: {x: -0.4, y: -1, z: 0.6}
 --- !u!1 &609195911
 GameObject:
   m_ObjectHideFlags: 0
@@ -500,7 +534,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraController
   cam: {fileID: 1755901144}
-  moveSpeed: 20
+  moveSpeed: 40
   mouseSensitivity: 2
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
