@@ -55,6 +55,32 @@ public static class MeshGenerator
         return mesh;
     }
 
+    // The 12 edges of a box centred on the origin, drawn as lines
+    public static Mesh WireBox(float3 size)
+    {
+        float3 h = size / 2;
+
+        Vector3[] verticies = new Vector3[]
+        {
+                // Bottom
+                new(-h.x, -h.y, -h.z), new(h.x, -h.y, -h.z), new(h.x, -h.y, h.z), new(-h.x, -h.y, h.z),
+                // Top
+                new(-h.x, h.y, -h.z), new(h.x, h.y, -h.z), new(h.x, h.y, h.z), new(-h.x, h.y, h.z)
+        };
+
+        int[] lines = new int[]
+        {
+            0, 1, 1, 2, 2, 3, 3, 0, // bottom
+            4, 5, 5, 6, 6, 7, 7, 4, // top
+            0, 4, 1, 5, 2, 6, 3, 7  // verticals
+        };
+
+        Mesh mesh = new() { vertices = verticies };
+        mesh.SetIndices(lines, MeshTopology.Lines, 0);
+
+        return mesh;
+    }
+
     public static Mesh Circle(float radius, int resolution)
     {
         if (radius <= 0)

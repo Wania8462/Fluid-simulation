@@ -55,7 +55,7 @@ public class SimulationManager : MonoBehaviour
     [HideInInspector] public int numParticles;
     [HideInInspector] public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
-    internal Tank Tank => spawn.GetTank(particleRadius);
+    public Tank Tank => spawn.GetTank(particleRadius);
 
     private Dictionary<string, int> KernelIDs;
     public Dictionary<string, ComputeBuffer> Buffers = new();
