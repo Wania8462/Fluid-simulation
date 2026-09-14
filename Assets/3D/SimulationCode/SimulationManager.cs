@@ -26,7 +26,6 @@ public struct SimulationSettings3D
     [Header("Rigid bodies")]
     public float boundaryFriction;
     public float bodyFriction;
-    // One slot per body, empty slots have bodyRadius 0. A body's SimulationAPI id is the index of its slot
     public RigidBodySettings3D[] bodies;
 }
 
