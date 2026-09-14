@@ -10,6 +10,7 @@ enum ParticleColor3D
 
 public class ParticleRenerer : MonoBehaviour
 {
+    [SerializeField] private SimulationManager sim;
     [SerializeField] private int particleQuality = 5;
     [SerializeField] private ParticleColor3D color = ParticleColor3D.BlueToWhite;
     [SerializeField] private float maxSpeed = 100;
@@ -112,8 +113,24 @@ public class ParticleRenerer : MonoBehaviour
 
     private void OnDestroy() => ReleaseBuffers();
 
+    // Runs before SimulationManager.Start, so the first BuffersChanged isn't missed
+    private void OnEnable()
+    {
+        sim.BuffersChanged += Setup;
+        sim.StepFinished += DrawParticles;
+        sim.StepFinished += DrawBoundaryParticles;
 #if UNITY_EDITOR
-    private void OnEnable()  => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
-    private void OnDisable() => UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+        UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += ReleaseBuffers;
 #endif
+    }
+
+    private void OnDisable()
+    {
+        sim.BuffersChanged -= Setup;
+        sim.StepFinished -= DrawParticles;
+        sim.StepFinished -= DrawBoundaryParticles;
+#if UNITY_EDITOR
+        UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= ReleaseBuffers;
+#endif
+    }
 }

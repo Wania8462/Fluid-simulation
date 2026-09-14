@@ -148,6 +148,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3bd04d508d6b2b4db5d732fddf7f47e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleRenerer
+  sim: {fileID: 642951339}
   particleQuality: 5
   color: 2
   maxSpeed: 100
@@ -341,7 +342,6 @@ MonoBehaviour:
   fakeFramerate: 120
   compute: {fileID: 7200000, guid: b5e4a0cf884ba434689f3c17b13c18b3, type: 3}
   spawn: {fileID: 642951341}
-  render: {fileID: 277284705}
   numParticles: 0
   numBoundaryParticles: 0
 --- !u!4 &642951340

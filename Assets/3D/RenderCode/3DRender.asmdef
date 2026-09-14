@@ -1,9 +1,10 @@
 {
-    "name": "C#2DRender",
+    "name": "3DRender",
     "rootNamespace": "",
     "references": [
         "GUID:d8b63aba1907145bea998dd612889d6b",
-        "GUID:83f320b7aaa424eac948549b9e332aa6"
+        "GUID:83f320b7aaa424eac948549b9e332aa6",
+        "GUID:5c1e7a9d2b4f4e8a9d3c6b1f0a7e2d48"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

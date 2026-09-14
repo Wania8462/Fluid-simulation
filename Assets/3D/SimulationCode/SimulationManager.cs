@@ -42,10 +42,15 @@ public class SimulationManager : MonoBehaviour
     [Header("References")]
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Spawn3DParticles spawn;
-    [SerializeField] private ParticleRenerer render;
     private SPValues3D SP;
 
     public bool Running { get; private set; }
+
+    // Renderers are in an assembly that references this one, so they subscribe here instead of being called
+    // Raised after Setup or a body change rebuilds the buffers
+    public event Action<SimulationManager> BuffersChanged;
+    // Raised at the end of every Update, paused or not, because draws have to be submitted each frame
+    public event Action StepFinished;
 
     [HideInInspector] public int numParticles;
     [HideInInspector] public int numBoundaryParticles;
@@ -86,7 +91,7 @@ public class SimulationManager : MonoBehaviour
                 ComputeHelper.Release(buffer);
 
             replacedBuffers.Clear();
-            render.Setup(this);
+            BuffersChanged?.Invoke(this);
         }
 
         if (Input.GetKeyDown(KeyCode.Space))
@@ -102,8 +107,7 @@ public class SimulationManager : MonoBehaviour
         }
 
         UpdateComputeSettings();
-        render.DrawParticles();
-        render.DrawBoundaryParticles();
+        StepFinished?.Invoke();
     }
 
     private void ExecuteStep()
@@ -277,7 +281,7 @@ public class SimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGroups);
         }
 
-        render.Setup(this);
+        BuffersChanged?.Invoke(this);
     }
 
     // Puts a body in the first empty slot of settings.bodies, or a new slot at the end, and returns the slot as its id.
