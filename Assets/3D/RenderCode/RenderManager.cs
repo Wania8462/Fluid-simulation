@@ -1,5 +1,12 @@
 using UnityEngine;
 
+// How the fluid particles are drawn
+enum FluidRenderMode
+{
+    Billboards,
+    ScreenSpace
+}
+
 // The only listener of the simulation's events, so it decides what is set up and drawn
 public class RenderManager : MonoBehaviour
 {
@@ -7,6 +14,9 @@ public class RenderManager : MonoBehaviour
     [SerializeField] private EnvironmentRenderer environmentRenderer;
     [SerializeField] private ParticleRenerer particleRenderer;
     [SerializeField] private BodyRenderer bodyRenderer;
+    [SerializeField] private ScreenSpaceFluidRenderer screenSpaceFluidRenderer;
+    [Tooltip("Billboards draws every particle as a flat disc. ScreenSpace draws the fluid as one smooth, refractive surface with the screen-space fluid renderer")]
+    [SerializeField] private FluidRenderMode fluidRenderMode = FluidRenderMode.Billboards;
     [Tooltip("Draw rigid bodies as solid meshes instead of as their boundary particles")]
     [SerializeField] private bool drawSolidBodies = true;
     [Tooltip("Direction the light travels in, shared by every shader that declares lightDirection")]
@@ -17,6 +27,10 @@ public class RenderManager : MonoBehaviour
         TrySetup(environmentRenderer, () => environmentRenderer.Setup(sim));
         TrySetup(particleRenderer, () => particleRenderer.Setup(sim));
         TrySetup(bodyRenderer, () => bodyRenderer.Setup(sim));
+
+        // Only needed in screen-space mode, so leaving it unassigned isn't an error while the fluid is drawn as billboards
+        if (screenSpaceFluidRenderer != null || fluidRenderMode == FluidRenderMode.ScreenSpace)
+            TrySetup(screenSpaceFluidRenderer, () => screenSpaceFluidRenderer.Setup(sim, bodyRenderer));
     }
 
     // One renderer failing to set up doesn't stop the others. Clicking the error selects the renderer that failed
@@ -38,7 +52,16 @@ public class RenderManager : MonoBehaviour
         Shader.SetGlobalVector("lightDirection", lightDirection);
 
         environmentRenderer.DrawTank();
-        particleRenderer.DrawParticles();
+
+        // Disabling the screen-space renderer takes its command buffer off the camera, so billboard mode renders as before
+        bool screenSpace = fluidRenderMode == FluidRenderMode.ScreenSpace;
+        if (screenSpaceFluidRenderer != null)
+            screenSpaceFluidRenderer.enabled = screenSpace;
+
+        if (screenSpace)
+            screenSpaceFluidRenderer.Draw();
+        else
+            particleRenderer.DrawParticles();
 
         if (drawSolidBodies)
             bodyRenderer.DrawBodies();

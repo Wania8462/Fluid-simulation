@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 277284705}
   - component: {fileID: 277284708}
   - component: {fileID: 277284707}
+  - component: {fileID: 277284710}
   m_Layer: 0
   m_Name: Render
   m_TagString: Untagged
@@ -217,8 +218,38 @@ MonoBehaviour:
   environmentRenderer: {fileID: 277284707}
   particleRenderer: {fileID: 277284705}
   bodyRenderer: {fileID: 277284708}
+  screenSpaceFluidRenderer: {fileID: 277284710}
+  fluidRenderMode: 1
   drawSolidBodies: 1
   lightDirection: {x: -0.4, y: -1, z: 0.6}
+--- !u!114 &277284710
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277284704}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8003f03e115da8b438eead2d79ee34f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 3DRender::ScreenSpaceFluidRenderer
+  cam: {fileID: 1755901143}
+  particleShader: {fileID: 4800000, guid: 066f887bf1527ce47b653b633073311e, type: 3}
+  smoothShader: {fileID: 4800000, guid: 263f14a47c0b07d46b83cf77ce1cbe1d, type: 3}
+  compositeShader: {fileID: 4800000, guid: 39fe820113504c54fb6a619cd4d32981, type: 3}
+  settings:
+    particleRenderRadius: 1.5
+    smoothingRadius: 3
+    smoothingIterations: 2
+    depthRangeSigma: 1.5
+    maxScreenRadius: 0.02
+    extinction: {x: 0.05, y: 0.02, z: 0.0016}
+    refractionStrength: 0.15
+    maxRefractionOffset: 0.03
+    debugView: 0
+    depthDisplayScale: 500
+    thicknessDisplayScale: 100
 --- !u!1 &609195911
 GameObject:
   m_ObjectHideFlags: 0
@@ -356,8 +387,8 @@ MonoBehaviour:
     stiffness: 200
     nearStiffness: 20
     restDensity: 5
-    highViscosity: 0.2
-    lowViscosity: 3
+    highViscosity: 0
+    lowViscosity: 1
     boundaryFriction: 1
     bodyFriction: 1
     bodies:
@@ -386,7 +417,7 @@ MonoBehaviour:
         z: 0
       boundaryBodyMass: 500
   particleRadius: 0.5
-  targetFrameRate: 120
+  targetFrameRate: 60
   useRealDeltaTime: 0
   fakeFramerate: 120
   compute: {fileID: 7200000, guid: b5e4a0cf884ba434689f3c17b13c18b3, type: 3}

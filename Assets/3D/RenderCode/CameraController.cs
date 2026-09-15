@@ -27,7 +27,7 @@ public class CameraController : MonoBehaviour
         cam.eulerAngles = new Vector3(pitch, yaw, 0f);
 
         float up = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
-        Vector3 move = cam.forward * Input.GetAxisRaw("Vertical") + cam.right * Input.GetAxisRaw("Horizontal") + Vector3.up * up;
+        Vector3 move = cam.forward * Input.GetAxisRaw("Vertical") + cam.right * Input.GetAxisRaw("Horizontal") + cam.up * up;
 
         float speed = Input.GetKey(KeyCode.LeftShift) ? moveSpeed * 2f : moveSpeed;
         cam.position += move.normalized * speed * Time.deltaTime;
