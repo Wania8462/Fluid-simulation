@@ -80,7 +80,6 @@ namespace SimulationLogic
 
     public class SimulationManager : MonoBehaviour
     {
-        [SerializeField] private Text text;
         [Header("Manager settings")]
         [SerializeField] private bool pause = true;
         [SerializeField] private bool realDeltaTime;
@@ -132,8 +131,7 @@ namespace SimulationLogic
 
         private void Start()
         {
-            Debug.Log(Application.persistentDataPath);
-            text.text = targetFrameRate.ToString();
+            // Debug.Log(Application.persistentDataPath);
             Application.targetFrameRate = targetFrameRate;
             Debug.Log(@"Controls: Pause/resume: space, Restart: R, Attract particles to mouse: left hold ↓
             Move body to mouse: right click
@@ -151,7 +149,6 @@ namespace SimulationLogic
 
         private void Update()
         {
-            // Allows typing
             if (!inputField.isFocused)
             {
                 if (Input.GetKeyDown(KeyCode.R))
@@ -187,23 +184,7 @@ namespace SimulationLogic
 
         private void InitSimulationInstances()
         {
-            if (twoSim)
-            {
-                Debug.LogError("Simulation manager: 2 simulations aren't supported");
-#if UNITY_EDITOR
-                EditorApplication.isPlaying = false;
-#endif
-                return;
-            }
-
-            if (settings == null || settings.Length == 0)
-            {
-                Debug.LogError("Simulation manager: There are no settings");
-#if UNITY_EDITOR
-                EditorApplication.isPlaying = false; // Avoids error spamming
-#endif
-                return;
-            }
+            CheckProperties();
 
             if (!twoSim)
             {
@@ -211,27 +192,37 @@ namespace SimulationLogic
                 simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
             }
 
-            else
-            {
-                simulations = new Simulation[2];
+            // else
+            // {
+            //     simulations = new Simulation[2];
 
-                if (settings.Length == 1)
-                {
-                    Array.Resize(ref settings, 2);
-                    settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
-                }
+            //     if (settings.Length == 1)
+            //     {
+            //         Array.Resize(ref settings, 2);
+            //         settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
+            //     }
 
-                simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
-                simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
-            }
+            //     simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
+            //     simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
+            // }
 
-            for (var i = 0; i < simulations.Length; i++)
-            {
-                simulations[i].UpdateSettings(settings[i]);
-                simulations[i].SetScene();
-            }
-
+            simulations[FirstSim].SetScene();
             render.Init(simulations[FirstSim]);
+        }
+
+        private void CheckProperties()
+        {
+            if (twoSim)
+            {
+                Debug.LogError("Simulation manager: 2 simulations aren't supported");
+                EditorApplication.isPlaying = false; // Avoids error spamming
+            }
+
+            if (settings == null || settings.Length == 0)
+            {
+                Debug.LogError("Simulation manager: There are no settings");
+                EditorApplication.isPlaying = false;
+            }
         }
 
         private void HandleFieldInputs()

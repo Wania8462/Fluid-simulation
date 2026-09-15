@@ -822,7 +822,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3bbdfbc0e1be4749a275cd43f8ff9a4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  text: {fileID: 489428649}
   pause: 1
   realDeltaTime: 0
   targetFrameRate: -1

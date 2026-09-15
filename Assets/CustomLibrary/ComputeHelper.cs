@@ -4,7 +4,6 @@ using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using Translator;
 using System.IO;
 
 public static class ComputeHelper

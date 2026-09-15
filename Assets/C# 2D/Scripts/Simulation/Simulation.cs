@@ -139,7 +139,6 @@ namespace SimulationLogic
         private const float particleRadius = 0.5f;
         private static readonly object lockBody = new();
         private float timer;
-        private float dt;
 
         public Simulation(SimulationSettings settings, InitializeParticles spawn)
         {
@@ -151,56 +150,57 @@ namespace SimulationLogic
 
         public void SimulationStep(float2 mousePos, float deltatime)
         {
-            dt = deltatime;
-            if (CheckDeltaTime()) return;
+            if (CheckDeltaTime(deltatime))
+                throw new ArgumentException($"Simulation: deltatime is outside of the accepted range. dt: {deltatime}");
+
             CheckArraysLength();
 
-            if (flow) HandleFlow();
+            if (flow) HandleFlow(deltatime);
 
             Watcher.ExecuteWithTimer("3. Init", InitSpatialPartitioning);
             Watcher.ExecuteWithTimer("4. GetNeighbours", SetNeighbours);
 
-            Watcher.ExecuteWithTimer("5. ExternalForces", ExternalForces);
-            Watcher.ExecuteWithTimer("6. ApplyViscosity", ApplyViscosity);
+            Watcher.ExecuteWithTimer("5. ExternalForces", () => { ExternalForces(deltatime); });
+            Watcher.ExecuteWithTimer("6. ApplyViscosity", () => { ApplyViscosity(deltatime); });
 
-            Watcher.ExecuteWithTimer("7. Advance predicted pos", AdvancePredictedPositions);
+            Watcher.ExecuteWithTimer("7. Advance predicted pos", () => { AdvancePredictedPositions(deltatime); });
 
-            Watcher.ExecuteWithTimer("8. Adjust springs", AdjustSprings);
-            Watcher.ExecuteWithTimer("9. Spring displacements", SpringDisplacements);
+            Watcher.ExecuteWithTimer("8. Adjust springs", () => { AdjustSprings(deltatime); });
+            Watcher.ExecuteWithTimer("9. Spring displacements", () => { SpringDisplacements(deltatime); });
 
-            Watcher.ExecuteWithTimer("10. DoubleDensityRelaxation", DoubleDensityRelaxation);
+            Watcher.ExecuteWithTimer("10. DoubleDensityRelaxation", () => { DoubleDensityRelaxation(deltatime); });
 
-            AttractToMouse(mousePos);
+            AttractToMouse(mousePos, deltatime);
 
             boundaries.ResolveFluidBorder(realHalfBoundSize);
-            Watcher.ExecuteWithTimer("11. Resolve boundary particles", ResolveBoundaryBody);
+            Watcher.ExecuteWithTimer("11. Resolve boundary particles", () => { ResolveBoundaryBody(deltatime); });
 
-            Watcher.ExecuteWithTimer("12. Calculate velocity", CalculateVelocities);
+            Watcher.ExecuteWithTimer("12. Calculate velocity", () => { CalculateVelocities(deltatime); });
 
             if (flow)
-                Watcher.ExecuteWithTimer("13. Init", ResolveFlow);
+                Watcher.ExecuteWithTimer("13. Flow", ResolveFlow);
         }
 
-        private void AdvancePredictedPositions()
+        private void AdvancePredictedPositions(float deltatime)
         {
             ForEachParticle(p =>
             {
                 p.prevPosition = p.position;
-                p.position += dt * p.velocity;
+                p.position += deltatime * p.velocity;
             });
         }
 
-        private void CalculateVelocities()
+        private void CalculateVelocities(float deltatime)
         {
-            ForEachParticle(p => p.velocity = (p.position - p.prevPosition) / dt);
+            ForEachParticle(p => p.velocity = (p.position - p.prevPosition) / deltatime);
         }
 
-        private void ExternalForces()
+        private void ExternalForces(float deltatime)
         {
-            ForEachParticle(p => p.velocity.y += dt * gravity);
+            ForEachParticle(p => p.velocity.y += deltatime * gravity);
         }
 
-        private void DoubleDensityRelaxation()
+        private void DoubleDensityRelaxation(float deltatime)
         {
             ClearForceBuffers();
 
@@ -245,7 +245,7 @@ namespace SimulationLogic
 
                     float2 r = FluidMath.UnitVector(p.position, _particles[_sparse[n]].position, mag);
                     float2 displacement = FluidMath.PressureDisplacement(
-                        dt,
+                        deltatime,
                         q,
                         pressure,
                         nearPressure,
@@ -266,7 +266,7 @@ namespace SimulationLogic
 
                     float2 r = FluidMath.UnitVector(p.position, _boundaryParticles[b].position, mag);
                     float2 displacement = FluidMath.PressureDisplacement(
-                        dt,
+                        deltatime,
                         q,
                         boundaryPressure,
                         boundaryNearPressure,
@@ -281,7 +281,7 @@ namespace SimulationLogic
             ApplyForceBuffers();
         }
 
-        private void ApplyViscosity()
+        private void ApplyViscosity(float deltatime)
         {
             Parallel.For(0, count, i =>
             {
@@ -297,7 +297,7 @@ namespace SimulationLogic
                     var inwardVelocity = math.dot(p.velocity - _particles[_sparse[n]].velocity, r);
                     if (!(inwardVelocity > 0)) continue;
 
-                    var impulse = FluidMath.ViscosityImpulse(dt,
+                    var impulse = FluidMath.ViscosityImpulse(deltatime,
                         highViscosity,
                         lowViscosity,
                         q,
@@ -318,7 +318,7 @@ namespace SimulationLogic
                     var inwardVelocity = math.dot(p.velocity - _boundaryParticles[b].velocity, r);
                     if (!(inwardVelocity > 0)) continue;
 
-                    var impulse = FluidMath.ViscosityImpulse(dt,
+                    var impulse = FluidMath.ViscosityImpulse(deltatime,
                         boundaryFriction,
                         0f,
                         q,
@@ -330,7 +330,7 @@ namespace SimulationLogic
             });
         }
 
-        private void AdjustSprings()
+        private void AdjustSprings(float deltatime)
         {
             Parallel.For(0, count, i =>
             {
@@ -360,14 +360,14 @@ namespace SimulationLogic
                     var deformation = springDeformationLimit * restLength;
 
                     if (mag > restLength + deformation)
-                        _springs[(p.ID, n)] += FluidMath.StretchSpring(dt,
+                        _springs[(p.ID, n)] += FluidMath.StretchSpring(deltatime,
                             plasticity,
                             mag,
                             restLength,
                             deformation);
 
                     else if (mag < restLength + deformation)
-                        _springs[(p.ID, n)] -= FluidMath.CompressSpring(dt,
+                        _springs[(p.ID, n)] -= FluidMath.CompressSpring(deltatime,
                             plasticity,
                             mag,
                             restLength,
@@ -376,7 +376,7 @@ namespace SimulationLogic
             });
         }
 
-        private void SpringDisplacements()
+        private void SpringDisplacements(float deltatime)
         {
             Parallel.ForEach(_springs, kvp =>
             {
@@ -402,7 +402,7 @@ namespace SimulationLogic
                 if (mag == 0) return;
 
                 var r = FluidMath.UnitVector(p.position, n.position, mag);
-                var displacement = FluidMath.DisplacementBySpring(dt,
+                var displacement = FluidMath.DisplacementBySpring(deltatime,
                     springStiffness,
                     kvp.Value,
                     springRadius,
@@ -414,7 +414,7 @@ namespace SimulationLogic
             });
         }
 
-        private void ResolveBoundaryBody()
+        private void ResolveBoundaryBody(float deltatime)
         {
             if (_boundaryParticles.Count == 0) return;
 
@@ -425,7 +425,7 @@ namespace SimulationLogic
             if (deformableBoundaryBody)
                 boundaries.ResolveBoundaryBorder(realHalfBoundSize);
             else
-                RigidContactResolution();
+                RigidContactResolution(deltatime);
         }
 
         private float FindRotationAngle()
@@ -464,7 +464,7 @@ namespace SimulationLogic
             }
         }
 
-        private void RigidContactResolution()
+        private void RigidContactResolution(float deltatime)
         {
             // Pass 1: mean push-out and contact centroid.
             float2 sumDelta = float2.zero;
@@ -510,7 +510,7 @@ namespace SimulationLogic
             // giving a constant angular acceleration τ / I — the body tips faster as its weight falls.
             float2 arm = boundaryCenter - pivot;
             float gravityTorque = arm.x * (_boundaryParticles.Count * gravity);
-            float gravityAngle = inertiaPivot > 1e-6f ? gravityTorque / inertiaPivot * dt * dt : 0f;
+            float gravityAngle = inertiaPivot > 1e-6f ? gravityTorque / inertiaPivot * deltatime * deltatime : 0f;
 
             float deltaAngle = levelAngle + gravityAngle;
 
@@ -538,7 +538,7 @@ namespace SimulationLogic
             return delta;
         }
 
-        private void AttractToMouse(float2 mousePos)
+        private void AttractToMouse(float2 mousePos, float deltatime)
         {
             if (Input.GetMouseButton(0))
             {
@@ -549,7 +549,7 @@ namespace SimulationLogic
                     if (dist > mouseRadius) return;
 
                     var unitVector = FluidMath.UnitVector(pos, mousePos, dist);
-                    pos += dt * mouseAttractiveness * unitVector;
+                    pos += deltatime * mouseAttractiveness * unitVector;
                     _particles[i].position = pos;
                 });
             }
@@ -557,9 +557,9 @@ namespace SimulationLogic
 
         #endregion
         #region Flow
-        private void HandleFlow()
+        private void HandleFlow(float deltatime)
         {
-            timer += dt;
+            timer += deltatime;
 
             if (timer >= initParticles.spawnInterval)
             {
@@ -993,22 +993,8 @@ namespace SimulationLogic
                 Debug.LogWarning($"Simulation: number of particles doesn't equal number of taken IDs. Num particles: {count}, taken IDs: {maxParticles - _freeIDs.Count}");
         }
 
-        private bool CheckDeltaTime()
-        {
-            if (dt <= 0)
-            {
-                Debug.LogWarning($"Simulation: deltatime is too small. Deltatime: {dt}");
-                return true;
-            }
+        private bool CheckDeltaTime(float deltatime) => deltatime <= 0 || deltatime >= 1 / 5f;
 
-            if (dt >= 1 / 5f)
-            {
-                Debug.LogWarning($"Simulation: deltatime is too large. Deltatime: {dt}");
-                return true;
-            }
-
-            return false;
-        }
         #endregion
         #region Debug
 
