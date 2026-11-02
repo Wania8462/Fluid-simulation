@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 // The box the fluid is simulated in, centred on the origin
 public readonly struct Tank
@@ -28,8 +27,11 @@ public class Spawn3DParticles : MonoBehaviour
     [SerializeField] private float spacing = 2;
     [SerializeField] private bool useJitter = true;
     [SerializeField] private float jitterStrength = 0.2f;
-    [Tooltip("Space between the particle cube and each tank wall")]
-    [SerializeField, FormerlySerializedAs("boundingBoxSizeOffset")] private float3 tankPadding = new(40, 40, 40);
+
+    [Header("Tank")]
+    [Tooltip("The box the fluid is simulated in, wall to wall, centred on the origin. Nothing else sizes it, so it has to be big enough for the spawn cube, or for a FluidFlow3D's reservoir and drain")]
+    [SerializeField] private float3 tankSize = new(100, 100, 100);
+    [SerializeField] private Color tankGizmoColor = new(1, 1, 1, 0.4f);
 
     public int GetNumberOfParticles() => particleCubeLength * particleCubeLength * particleCubeLength;
 
@@ -109,11 +111,17 @@ public class Spawn3DParticles : MonoBehaviour
 
     public Tank GetTank(float particleRadius)
     {
-        float3 size = new float3(particleCubeLength) + tankPadding * 2;
+        if (math.any(tankSize <= 0))
+            Debug.LogWarning($"Spawn particles: tank size is {tankSize}");
 
-        if (math.any(size <= 0))
-            Debug.LogWarning($"Spawn particles: tank size is {size}");
+        return new Tank(tankSize, particleRadius);
+    }
 
-        return new Tank(size, particleRadius);
+    // The tank is the frame everything else is positioned against, so it is always drawn, not only when this
+    // component is selected
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = tankGizmoColor;
+        Gizmos.DrawWireCube(Vector3.zero, tankSize);
     }
 }

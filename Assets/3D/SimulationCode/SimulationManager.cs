@@ -42,6 +42,8 @@ public class SimulationManager : MonoBehaviour
     [Header("References")]
     [SerializeField] private ComputeShader compute;
     [SerializeField] private Spawn3DParticles spawn;
+    [Tooltip("Optional. With one, the fluid pours out of its reservoir and is recycled at its drain instead of spawning as a block")]
+    [SerializeField] private FluidFlow3D flow;
     private SPValues3D SP;
 
     public bool Running { get; private set; }
@@ -52,8 +54,10 @@ public class SimulationManager : MonoBehaviour
     // Raised at the end of every Update, paused or not, because draws have to be submitted each frame
     public event Action StepFinished;
 
-    [HideInInspector] public int numParticles;
-    [HideInInspector] public int numBoundaryParticles;
+    // Shown in the inspector, not hidden: what Setup actually ended up with is the first thing worth seeing when a
+    // scene comes up empty. Set by Setup, so editing them does nothing
+    public int numParticles;
+    public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
     public Tank Tank => spawn.GetTank(particleRadius);
 
@@ -97,6 +101,9 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Space))
             paused = !paused;
 
+        if (Input.GetKeyDown(KeyCode.P))
+            DebugHelper3D.LogPositions(this);
+
         if (!paused || Input.GetKeyDown(KeyCode.RightArrow))
             ExecuteStep();
 
@@ -124,6 +131,14 @@ public class SimulationManager : MonoBehaviour
 
         if (clock % 4 == 0)
         {
+            // Before BuildGrid, so a recycled particle is hashed where it reappears rather than where it
+            // drained, and before AdvancePredictedPositions, which is what makes the teleport not a velocity
+            if (flow != null)
+            {
+                flow.SetRecycleSeed(compute, Time.frameCount);
+                compute.Dispatch(KernelIDs["RecycleParticles"], threadGroups);
+            }
+
             BuildGrid();
             if (numBodies > 0)
                 BuildBoundaryGrid();
@@ -181,6 +196,9 @@ public class SimulationManager : MonoBehaviour
         }
 
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGroups);
+
+        if (flow != null)
+            compute.Dispatch(KernelIDs["ResolveReservoir"], threadGroups);
 
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGroups);
     }
@@ -251,9 +269,15 @@ public class SimulationManager : MonoBehaviour
         numBodies = bodies.NumBodies;
         numBoundaryParticles = bodies.NumBoundaryParticles;
 
+        // With a flow the fluid starts stacked in its reservoir instead of as a block in the middle of the tank
+        if (flow != null)
+            flow.Validate(tank, settings.interactionRadius, particleRadius);
+
+        float4[] spawned = flow != null ? flow.InitializePositions() : spawn.InitializePositions();
+
         // Fluid closer than half the interaction radius to a body would start squeezed by its boundary particles,
         // get shot out on the first step and kick the body the other way
-        float4[] positions = RigidBodies3D.RemoveParticlesInsideBodies(spawn.InitializePositions(), bodies.settings, settings.interactionRadius * 0.5f);
+        float4[] positions = RigidBodies3D.RemoveParticlesInsideBodies(spawned, bodies.settings, settings.interactionRadius * 0.5f);
         numParticles = positions.Length;
 
         CreateBuffers(positions);
@@ -394,6 +418,11 @@ public class SimulationManager : MonoBehaviour
 
         compute.SetInt("numBoundaryParticles", numBoundaryParticles);
         compute.SetInt("numBodies", numBodies);
+
+        // Here rather than in SetComputeSettings so the reservoir can be moved and resized in the inspector
+        // while it runs. Only the fill settings need a reset, because they decide where the particles start
+        if (flow != null)
+            flow.SetComputeSettings(compute);
     }
 
     private void SetComputeSettings()

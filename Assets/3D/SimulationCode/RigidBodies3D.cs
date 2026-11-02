@@ -23,6 +23,8 @@ public struct RigidBodySettings3D
     [Tooltip("Euler angles in degrees")]
     public float3 bodyRotation;
     public float boundaryBodyMass;
+    [Tooltip("One way coupling: the fluid and the other bodies are blocked by this one, but nothing ever moves it. Its mass is ignored")]
+    public bool isStatic;
 
     // A slot of the bodies array without a body. SimulationManager.RemoveBody clears slots to default, whose radius is 0
     public bool IsEmpty => bodyRadius == 0;
@@ -194,6 +196,15 @@ public static class RigidBodies3D
     // boundary particle count, like 2D
     public static void SetMassProperties(ref RigidBodyProperties3D properties, RigidBodySettings3D body)
     {
+        // A static body is infinitely heavy. Every place the fluid or another body pushes back scales by one of
+        // these two, so zeroing them is what makes the coupling one way
+        if (body.isStatic)
+        {
+            properties.invMass = 0;
+            properties.invInertia = float4.zero;
+            return;
+        }
+
         float mass = body.boundaryBodyMass > 0 ? body.boundaryBodyMass : properties.count;
         float r = body.bodyRadius;
         float inertia = body.shape switch
@@ -221,12 +232,14 @@ public static class RigidBodies3D
             if (index >= inspectorBodies.Length) continue;
 
             float mass = inspectorBodies[index].boundaryBodyMass;
-            if (mass <= 0)
+            if (mass <= 0 && !inspectorBodies[index].isStatic)
                 Debug.LogWarning($"Rigid bodies: body {index} has boundaryBodyMass {mass}, falling back to its boundary particle count ({data.properties[b].count})");
 
-            // List elements are copies, so each struct is changed and written back
+            // List elements are copies, so each struct is changed and written back. isStatic comes from the
+            // inspector too, so ticking it takes effect without a reset, like the mass
             RigidBodySettings3D body = data.settings[b];
             body.boundaryBodyMass = mass;
+            body.isStatic = inspectorBodies[index].isStatic;
             data.settings[b] = body;
 
             RigidBodyProperties3D properties = data.properties[b];

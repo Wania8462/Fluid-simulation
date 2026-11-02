@@ -52,7 +52,6 @@ namespace SimulationLogic
     {
         public float volume;
         public float2 restPosition;
-        public float psi;
 
         public BoundaryParticle(float2 position)
         {

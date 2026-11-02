@@ -212,7 +212,10 @@ void CalculateBoundaryVolumes (uint3 id : SV_DispatchThreadID)
         }
     }
 
-    BoundaryVolumes[id.x] = 1.0 / delta;
+    // A sample with no same-body neighbour in range has delta 0, and 1/0 is inf. The callers weigh psi by a mask
+    // that is 0 out of range, and 0 * inf is NaN, so one isolated sample would poison the density of every fluid
+    // particle near it and spread from there. An isolated sample carries no volume, so it contributes nothing
+    BoundaryVolumes[id.x] = delta > 0 ? 1.0 / delta : 0.0;
 }
 
 [numthreads(64,1,1)]
@@ -247,11 +250,16 @@ void BodyAdvancePredictedStates (uint3 id : SV_DispatchThreadID)
 
     RigidBodyState state = BodyStates[id.x];
 
-    state.velocity.y += dt * gravity;
+    // A static body has invMass 0. The pushes it gets all scale by that, but gravity does not, so it is
+    // stopped here instead. prevPosition and prevRotation still have to keep up, or the contact kernels read
+    // a motion that never happened
+    float moves = step(1e-12, BodyProperties[id.x].invMass);
+
+    state.velocity.y += dt * gravity * moves;
     state.prevPosition = state.position;
     state.prevRotation = state.rotation;
-    state.position += dt * state.velocity;
-    state.rotation = IntegrateRotation(state.rotation, dt * state.angularVelocity.xyz);
+    state.position += dt * state.velocity * moves;
+    state.rotation = IntegrateRotation(state.rotation, dt * state.angularVelocity.xyz * moves);
 
     BodyStates[id.x] = state;
 }
@@ -314,7 +322,10 @@ void AttractBodiesToMouse (uint3 id : SV_DispatchThreadID)
 
     RigidBodyState state = BodyStates[id.x];
     float mag = Distance(state.position, mousePosition);
-    float inRange = step(mag, mouseRadius);
+
+    // Static bodies are not draggable either, and dragging one would leave prevPosition behind and show up
+    // as a velocity it never had
+    float inRange = step(mag, mouseRadius) * step(1e-12, BodyProperties[id.x].invMass);
 
     state.position += inRange * dt * mouseAttractiveness * (mousePosition - state.position) / max(mag, 1e-9);
     BodyStates[id.x] = state;
@@ -336,13 +347,16 @@ void AccumulateContact(inout float4 pushSum, inout float4 frictionSum, inout flo
                        float invMass, float3x3 invInertiaWorld, float3 r, float3 normal, float depth,
                        float3 contactDisplacement, float share)
 {
-    float isContact = step(1e-9, depth);
-    float normalLambda = depth / GeneralizedInverseMass(invMass, invInertiaWorld, r, normal);
+    // A static body has no inverse mass and no inverse inertia, so every correction it sees divides by zero.
+    // Masking it out of isContact as well keeps the infinity from reaching the sums at all
+    float normalInverseMass = GeneralizedInverseMass(invMass, invInertiaWorld, r, normal);
+    float isContact = step(1e-9, depth) * step(1e-12, normalInverseMass);
+    float normalLambda = depth / max(normalInverseMass, 1e-12);
 
     float3 tangentialMotion = contactDisplacement - dot(contactDisplacement, normal) * normal;
     float tangentialLength = length(tangentialMotion);
     float3 tangent = -tangentialMotion / max(tangentialLength, 1e-9);
-    float tangentLambda = tangentialLength / GeneralizedInverseMass(invMass, invInertiaWorld, r, tangent);
+    float tangentLambda = tangentialLength / max(GeneralizedInverseMass(invMass, invInertiaWorld, r, tangent), 1e-12);
     float frictionLambda = min(tangentLambda, bodyFriction * normalLambda);
 
     float3 push = normalLambda * normal * isContact;
@@ -412,7 +426,10 @@ void SumContacts (uint3 groupId : SV_GroupID, uint3 threadId : SV_GroupThreadID)
             // the other body's centre are closest to its far side, and pushing them out there pulls the bodies together
             float facing = step(0.0, dot(otherNormal, state.position.xyz - otherState.position.xyz));
             float inside = step(otherDistance, particleRadius) * facing * (other != body);
-            float share = properties.invMass / (properties.invMass + otherProperties.invMass);
+            // Two static bodies, or the iteration where other is this body, have no inverse mass between them.
+            // The masks below cannot clear a NaN, because NaN * 0 is NaN, so the division is guarded instead:
+            // a static body takes no share of a correction, and a dynamic one against a static body takes it all
+            float share = properties.invMass / max(properties.invMass + otherProperties.invMass, 1e-12);
 
             bodyPush += otherNormal * (particleRadius - otherDistance) * share * inside;
             otherDisplacement += BodyPointDisplacement(otherState, contactPosition) * inside;

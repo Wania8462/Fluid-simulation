@@ -52,6 +52,7 @@ public class GPUSimulationManager : MonoBehaviour
 {
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
+    [SerializeField] private bool boundaryBodyEnabled = true;
     [SerializeField] private SimulationSettings settings;
     [SerializeField] private int maxParticlesPerCell;
     [SerializeField] private int maxSpringsPerParticle;
@@ -117,16 +118,16 @@ public class GPUSimulationManager : MonoBehaviour
         }
 
         if (renderingType == RenderingType.Particles)
-        {
             render.DrawParticles();
-            render.DrawBoundaryParticles();
-        }
 
         else if (renderingType == RenderingType.DensityMap)
             densityMap.Draw();
 
         else
             marchingSquares.Draw();
+
+        if (boundaryBodyEnabled)
+            render.DrawBoundaryParticles();
     }
 
     private void SimulationStep()
@@ -137,48 +138,86 @@ public class GPUSimulationManager : MonoBehaviour
 
         if (clock % 4 == 0)
         {
-            compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
-            compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
-            compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
-            compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
-
-            compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
-            compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
-            compute.Dispatch(KernelIDs["SetBoundaryNeighbours"], threadGropus);
+            UpdateNeighbours();
             clock = 0;
         }
 
+        ApplyExternalForcesAndViscosity();
+        AdvancePredictedPositions();
+        RelaxDensities();
+        ApplyMouseInteraction();
+
+        if (boundaryBodyEnabled)
+            UpdateBoundaryBody();
+
+        // Clamp to the borders last
+        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+
+        CalculateVelocities();
+    }
+
+    private void UpdateNeighbours()
+    {
+        compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
+        compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
+        compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
+        compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+
+        // Disabled body: leave the boundary grid empty so fluid finds no boundary neighbours
+        compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
+        compute.Dispatch(KernelIDs["SetBoundaryNeighbours"], threadGropus);
+    }
+
+    private void ApplyExternalForcesAndViscosity()
+    {
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryExternalForces"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryExternalForces"], boundaryThreadGropus);
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
+    }
 
+    private void AdvancePredictedPositions()
+    {
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
+    }
 
+    private void RelaxDensities()
+    {
         for (int i = 0; i < 2; i++)
         {
             compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
             compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
             compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
             compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
-            compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
+            if (boundaryBodyEnabled)
+                compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
         }
+    }
 
+    private void ApplyMouseInteraction()
+    {
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
         }
 
-        if (Input.GetMouseButton(1))
+        if (boundaryBodyEnabled && Input.GetMouseButton(1))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouseBoundary"], boundaryThreadGropus);
         }
+    }
 
+    private void UpdateBoundaryBody()
+    {
         // Rigid boundary body: maintain the shape, then resolve wall contacts
         compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
@@ -186,15 +225,18 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["CancelBoundaryBorderVelocity"], 1);
 
-        // Project fluid particles out of the body, then clamp to the borders last
+        // Project fluid particles out of the body
         string bodyCollisionKernel = settings.shape == BoundaryShape.Square
             ? "ResolveSquareBodyCollision"
             : "ResolveCircleBodyCollision";
         compute.Dispatch(KernelIDs[bodyCollisionKernel], threadGropus);
-        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+    }
 
+    private void CalculateVelocities()
+    {
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryCalculateVelocity"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryCalculateVelocity"], boundaryThreadGropus);
     }
 
     private void OnValidate()

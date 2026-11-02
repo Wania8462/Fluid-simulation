@@ -29,6 +29,8 @@
 #pragma kernel ApplyContacts
 #pragma kernel BodyCalculateVelocity
 #pragma kernel ResolveBodyCollisions
+#pragma kernel RecycleParticles
+#pragma kernel ResolveReservoir
 
 #include "FluidMath3D.hlsl"
 #include "RigidBodyMath3D.hlsl"
@@ -127,6 +129,16 @@ const uint numBoundaryParticles;
 const uint numBodies;
 const float boundaryFriction;
 const float bodyFriction;
+
+// Continuous flow, only used by the kernels in FlowKernels3D.hlsl. The reservoir is the box the fluid pours
+// out of, the nozzle the hole in its floor, and recycleSeed changes every dispatch so returning particles
+// don't come back to the same spot
+const float4 reservoirCenter;
+const float4 reservoirHalfSize;
+const float nozzleRadius;
+const float drainHeight;
+const float respawnSlabHeight;
+const uint recycleSeed;
 
 void SetForceBuffer(uint index, float4 value)
 {
@@ -429,3 +441,7 @@ void Scatter (uint3 id : SV_DispatchThreadID)
 // The kernels live in their own file to keep this one readable. Their pragmas and declarations have to stay
 // in this file, the only one ComputeHelper reflection reads
 #include "RigidBodyKernels3D.hlsl"
+
+// ---------- Continuous flow ----------
+// Split out for the same reason, and dispatched only when the simulation has a FluidFlow3D
+#include "FlowKernels3D.hlsl"

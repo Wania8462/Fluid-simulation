@@ -8,6 +8,7 @@ public class CameraController : MonoBehaviour
 
     private float yaw;
     private float pitch;
+    private bool moveCam;
 
     void Start()
     {
@@ -21,6 +22,11 @@ public class CameraController : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape))
+            moveCam = !moveCam;
+
+        if (!moveCam) return;
+        
         yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
         pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
         pitch = Mathf.Clamp(pitch, -89f, 89f);
