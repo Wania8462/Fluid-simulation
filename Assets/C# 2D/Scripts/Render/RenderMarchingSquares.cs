@@ -64,10 +64,6 @@ namespace Rendering
 
         [SerializeField] private Material mat;
         [SerializeField] private Material testMat;
-        // [Header("Debug")]
-        // [SerializeField] private GameObject testSquare;
-        // [SerializeField] private int drawIndex;
-        // private List<GameObject> testObjects = new();
 
         private Mesh[] meshes;
         internal Vector3[] edges { get; private set; }
@@ -84,6 +80,8 @@ namespace Rendering
         private List<Vector3> lerpVertices;
         private List<int> lerpTriangles;
 
+        // Triangles per marching squares case. Indices 0-3 are the corners (TL, TR, BL, BR)
+        // and 4-7 the interpolated edge points (top, right, bottom, left), see GetVertex
         private static readonly int[][] triangleTable =
         {
             Array.Empty<int>(),
@@ -274,6 +272,7 @@ namespace Rendering
         {
             var shouldConnect = false;
 
+            // Saddle cases: the bilinear decider picks whether the two corners connect through the centre
             if (meshIndex == 5 || meshIndex == 10)
             {
                 var decider = ((cellDensities.topLeft - threashold) * (cellDensities.bottomRight - threashold))
@@ -325,6 +324,7 @@ namespace Rendering
         {
             var meshIndex = 0;
 
+            // One bit per corner above the threshold
             if (cellDensities.topLeft >= threashold) meshIndex |= 1;
             if (cellDensities.topRight >= threashold) meshIndex |= 2;
             if (cellDensities.bottomRight >= threashold) meshIndex |= 4;
@@ -408,36 +408,7 @@ namespace Rendering
         #endregion
 
         #region Debug
-        // private void DrawEdges()
-        // {
-        //     testSquare.GetComponent<SpriteRenderer>().color = Color.white;
-        //     foreach (var edge in edges)
-        //         Instantiate(testSquare, edge, Quaternion.identity);
-        // }
 
-        // private void DrawCentres()
-        // {
-        //     testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
-        //     foreach (var centre in centres)
-        //         Instantiate(testSquare, new Vector3(centre.x, centre.y), Quaternion.identity);
-        // }
-
-        // private void DrawSquare()
-        // {
-        //     foreach (var testObject in testObjects)
-        //         Destroy(testObject);
-
-        //     var offset = Mathf.FloorToInt((float)drawIndex / (width - 1));
-        //     Debug.Log($"Draw Index: {drawIndex}, width: {width - 1}, offset: {offset}");
-        //     testSquare.GetComponent<SpriteRenderer>().color = Color.purple;
-        //     testObjects.Add(Instantiate(testSquare, new Vector3(centres[drawIndex].x, centres[drawIndex].y), Quaternion.identity));
-        //     testSquare.GetComponent<SpriteRenderer>().color = Color.white;
-
-        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset], Quaternion.identity));
-        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + 1], Quaternion.identity));
-        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width], Quaternion.identity));
-        //     testObjects.Add(Instantiate(testSquare, edges[drawIndex + offset + width + 1], Quaternion.identity));
-        // }
         #endregion
     }
 }

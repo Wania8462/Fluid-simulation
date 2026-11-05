@@ -22,6 +22,7 @@ namespace Rendering
         private MaterialPropertyBlock mpb;
 
         private readonly int colors = Shader.PropertyToID("_Color");
+        // DrawMeshInstanced takes at most 1023 instances per call
         private const int batchSize = 1023;
         private const int submeshIndex = 0;
 
@@ -113,11 +114,6 @@ namespace Rendering
         }
         
         private Vector4 GetColorVector(float density) => new(0, 0, Mathf.Clamp01(density / densityLimt), 1);
-
-        // void OnValidate()
-        // {
-        //     SetDimentions();
-        // }
 
         void OnDestroy()
         {

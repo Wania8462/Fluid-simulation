@@ -87,7 +87,6 @@ public class ParticleRender : MonoBehaviour
 
     private void ColorParticles(List<int> indices)
     {
-        // ik that its inefficient
         var colors = ComputeHelper.GetBuffer<float4>(colorsBuffer);
 
         for (int i = 0; i < indices.Count; i++)

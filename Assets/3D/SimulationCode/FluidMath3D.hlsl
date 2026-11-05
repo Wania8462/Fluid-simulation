@@ -4,9 +4,7 @@ float Distance(float4 p1, float4 p2);
 float DistanceSq(float4 p1, float4 p2);
 float Pow3(float x);
 
-// Positions and velocities are float4 with w = 0 (16 byte GPU alignment),
-// only xyz carries simulation data
-
+// Double density relaxation (Clavet et al. 2005)
 float4 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, float4 unitVector)
 {
     float invRelativeDist = 1.0 - relativeDistance;

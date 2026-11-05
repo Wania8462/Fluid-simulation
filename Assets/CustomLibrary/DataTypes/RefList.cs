@@ -2,9 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-// WARNING: Indexer returns ref — do not hold onto a ref across any Add/Remove/Resize call, as resizing invalidates all refs.
-// WARNING: Remove(item) and RemoveAt(index) do not preserve order — the last element is swapped into the removed slot.
-// WARNING: IList<T>.Insert and IList<T>.RemoveAt DO preserve order (shift-based) to satisfy interface contract.
 public class RefList<T> : IRefList<T>
 {
     private T[] _items;
@@ -134,6 +131,7 @@ public class RefList<T> : IRefList<T>
         Array.Copy(_items, 0, array, arrayIndex, _size);
     }
 
+    // Remove and RemoveAt swap in the last element, so order isn't preserved
     public bool Remove(T item)
     {
         for (int i = 0; i < _size; i++)
@@ -168,7 +166,6 @@ public class RefList<T> : IRefList<T>
         _items[_size] = default!;
     }
 
-    // Order-preserving insert to satisfy IList<T> contract.
     void IList<T>.Insert(int index, T item)
     {
         if ((uint)index > (uint)_size)
@@ -184,7 +181,6 @@ public class RefList<T> : IRefList<T>
         _size++;
     }
 
-    // Order-preserving removal to satisfy IList<T> contract.
     void IList<T>.RemoveAt(int index)
     {
         if ((uint)index >= (uint)_size)
@@ -202,10 +198,6 @@ public class RefList<T> : IRefList<T>
             action(_items[i]);
     }
 
-    /// <summary>
-    /// Allocates a new <c>T[]</c> and fills it by applying <paramref name="transform"/> to each element.
-    /// <para><b>Warning:</b> allocates every call — avoid in hot paths or per-frame update loops.</para>
-    /// </summary>
     public T[] ForEach(Func<T, T> transform)
     {
         T[] copy = new T[_size];
@@ -214,10 +206,6 @@ public class RefList<T> : IRefList<T>
         return copy;
     }
 
-    /// <summary>
-    /// Allocates a new <c>TResult[]</c> and fills it by projecting each element via <paramref name="transform"/>.
-    /// <para><b>Warning:</b> allocates every call — avoid in hot paths or per-frame update loops.</para>
-    /// </summary>
     public TResult[] ForEach<TResult>(Func<T, TResult> transform)
     {
         TResult[] result = new TResult[_size];
@@ -271,7 +259,6 @@ public class RefList<T> : IRefList<T>
 
     public RefListEnumerator<T> GetEnumerator() => new(_items, _size);
 
-    // Explicit interface implementations for IEnumerable<T> / LINQ / etc.
     IEnumerator<T> IEnumerable<T>.GetEnumerator()
     {
         for (int i = 0; i < _size; i++)

@@ -48,14 +48,10 @@ public class SimulationManager : MonoBehaviour
 
     public bool Running { get; private set; }
 
-    // Renderers are in an assembly that references this one, so they subscribe here instead of being called
-    // Raised after Setup or a body change rebuilds the buffers
     public event Action<SimulationManager> BuffersChanged;
-    // Raised at the end of every Update, paused or not, because draws have to be submitted each frame
+    // Raised every Update, even when paused, since draws must be submitted each frame
     public event Action StepFinished;
 
-    // Shown in the inspector, not hidden: what Setup actually ended up with is the first thing worth seeing when a
-    // scene comes up empty. Set by Setup, so editing them does nothing
     public int numParticles;
     public int numBoundaryParticles;
     public float InteractionRadius => settings.interactionRadius;
@@ -67,7 +63,7 @@ public class SimulationManager : MonoBehaviour
     private RigidBodyData3D bodies;
     private int numBodies;
 
-    // Body buffers that AddBody or RemoveBody replaced, released at the start of the next Update
+    // Body buffers replaced by AddBody/RemoveBody, released at the start of the next Update
     private readonly List<ComputeBuffer> replacedBuffers = new();
 
     private int3 threadGroups;
@@ -87,10 +83,9 @@ public class SimulationManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R))
             Setup();
 
-        // Draws queued before AddBody or RemoveBody may use the buffers they replaced until that frame has rendered, so
-        // the buffers are released here, before this frame's draws, and the renderer switches to the new ones
         if (replacedBuffers.Count > 0)
         {
+            // Released here because draws queued last frame may still have used them
             foreach (ComputeBuffer buffer in replacedBuffers)
                 ComputeHelper.Release(buffer);
 
@@ -129,12 +124,12 @@ public class SimulationManager : MonoBehaviour
         float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeFramerate;
         compute.SetFloat("dt", dt);
 
+        // Grids are only rebuilt every 4th step
         if (clock % 4 == 0)
         {
-            // Before BuildGrid, so a recycled particle is hashed where it reappears rather than where it
-            // drained, and before AdvancePredictedPositions, which is what makes the teleport not a velocity
             if (flow != null)
             {
+                // Recycle before BuildGrid and AdvancePredictedPositions so the teleport isn't hashed stale or turned into velocity
                 flow.SetRecycleSeed(compute, Time.frameCount);
                 compute.Dispatch(KernelIDs["RecycleParticles"], threadGroups);
             }
@@ -203,8 +198,7 @@ public class SimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGroups);
     }
 
-    // Counting sort: count per cell, prefix sum the counts into start offsets, then
-    // scatter. Leaves cell c's particles in SortedIndices[CellStart[c]..CellStart[c + 1])
+    // Counting sort: cell c's particles end up in SortedIndices[CellStart[c]..CellStart[c + 1])
     private void BuildGrid()
     {
         compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGroups);
@@ -221,7 +215,6 @@ public class SimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["Scatter"], threadGroups);
     }
 
-    // The same counting sort for the boundary particles, into BoundaryCellStart and BoundarySortedIndices
     private void BuildBoundaryGrid()
     {
         compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGroups);
@@ -238,7 +231,6 @@ public class SimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["ScatterBoundary"], boundaryThreadGroups);
     }
 
-    // Body kernels run one thread group per body; the Sum* kernels have BodyReductionThreads threads in each group
     private void DispatchPerBody(string kernel) => compute.Dispatch(KernelIDs[kernel], numBodies, 1, 1);
 
     private void OnValidate()
@@ -269,14 +261,12 @@ public class SimulationManager : MonoBehaviour
         numBodies = bodies.NumBodies;
         numBoundaryParticles = bodies.NumBoundaryParticles;
 
-        // With a flow the fluid starts stacked in its reservoir instead of as a block in the middle of the tank
         if (flow != null)
             flow.Validate(tank, settings.interactionRadius, particleRadius);
 
         float4[] spawned = flow != null ? flow.InitializePositions() : spawn.InitializePositions();
 
-        // Fluid closer than half the interaction radius to a body would start squeezed by its boundary particles,
-        // get shot out on the first step and kick the body the other way
+        // Fluid spawned too close to a body would be shot out on the first step
         float4[] positions = RigidBodies3D.RemoveParticlesInsideBodies(spawned, bodies.settings, settings.interactionRadius * 0.5f);
         numParticles = positions.Length;
 
@@ -289,16 +279,13 @@ public class SimulationManager : MonoBehaviour
         gridThreadGroups = compute.GetThreadGroups(KernelIDs["ClearGrid"], SP.NumCells + 1);
         boundaryThreadGroups = compute.GetThreadGroups(0, numBoundaryParticles);
 
-        // Hillis-Steele needs ceil(log2(n)) passes. Rounding up to an even count makes
-        // the ping-pong always land back in CellStart: the extra pass has a stride past
-        // the end of the array, so every entry carries nothing and it is a plain copy.
         numScanSteps = 0;
         while ((1 << numScanSteps) < SP.NumCells + 1) numScanSteps++;
+        // An even pass count makes the ping-pong end in CellStart; the extra pass is a plain copy
         if (numScanSteps % 2 == 1) numScanSteps++;
 
         clock = 0;
 
-        // Boundary particle volumes depend only on the body shapes, so they are computed once
         if (numBodies > 0)
         {
             BuildBoundaryGrid();
@@ -308,8 +295,6 @@ public class SimulationManager : MonoBehaviour
         BuffersChanged?.Invoke(this);
     }
 
-    // Puts a body in the first empty slot of settings.bodies, or a new slot at the end, and returns the slot as its id.
-    // The other bodies keep their slots, positions and motion
     internal int AddBody(RigidBodySettings3D body)
     {
         if (settings.bodies.Count(slot => !slot.IsEmpty) >= RigidBodies3D.MaxBodies)
@@ -324,7 +309,6 @@ public class SimulationManager : MonoBehaviour
 
         settings.bodies[id] = body;
 
-        // Before Setup there is no body data yet, and Setup builds every body in the array
         if (bodies == null) return id;
 
         ReadBodyStates();
@@ -333,7 +317,6 @@ public class SimulationManager : MonoBehaviour
         return id;
     }
 
-    // Empties the slot of a body. The other bodies keep their slots, positions and motion
     internal void RemoveBody(int id)
     {
         if (id < 0 || id >= settings.bodies.Length || settings.bodies[id].IsEmpty)
@@ -341,7 +324,6 @@ public class SimulationManager : MonoBehaviour
 
         settings.bodies[id] = default;
 
-        // Before Setup there is no body data yet
         if (bodies == null) return;
 
         ReadBodyStates();
@@ -349,7 +331,7 @@ public class SimulationManager : MonoBehaviour
         RebuildBodies();
     }
 
-    // The GPU moves the bodies, so the CPU only has their start poses until the current states are copied back
+    // Bodies move on the GPU, so copy their current states back before rebuilding
     private void ReadBodyStates()
     {
         if (numBodies == 0) return;
@@ -360,13 +342,11 @@ public class SimulationManager : MonoBehaviour
         bodies.states.AddRange(states);
     }
 
-    // Recreates the body buffers for the current bodies and places the bodies where they are now. The fluid buffers stay
     private void RebuildBodies()
     {
-        // Except finds the buffers CreateBuffers replaced, each once, even though the read-only aliases share them.
-        // This frame's draws may already be queued with them, so Update releases them before the next draws
         List<ComputeBuffer> previous = Buffers.Values.ToList();
         RigidBodies3D.CreateBuffers(Buffers, bodies, SP.NumCells);
+        // Except yields each replaced buffer once even though read-only aliases share them
         replacedBuffers.AddRange(previous.Except(Buffers.Values));
 
         numBodies = bodies.NumBodies;
@@ -377,13 +357,11 @@ public class SimulationManager : MonoBehaviour
 
         if (numBodies > 0)
         {
-            // The uploaded boundary positions are where the bodies started, the grid and the volumes need where they are
             compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGroups);
             BuildBoundaryGrid();
             compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGroups);
 
-            // Fluid inside a new body is pushed out now, before the next step saves PrevPositions, so the push doesn't
-            // turn into velocity
+            // Push fluid out of new bodies now, before PrevPositions is saved, so it doesn't become velocity
             compute.Dispatch(KernelIDs["ResolveBodyCollisions"], threadGroups);
         }
     }
@@ -419,8 +397,6 @@ public class SimulationManager : MonoBehaviour
         compute.SetInt("numBoundaryParticles", numBoundaryParticles);
         compute.SetInt("numBodies", numBodies);
 
-        // Here rather than in SetComputeSettings so the reservoir can be moved and resized in the inspector
-        // while it runs. Only the fill settings need a reset, because they decide where the particles start
         if (flow != null)
             flow.SetComputeSettings(compute);
     }
@@ -454,8 +430,6 @@ public class SimulationManager : MonoBehaviour
         if (numParticles == 0)
             Debug.LogWarning("Simulation manager: there are 0 particles. Creating non-existant buffers.");
 
-        // Cell counts grow cubically as interactionRadius shrinks; columns * rows * layers
-        // silently overflows int well before the allocation itself becomes a problem
         if (SP.NumCells <= 0)
             Debug.LogError($"Simulation manager: grid has {SP.NumCells} cells. interactionRadius is too small for the bounding box, so every neighbour query will read out of range.");
 
@@ -469,15 +443,12 @@ public class SimulationManager : MonoBehaviour
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
         Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
 
-        // One uint per cell for the offsets, one per particle for the grid contents.
-        // ScanTemp is the prefix sum's ping-pong partner, CellCursor the scatter write head.
         Buffers["CellStart"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
         Buffers["ScanTemp"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
         Buffers["CellCursor"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
         Buffers["SortedIndices"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles);
 
-        // Read-only aliases: the same buffers bound under the names DoubleDensityRelaxation and ApplyViscosity
-        // read through, keeping those kernels within the 8 read-write resources a compute shader gets
+        // Read-only aliases keep the heavy kernels within the 8 read-write resources a compute shader gets
         Buffers["PositionsRO"] = Buffers["Positions"];
         Buffers["VelocitiesRO"] = Buffers["Velocities"];
         Buffers["CellStartRO"] = Buffers["CellStart"];
@@ -488,7 +459,6 @@ public class SimulationManager : MonoBehaviour
 
     private void ReleaseBuffers()
     {
-        // Distinct: the read-only aliases share buffer instances with their read-write originals
         foreach (var buffer in Buffers.Values.Concat(replacedBuffers).Distinct())
             ComputeHelper.Release(buffer);
 
@@ -514,10 +484,10 @@ public class SimulationManager : MonoBehaviour
 
     #endregion
 
-    // The cursor ray intersected with the z = 0 plane, so mouse attraction acts there
     private Vector4 GetMousePos()
     {
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        // Mouse interaction happens on the z = 0 plane
         new Plane(Vector3.forward, 0).Raycast(ray, out float enter);
         Vector3 point = ray.GetPoint(enter);
         return new(point.x, point.y, point.z, 0);

@@ -273,8 +273,9 @@ public static class ComputeHelper
     }
     #endregion
 
-    // Won't work in build!!!
     #region Shader reflection helpers 
+    // Kernel and buffer names are parsed from the shader source, one declaration per line.
+    // A kernel's index is its position among the #pragma kernel lines
     public static Dictionary<string, int> GetKernels(ComputeShader compute)
     {
         string path = AssetDatabase.GetAssetPath(compute);
@@ -296,6 +297,7 @@ public static class ComputeHelper
         Dictionary<string, ComputeBuffer> result = new();
 
         for (int i = 0; i < lines.Length; i++)
+            // [..^1] drops the trailing ';'
             result.Add(lines[i].Split(' ').Last()[..^1], null);
 
         return result;

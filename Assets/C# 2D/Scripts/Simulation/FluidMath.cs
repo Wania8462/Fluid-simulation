@@ -8,6 +8,7 @@ namespace SimulationLogic
     public static class FluidMath
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        // Double density relaxation and viscoelastic springs follow Clavet et al. 2005
         public static float2 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, float2 unitVector)
         {
             var invRelativeDist = 1 - relativeDistance;
@@ -68,7 +69,6 @@ namespace SimulationLogic
                 (64 * Mathf.PI * Pow9(smoothingRadius));
         }
 
-        // Relative distance is always positive because it's derived from distance
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float QuadraticSpikyKernel(float relativeDistance) => (1 - relativeDistance) * (1 - relativeDistance);
 

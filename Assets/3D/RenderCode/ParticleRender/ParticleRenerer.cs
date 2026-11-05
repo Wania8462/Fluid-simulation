@@ -59,7 +59,6 @@ public class ParticleRenerer : MonoBehaviour
         SetupBoundaryParticles(sim);
     }
 
-    // Rigid bodies are drawn as their boundary particles in a solid colour, like in the 2D renderer
     private void SetupBoundaryParticles(SimulationManager sim)
     {
         ComputeHelper.Release(boundaryCommandBuf);
