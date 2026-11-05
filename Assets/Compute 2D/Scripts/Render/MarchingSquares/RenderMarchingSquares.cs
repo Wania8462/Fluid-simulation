@@ -46,9 +46,8 @@ public class RenderMarchingSquares : MonoBehaviour
 
         meshes = MeshGenerator.MarchingSquareVariations();
 
-        // Single command buffer holds all 16 cases' indirect args.
-        // Stride must equal IndirectDrawIndexedArgs.size (20 bytes).
         ComputeHelper.Release(commandBuf);
+        // One indirect draw per marching squares case; the GPU fills in the instance counts
         commandBuf = new GraphicsBuffer(
             GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Structured,
             16,
@@ -60,7 +59,6 @@ public class RenderMarchingSquares : MonoBehaviour
             initArgs[c].indexCountPerInstance = meshes[c].GetIndexCount(0);
         commandBuf.SetData(initArgs);
 
-        // One RenderParams per case, each reads CasePositions at a different offset.
         rp = new RenderParams[16];
         for (int c = 0; c < 16; c++)
         {

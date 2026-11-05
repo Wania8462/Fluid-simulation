@@ -8,13 +8,9 @@ public static class MeshGenerator
     {
         Vector3[] verticies = new Vector3[]
         {
-                // Top left
                 new(-0.5f * width, 0.5f * height),
-                // Top right
                 new(0.5f * width, 0.5f * height),
-                // Bottom left
                 new(-0.5f * width, -0.5f * height),
-                // Bottom right
                 new(0.5f * width, -0.5f * height)
         };
 
@@ -55,24 +51,21 @@ public static class MeshGenerator
         return mesh;
     }
 
-    // The 12 edges of a box centred on the origin, drawn as lines
     public static Mesh WireBox(float3 size)
     {
         float3 h = size / 2;
 
         Vector3[] verticies = new Vector3[]
         {
-                // Bottom
                 new(-h.x, -h.y, -h.z), new(h.x, -h.y, -h.z), new(h.x, -h.y, h.z), new(-h.x, -h.y, h.z),
-                // Top
                 new(-h.x, h.y, -h.z), new(h.x, h.y, -h.z), new(h.x, h.y, h.z), new(-h.x, h.y, h.z)
         };
 
         int[] lines = new int[]
         {
-            0, 1, 1, 2, 2, 3, 3, 0, // bottom
-            4, 5, 5, 6, 6, 7, 7, 4, // top
-            0, 4, 1, 5, 2, 6, 3, 7  // verticals
+            0, 1, 1, 2, 2, 3, 3, 0,
+            4, 5, 5, 6, 6, 7, 7, 4,
+            0, 4, 1, 5, 2, 6, 3, 7
         };
 
         Mesh mesh = new() { vertices = verticies };
@@ -116,6 +109,7 @@ public static class MeshGenerator
             v += 1;
         }
 
+        // Close the fan: the last triangle wraps back to the first rim vertex
         triangles[^2] = 1;
 
         Mesh mesh = new()
@@ -129,18 +123,15 @@ public static class MeshGenerator
 
     public static Mesh[] MarchingSquareVariations()
     {
-        // Directions
         const float Up = 0.5f;
         const float RightDir = 0.5f;
         const float Down = -0.5f;
         const float LeftDir = -0.5f;
-        // Corners
         const int TL = 0;
         const int TR = 1;
         const int BL = 2;
         const int BR = 3;
 
-        // Edge midpoints
         const int Top = 4;
         const int Right = 5;
         const int Bottom = 6;
@@ -148,52 +139,35 @@ public static class MeshGenerator
 
         Vector3[] vertices =
         {
-            // Vertices
-            new(LeftDir, Up),  // top left
-            new(RightDir, Up),  // top right
-            new(LeftDir, Down),  // bottom left
-            new(RightDir, Down),  // bottom right
+            new(LeftDir, Up),
+            new(RightDir, Up),
+            new(LeftDir, Down),
+            new(RightDir, Down),
 
-            // Middle
-            new(0, Up),  // top
-            new(RightDir, 0),  // right
-            new(0, Down),  // bottom
-            new(LeftDir, 0)  // left
+            new(0, Up),
+            new(RightDir, 0),
+            new(0, Down),
+            new(LeftDir, 0)
         };
 
+        // Unit-cell mesh per case, with bits 1 = TL, 2 = TR, 4 = BR, 8 = BL
         int[][] triangles = new int[][]
         {
-            // Empty
             new int[] { },
-            // Top-left corner
             new int[] { Left, TL, Top },
-            // Top-right corner
             new int[] { Top, TR, Right },
-            // Top edge (TL + TR)
             new int[] { Left, TL, TR,  Left, TR, Right },
-            // Bottom-right corner
             new int[] { Right, BR, Bottom },
-            // Saddle (TL + BR)
             new int[] { Left, TL, Top,  Right, BR, Bottom },
-            // Right edge (TR + BR)
             new int[] { Top, TR, BR,  Top, BR, Bottom },
-            // Filled except BL
             new int[] { Left, TL, TR,  Left, TR, BR,  Left, BR, Bottom },
-            // Bottom-left corner
             new int[] { Bottom, BL, Left },
-            // Left edge (TL + BL)
             new int[] { Top, Bottom, BL,  Top, BL, TL },
-            // Saddle (TR + BL)
             new int[] { Top, TR, Right,  Bottom, BL, Left },
-            // Filled except BR
             new int[] { TL, TR, Right,  TL, Right, Bottom,  TL, Bottom, BL },
-            // Bottom edge (BL + BR)
             new int[] { Right, BR, BL,  Right, BL, Left },
-            // Filled except TR
             new int[] { TL, Top, Right,  TL, Right, BR,  TL, BR, BL },
-            // Filled except TL
             new int[] { Top, TR, BR,  Top, BR, BL,  Top, BL, Left },
-            // Full
             new int[] { TL, TR, BR,  TL, BR, BL }
         };
 

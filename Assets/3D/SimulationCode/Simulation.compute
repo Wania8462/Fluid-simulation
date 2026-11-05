@@ -36,6 +36,7 @@
 #include "RigidBodyMath3D.hlsl"
 
 static const float4 ZeroImpulse = float4(0, 0, 0, 0);
+// Forces are stored as fixed-point ints so threads can sum them with InterlockedAdd
 static const int FloatScale = 1000000;
 
 
@@ -49,14 +50,11 @@ RWStructuredBuffer<float4> Velocities;
 RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> NearDensities;
 
-// Compact grid: particle indices grouped by cell in one contiguous buffer.
-// Cell c occupies SortedIndices[CellStart[c] .. CellStart[c + 1]).
 RWStructuredBuffer<uint> CellStart;
 RWStructuredBuffer<uint> ScanTemp;
 RWStructuredBuffer<uint> CellCursor;
 RWStructuredBuffer<uint> SortedIndices;
 
-// Boundary particles: surface samples of every rigid body, stored body after body
 RWStructuredBuffer<float4> BoundaryPositions;
 RWStructuredBuffer<float4> BoundaryVelocities;
 RWStructuredBuffer<float4> BoundaryRestPositions;
@@ -66,21 +64,15 @@ RWStructuredBuffer<int> BoundaryForceBuffersY;
 RWStructuredBuffer<int> BoundaryForceBuffersZ;
 RWStructuredBuffer<uint> BoundaryBodyIndices;
 
-// Compact grid of the boundary particles, laid out like CellStart and SortedIndices
 RWStructuredBuffer<uint> BoundaryCellStart;
 RWStructuredBuffer<uint> BoundarySortedIndices;
 
-// One entry per rigid body
 RWStructuredBuffer<RigidBodyProperties> BodyProperties;
 RWStructuredBuffer<RigidBodyState> BodyStates;
 
-// Scratch slots for the per-body reductions, BodyReductionThreads slots per body
 RWStructuredBuffer<float4> BodyCouplingSums;
 RWStructuredBuffer<float4> BodyContactSums;
 
-// Read-only views bound to the same GPU buffers as the declarations above. Kernels that only read a
-// buffer go through these, because a compute shader gets 8 read-write slots but 128 read-only ones.
-// A kernel must use either the read-write or the read-only name of a buffer, never both
 StructuredBuffer<float4> PositionsRO;
 StructuredBuffer<float4> VelocitiesRO;
 StructuredBuffer<uint> CellStartRO;
@@ -120,8 +112,6 @@ const uint columns;
 const uint rows;
 const uint layers;
 
-// Hillis-Steele scan step: stride doubles each pass, flip alternates the
-// ping-pong direction. Both are uniform, so the branch on flip never diverges.
 const uint scanStride;
 const uint scanFlip;
 
@@ -130,9 +120,6 @@ const uint numBodies;
 const float boundaryFriction;
 const float bodyFriction;
 
-// Continuous flow, only used by the kernels in FlowKernels3D.hlsl. The reservoir is the box the fluid pours
-// out of, the nozzle the hole in its floor, and recycleSeed changes every dispatch so returning particles
-// don't come back to the same spot
 const float4 reservoirCenter;
 const float4 reservoirHalfSize;
 const float nozzleRadius;
@@ -162,11 +149,9 @@ float4 ReadForceBuffer(uint index)
     0);
 }
 
-// Defined in the spatial partitioning section below
 uint3 GetCellPosition(float4 position);
 uint GetCellIndex(uint3 cellPosition);
 
-// Fluid-body coupling, defined in RigidBodyKernels3D.hlsl
 void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float nearDensity);
 void ApplyBoundaryPressure(uint index, float4 position, uint3 cellPosition, float pressure, float nearPressure);
 void ApplyBoundaryFriction(uint index, float4 position, float4 velocity, uint3 cellPosition);
@@ -198,10 +183,12 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     float density = 0;
     float nearDensity = 0;
 
+    // Visit the 3x3x3 block of cells around the particle
     for (uint i = 0; i < 27; i++)
     {
         int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        uint3 neighbourPos = cellPosition + cellOffset;
+        // Offsets below zero wrap to large uints, so this also rejects them
         if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
         uint cell = GetCellIndex(neighbourPos);
 
@@ -217,7 +204,6 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
         }
     }
 
-    // numBodies is the same for every thread, so this branch costs no divergence
     if (numBodies > 0)
         AddBoundaryDensity(position, cellPosition, density, nearDensity);
 
@@ -243,6 +229,7 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
 
             float q = mag / interactionRadius;
             float4 r = UnitVector(position, PositionsRO[neighbour], mag);
+            // Split the displacement equally between the pair
             float4 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
 
             AtomicAddForceBuffer(neighbour, displacement);
@@ -282,7 +269,7 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
     for (uint i = 0; i < 27; i++)
     {
         int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        uint3 neighbourPos = cellPosition + cellOffset;
         if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
         uint cell = GetCellIndex(neighbourPos);
 
@@ -303,7 +290,6 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
         }
     }
 
-    // numBodies is the same for every thread, so this branch costs no divergence
     if (numBodies > 0)
         ApplyBoundaryFriction(id.x, position, velocity, cellPosition);
 }
@@ -364,8 +350,6 @@ void CalculateVelocity (uint3 id : SV_DispatchThreadID)
     Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
 }
 
-// ---------- Spatial partitioning (3D: cubic cells, 27 adjacent cells) ----------
-
 uint3 GetCellPosition(float4 position)
 {
     float3 scaled = (position.xyz - offset.xyz) / cellLength;
@@ -379,12 +363,6 @@ uint GetCellIndex(uint3 cellPosition)
     return cellPosition.x + cellPosition.y * columns + cellPosition.z * columns * rows;
 }
 
-// The grid is built by counting sort: count per cell, prefix sum the counts into
-// start offsets, then scatter particle indices into their cell's slice. There is
-// no per-cell capacity, so no particle is ever dropped.
-
-// CellStart holds the counts first, shifted up one slot so the inclusive scan
-// below turns them straight into exclusive start offsets.
 [numthreads(64,1,1)]
 void ClearGrid (uint3 id : SV_DispatchThreadID)
 {
@@ -399,18 +377,19 @@ void CountParticles (uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles) return;
 
     uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
+    // Counts are shifted one slot so the prefix sum gives each cell's start index
     InterlockedAdd(CellStart[cellIndex + 1], 1);
 }
 
 [numthreads(64,1,1)]
+// One pass of a Hillis-Steele prefix sum, ping-ponging between CellStart and ScanTemp
 void ScanStep (uint3 id : SV_DispatchThreadID)
 {
     if (id.x > numCells) return;
 
     uint previous = max((int)id.x - (int)scanStride, 0);
-    uint mask = id.x >= scanStride; // 0 for the first stride entries, which carry nothing
+    uint mask = id.x >= scanStride;
 
-    // scanFlip is uniform across the dispatch, so this costs no divergence
     if (scanFlip == 0)
         ScanTemp[id.x] = CellStart[id.x] + CellStart[previous] * mask;
     else
@@ -432,16 +411,12 @@ void Scatter (uint3 id : SV_DispatchThreadID)
 
     uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
     uint destination;
+    // Counting sort: claim the next free slot in this particle's cell
     InterlockedAdd(CellCursor[cellIndex], 1, destination);
 
     SortedIndices[destination] = id.x;
 }
 
-// ---------- Rigid bodies ----------
-// The kernels live in their own file to keep this one readable. Their pragmas and declarations have to stay
-// in this file, the only one ComputeHelper reflection reads
 #include "RigidBodyKernels3D.hlsl"
 
-// ---------- Continuous flow ----------
-// Split out for the same reason, and dispatched only when the simulation has a FluidFlow3D
 #include "FlowKernels3D.hlsl"

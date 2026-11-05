@@ -1,15 +1,6 @@
 using Unity.Mathematics;
 using UnityEngine;
 
-// A continuous stream instead of a one-off block of fluid: a reservoir up above drains through a hole in its
-// floor, and whatever falls past drainHeight is put back into the top of the reservoir. The particle count
-// never changes, so the renderers keep the sizes they cached.
-//
-// The reservoir doubles as the buffer between the drain and the nozzle. Outflow is driven by the weight of the
-// water above the hole, so the stream stays smooth however unevenly the drain delivers particles back, and
-// returning particles land on a free surface where their spacing doesn't matter.
-//
-// Leave SimulationManager.flow empty and none of this runs.
 public class FluidFlow3D : MonoBehaviour
 {
     [Header("Source")]
@@ -35,8 +26,6 @@ public class FluidFlow3D : MonoBehaviour
 
     private float3 HalfSize => sourceSize / 2;
 
-    // Fills the reservoir from the floor up, one lattice layer at a time, so the fluid starts settled rather
-    // than dropped. Counterpart of Spawn3DParticles.InitializePositions, which spawns a centred cube instead
     public float4[] InitializePositions()
     {
         float4[] positions = new float4[math.max(particleCount, 0)];
@@ -49,7 +38,7 @@ public class FluidFlow3D : MonoBehaviour
 
         for (int i = 0; i < positions.Length; i++)
         {
-            // Filled bottom up: x runs fastest, then z, and y is the layer
+            // Fill x then z, then stack layers upwards
             int3 cell = new(i % columns, i / (columns * layers), i / columns % layers);
             float3 jitterOffset = UnityEngine.Random.insideUnitSphere * jitter;
             float3 position = low + (float3)cell * spacing + jitterOffset;
@@ -69,7 +58,6 @@ public class FluidFlow3D : MonoBehaviour
         compute.SetFloat("respawnSlabHeight", respawnSlabHeight);
     }
 
-    // Changes every dispatch so a particle doesn't return to the same spot every time it drains
     public void SetRecycleSeed(ComputeShader compute, int seed) => compute.SetInt("recycleSeed", seed);
 
     public void Validate(Tank tank, float interactionRadius, float particleRadius)
@@ -95,8 +83,6 @@ public class FluidFlow3D : MonoBehaviour
         if (drainHeight <= -tank.innerHalfSize.y)
             Debug.LogWarning($"Fluid flow: drainHeight {drainHeight} is at or below the tank floor ({-tank.innerHalfSize.y}), so particles pile up on the floor instead of draining");
 
-        // The fill stacks layers of columns * layers particles until it runs out, and anything past the ceiling
-        // starts outside the reservoir, where ResolveReservoir never sees it
         int perLayer = math.max(1, (int)(sourceSize.x / spacing)) * math.max(1, (int)(sourceSize.z / spacing));
         float fillHeight = math.ceil((float)particleCount / perLayer) * spacing;
         if (fillHeight > sourceSize.y)
@@ -113,7 +99,6 @@ public class FluidFlow3D : MonoBehaviour
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireCube(sourceCenter, sourceSize);
 
-        // The nozzle, as a ring on the reservoir floor
         Gizmos.color = Color.yellow;
         float3 floorCentre = new(sourceCenter.x, sourceCenter.y - halfSize.y, sourceCenter.z);
         float3 previous = floorCentre + new float3(nozzleRadius, 0, 0);

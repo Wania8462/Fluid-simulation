@@ -2,13 +2,8 @@ using System.Linq;
 using Unity.Mathematics;
 using UnityEngine;
 
-// Readbacks that answer "what is actually in the buffers", for the failures that look identical from the outside:
-// a simulation that draws nothing is empty, full of NaNs, or somewhere the camera is not.
-//
-// Readbacks stall the GPU, so these are for a key press or a one-off check, never for a per-frame log
 public static class DebugHelper3D
 {
-    // The position and velocity buffers as the last step left them, against the tank they are supposed to be inside
     public static void LogPositions(SimulationManager sim)
     {
         if (!sim.Buffers.TryGetValue("Positions", out ComputeBuffer positions) || positions == null)
@@ -24,7 +19,6 @@ public static class DebugHelper3D
             return;
         }
 
-        // Velocities are optional: a NaN hunt only needs the positions
         sim.Buffers.TryGetValue("Velocities", out ComputeBuffer velocities);
         float4[] velocityData = velocities != null ? ComputeHelper.GetBuffer<float4>(velocities) : null;
 
@@ -44,7 +38,6 @@ public static class DebugHelper3D
                 fastest = math.max(fastest, math.length(velocityData[i].xyz));
         }
 
-        // Bounds only mean something if at least one position is finite, so say so rather than print the infinities
         string bounds = broken == positionData.Length ? "none, every position is NaN or infinite" : $"{low} to {high}";
 
         Debug.Log($"Positions: {positionData.Length} in the buffer, numParticles is {sim.numParticles}, {broken} not finite\n"

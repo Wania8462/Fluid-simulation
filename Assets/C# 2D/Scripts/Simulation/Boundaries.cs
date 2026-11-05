@@ -81,22 +81,20 @@ namespace SimulationLogic
                 return;
             }
 
-            // Horizontal
             if (start.y == end.y)
             {
                 for (int i = 0; i < _count; i++)
                 {
-                    // Left-right
                     if (start.x < end.x)
                         if (_particles[i].position.x < start.x || _particles[i].position.x > end.x) continue;
 
-                    // Right-left
                     if (start.x > end.x)
                         if (_particles[i].position.x > start.x || _particles[i].position.x < end.x) continue;
 
                     var dist = start.y - _particles[i].position.y;
                     var prevDist = start.y - _particles[i].prevPosition.y;
 
+                    // Only particles too close to the line, or that crossed it this step, get pushed back
                     if (Math.Abs(dist) >= particleRadius && Math.Sign(dist) == Math.Sign(prevDist)) continue;
 
                     var sign = Math.Sign(prevDist) != 0 ? Math.Sign(prevDist) : Math.Sign(dist);
@@ -105,16 +103,13 @@ namespace SimulationLogic
                 }
             }
 
-            // Vertical
             else if (start.x == end.x)
             {
                 for (int i = 0; i < _count; i++)
                 {
-                    // Top-down
                     if (start.y > end.y)
                         if (_particles[i].position.y > start.y || _particles[i].position.y < end.y) continue;
 
-                    // Down-top
                     if (start.y < end.y)
                         if (_particles[i].position.y < start.y || _particles[i].position.y > end.y) continue;
 
@@ -132,10 +127,10 @@ namespace SimulationLogic
 
         private void RectBarrier(float2 topLeft, float2 bottomRight)
         {
-            LineBarrier(new float2(topLeft.x, topLeft.y), new float2(bottomRight.x, topLeft.y));    // top
-            LineBarrier(new float2(topLeft.x, bottomRight.y), new float2(bottomRight.x, bottomRight.y)); // bottom
-            LineBarrier(new float2(topLeft.x, bottomRight.y), new float2(topLeft.x, topLeft.y));    // left
-            LineBarrier(new float2(bottomRight.x, bottomRight.y), new float2(bottomRight.x, topLeft.y));    // right
+            LineBarrier(new float2(topLeft.x, topLeft.y), new float2(bottomRight.x, topLeft.y));
+            LineBarrier(new float2(topLeft.x, bottomRight.y), new float2(bottomRight.x, bottomRight.y));
+            LineBarrier(new float2(topLeft.x, bottomRight.y), new float2(topLeft.x, topLeft.y));
+            LineBarrier(new float2(bottomRight.x, bottomRight.y), new float2(bottomRight.x, topLeft.y));
         }
 
         private void CircleBarrier(float2 center, float circleRadius)

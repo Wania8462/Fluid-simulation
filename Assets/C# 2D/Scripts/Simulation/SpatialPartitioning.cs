@@ -65,6 +65,7 @@ namespace SimulationLogic
                     Debug.Log("WTF");
                 }
 
+                // Fluid cells store particle IDs, boundary cells store indices
                 grid[GetGridIndex(particle.position)].Add(particle.ID);
             }
         }
@@ -114,7 +115,6 @@ namespace SimulationLogic
             }
         }
 
-        // Returns 75 neighbours on average
         public void GetNeighbours(float2 position, RefList<int> list)
         {
             list.Clear();

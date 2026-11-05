@@ -80,6 +80,7 @@ void CalculateCases(uint3 id : SV_DispatchThreadID)
     float2 cellCenter = VertexPositions[TL] + float2(cellSize.x * 0.5, -cellSize.y * 0.5);
 
     uint index;
+    // Bucket cells by case: each case owns a numCells-sized slice, drawn as one instanced batch
     InterlockedAdd(CaseCounts[caseIdx], 1, index);
     CasePositions[caseIdx * numCells + index] = cellCenter;
     CaseDensities[caseIdx * numCells + index] = float4(

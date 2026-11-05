@@ -136,6 +136,7 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("dt", dt);
         clock++;
 
+        // Neighbour lists are only rebuilt every 4th step
         if (clock % 4 == 0)
         {
             UpdateNeighbours();
@@ -150,7 +151,6 @@ public class GPUSimulationManager : MonoBehaviour
         if (boundaryBodyEnabled)
             UpdateBoundaryBody();
 
-        // Clamp to the borders last
         compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
 
         CalculateVelocities();
@@ -163,7 +163,6 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
         compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
 
-        // Disabled body: leave the boundary grid empty so fluid finds no boundary neighbours
         compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
         if (boundaryBodyEnabled)
             compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
@@ -218,14 +217,12 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void UpdateBoundaryBody()
     {
-        // Rigid boundary body: maintain the shape, then resolve wall contacts
         compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["RigidContactResolution"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["CancelBoundaryBorderVelocity"], 1);
 
-        // Project fluid particles out of the body
         string bodyCollisionKernel = settings.shape == BoundaryShape.Square
             ? "ResolveSquareBodyCollision"
             : "ResolveCircleBodyCollision";
@@ -337,6 +334,7 @@ public class GPUSimulationManager : MonoBehaviour
             UnityEngine.Debug.LogWarning($"GPU simulation manager: boundaryBodyMass is {settings.boundaryBodyMass}, falling back to the neutral response (mass = boundary particle count)");
 
         compute.SetFloat("boundaryFriction", settings.boundaryFriction);
+        // Per-particle inverse mass, so the body's total mass is boundaryBodyMass
         compute.SetFloat("invBodyMass", settings.boundaryBodyMass > 0 ? numBoundaryParticles / settings.boundaryBodyMass : 1f);
         compute.SetFloat("bodyRadius", settings.bodyRadius);
     }
@@ -406,8 +404,6 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
         Buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
 
-        // Read-only aliases: the same buffers bound under the SRV names that
-        // DoubleDensityRelaxation and ApplyViscosity read through (D3D11.0 UAV limit)
         Buffers["PositionsRO"] = Buffers["Positions"];
         Buffers["VelocitiesRO"] = Buffers["Velocities"];
         Buffers["NeighboursRO"] = Buffers["Neighbours"];
@@ -421,7 +417,6 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void ReleaseBuffers()
     {
-        // Distinct: the RO aliases share buffer instances with their RW originals
         foreach (var buffer in Buffers.Values.Distinct())
             ComputeHelper.Release(buffer);
     }
@@ -451,7 +446,6 @@ public class GPUSimulationManager : MonoBehaviour
     );
 
     #region Debug
-    // Retrieve some dummy data at the end of the function or it will only wait for the calls
     private void LogFrameData()
     {
         if (Watcher.Count % 1000 == 0)

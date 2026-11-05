@@ -2,17 +2,16 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-// Open-addressing hash map with ref indexer.
-// WARNING: Do not hold onto a ref across any Add/Remove call — resizing invalidates refs.
 public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, IDictionary<TKey, TValue>
 {
     private struct Entry
     {
         public TKey Key;
         public TValue Value;
-        public int Hash; // 0 = empty, int.MinValue = deleted (tombstone)
+        public int Hash;
     }
 
+    // Open addressing with linear probing. Hash 0 marks an empty slot, Tombstone a removed one
     private const int Empty = 0;
     private const int Tombstone = int.MinValue;
     private const float LoadFactor = 0.72f;
@@ -27,7 +26,6 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         _entries = new Entry[NextPow2(Math.Max(capacity, 4))];
     }
 
-    // ref indexer — public, allows in-place mutation
     public ref TValue this[TKey key]
     {
         get
@@ -39,7 +37,6 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
         }
     }
 
-    // IDictionary<TKey, TValue> indexer — get or add/update
     TValue IDictionary<TKey, TValue>.this[TKey key]
     {
         get
@@ -176,8 +173,6 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
                 array[i++] = new KeyValuePair<TKey, TValue>(entry.Key, entry.Value);
     }
 
-    // Returns ref to value, adding a default entry if key is missing.
-    // Useful for in-place modification without a separate Add call.
     public ref TValue GetOrAdd(TKey key)
     {
         if (_count >= _entries.Length * LoadFactor)
@@ -251,8 +246,8 @@ public class RefDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue
     private int GetHash(TKey key)
     {
         int h = EqualityComparer<TKey>.Default.GetHashCode(key!);
-        // Perturb to avoid clustering and ensure h is never a sentinel value
         h ^= h >> 16;
+        // Keep real hashes clear of the marker values
         if (h == Empty) h = 1;
         if (h == Tombstone) h = Tombstone + 1;
         return h;

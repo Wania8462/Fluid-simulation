@@ -26,8 +26,7 @@ Shader "Custom/Particle3D"
             {
                 v2f o;
 
-                // The circle mesh lies in the XY plane; spanning it by the camera's
-                // right/up axes turns it into a camera-facing billboard
+                // Billboard: the view matrix rows are the camera's right and up axes in world space
                 float3 worldPos = Positions[instanceID].xyz
                     + v.vertex.x * UNITY_MATRIX_V[0].xyz
                     + v.vertex.y * UNITY_MATRIX_V[1].xyz;

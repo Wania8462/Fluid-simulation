@@ -91,8 +91,6 @@ public class SimGraph : MonoBehaviour
         }
     }
 
-    // ── Axes ──────────────────────────────────────────────────────
-
     void DrawAxes()
     {
         float xLen = xTickCount * xZoom;
@@ -116,8 +114,6 @@ public class SimGraph : MonoBehaviour
             origin + new Vector3(0f, yLen, 0f)
         });
     }
-
-    // ── Labels ────────────────────────────────────────────────────
 
     void SpawnAxisLabels()
     {
@@ -144,8 +140,6 @@ public class SimGraph : MonoBehaviour
             xLabels.Add(label);
         }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────
 
     TextMesh SpawnLabel(string text, Vector3 worldPos)
     {
@@ -176,7 +170,6 @@ public class SimGraph : MonoBehaviour
 
     void SetupLineRenderer(LineRenderer target, Color color)
     {
-        // Unlit/Color works in all render pipelines without the purple fallback
         target.material = new Material(Shader.Find("Unlit/Color")) { color = color };
     }
 }

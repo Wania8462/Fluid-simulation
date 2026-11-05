@@ -1,13 +1,11 @@
 using UnityEngine;
 
-// How the fluid particles are drawn
 enum FluidRenderMode
 {
     Billboards,
     ScreenSpace
 }
 
-// The only listener of the simulation's events, so it decides what is set up and drawn
 public class RenderManager : MonoBehaviour
 {
     [SerializeField] private SimulationManager sim;
@@ -28,12 +26,10 @@ public class RenderManager : MonoBehaviour
         TrySetup(particleRenderer, () => particleRenderer.Setup(sim));
         TrySetup(bodyRenderer, () => bodyRenderer.Setup(sim));
 
-        // Only needed in screen-space mode, so leaving it unassigned isn't an error while the fluid is drawn as billboards
         if (screenSpaceFluidRenderer != null || fluidRenderMode == FluidRenderMode.ScreenSpace)
             TrySetup(screenSpaceFluidRenderer, () => screenSpaceFluidRenderer.Setup(sim, bodyRenderer));
     }
 
-    // One renderer failing to set up doesn't stop the others. Clicking the error selects the renderer that failed
     private void TrySetup(Object renderer, System.Action setup)
     {
         try
@@ -48,12 +44,10 @@ public class RenderManager : MonoBehaviour
 
     private void Draw()
     {
-        // Global, so every renderer's shader lights from the same direction without being passed it. Set each frame so inspector changes show
         Shader.SetGlobalVector("lightDirection", lightDirection);
 
         environmentRenderer.DrawTank();
 
-        // Disabling the screen-space renderer takes its command buffer off the camera, so billboard mode renders as before
         bool screenSpace = fluidRenderMode == FluidRenderMode.ScreenSpace;
         if (screenSpaceFluidRenderer != null)
             screenSpaceFluidRenderer.enabled = screenSpace;
@@ -69,9 +63,9 @@ public class RenderManager : MonoBehaviour
             particleRenderer.DrawBoundaryParticles();
     }
 
-    // Runs before SimulationManager.Start, so the first BuffersChanged isn't missed
     private void OnEnable()
     {
+        // Renderers live in an assembly that references the simulation, so they subscribe to its events
         sim.BuffersChanged += Setup;
         sim.StepFinished += Draw;
     }
