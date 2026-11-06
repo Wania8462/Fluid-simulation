@@ -48,28 +48,24 @@ float Poly6Kernel(float dist, float smoothingRadius)
         (64.0 * PI * Pow9(smoothingRadius));
 }
 
-// Used by the density map and marching squares renderers
 float QuadraticSpikyKernel(float relativeDistance)
 {
     return (1.0 - relativeDistance) * (1.0 - relativeDistance);
 }
 
-// 2D Poly6 density kernel, factor = 4 / (π h⁸)
+// Position based fluids (Macklin & Müller 2013)
 float Poly6(float distanceSq, float radiusSq, float factor)
 {
     return factor * Pow3(max(radiusSq - distanceSq, 0.0));
 }
 
-// 2D spiky kernel gradient with respect to the particle, pointing towards the neighbour. factor = 30 / (π h⁵)
 float2 SpikyGradient(float distance, float radius, float factor, float2 towardsNeighbour)
 {
     float overlap = radius - distance;
     return factor * overlap * overlap * towardsNeighbour;
 }
 
-// Density a wall adds as if fluid at rest filled the space beyond it: 2D Poly6 integrated over that half plane,
-// 128 / (35π) times the integral of (1 - u²)^(7/2) from x to 1, done with u = sin θ.
-// x is the distance to the wall over the radius in [0, 1]: 0.5 at the wall, 0 at x = 1
+// Poly6 integrated over the half plane past the wall, x is the distance to the wall over the radius
 float2 WallDensity(float2 x)
 {
     float2 t = asin(x);
@@ -77,7 +73,6 @@ float2 WallDensity(float2 x)
         4.0 / 3.0 * sin(6.0 * t) - 1.0 / 8.0 * sin(8.0 * t)) / (35.0 * PI);
 }
 
-// How fast WallDensity grows as the particle moves towards the wall
 float2 WallDensityGradient(float2 x, float radius)
 {
     float2 y = 1.0 - x * x;

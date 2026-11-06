@@ -15,14 +15,10 @@ public struct SimulationSettings3D
     public float collisionDamping;
 
     [Header("Density")]
-    [Tooltip("PBF iterations per step. More keeps deep fluid less compressed")]
     public int solverIterations;
-    // The stable range depends on spacing and interactionRadius, retune it if either changes
-    [Tooltip("Softens the density constraint. Below about 0.02 (spacing 3, radius 6) the solver overshoots and the fluid blows apart, higher is springier")]
+    [Tooltip("Below about 0.02 (spacing 3, radius 6) the solver overshoots and the fluid blows apart")]
     public float relaxation;
-    [Tooltip("Strength k of the s_corr term that keeps particles from clumping, 0.1 in the PBF paper")]
     public float artificialPressure;
-    [Tooltip("Sim mass per sim unit³. Only sets the particles' mass, the fluid's packing doesn't change")]
     public float restDensity;
 
     [Header("Viscosity")]
@@ -137,7 +133,6 @@ public class SimulationManager : MonoBehaviour
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGroups);
 
-        // Viscosity reads the grid built from last step's predicted positions, which the solve has only nudged since
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGroups);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGroups);
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGroups);
@@ -150,12 +145,11 @@ public class SimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGroups);
         }
 
-        // PBF needs every neighbour of the predicted positions, so the grids are rebuilt every step
+        // PBF needs the neighbours of the predicted positions, so grids are rebuilt every step
         BuildGrid();
         if (numBodies > 0)
             BuildBoundaryGrid();
 
-        // The bodies are moved by the fluid inside every iteration, so they and the fluid settle together
         for (int i = 0; i < settings.solverIterations; i++)
         {
             compute.Dispatch(KernelIDs["CalculateLambdas"], threadGroups);
@@ -389,7 +383,7 @@ public class SimulationManager : MonoBehaviour
         if (settings.solverIterations < 1)
             Debug.LogWarning($"Simulation manager: solverIterations is {settings.solverIterations}, nothing will keep the fluid from compressing");
 
-        // The fluid rests at the spawn spacing, which V = spacing³ gives to within about 1% for Poly6 at h = 2 spacings
+        // The fluid rests at the spawn spacing
         float h = settings.interactionRadius;
         float spacing = flow != null ? flow.Spacing : spawn.Spacing;
         float particleVolume = math.pow(spacing, 3);

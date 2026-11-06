@@ -22,21 +22,19 @@ float4 UnitVector(float4 initialVector, float4 finalVector, float distance)
     return (finalVector - initialVector) / distance;
 }
 
-// Poly6 density kernel, factor = 315 / (64π h⁹)
+// Position based fluids (Macklin & Müller 2013)
 float Poly6(float distanceSq, float radiusSq, float factor)
 {
     return factor * Pow3(max(radiusSq - distanceSq, 0.0));
 }
 
-// Spiky kernel gradient with respect to the particle, pointing towards the neighbour. factor = 45 / (π h⁶)
 float4 SpikyGradient(float distance, float radius, float factor, float4 towardsNeighbour)
 {
     float overlap = radius - distance;
     return factor * overlap * overlap * towardsNeighbour;
 }
 
-// Density a wall adds as if fluid at rest filled the space beyond it: Poly6 integrated over that half space.
-// x is the distance to the wall over the radius in [0, 1]: 0.5 at the wall, 0 at x = 1
+// Poly6 integrated over the half space past the wall, x is the distance to the wall over the radius
 float3 WallDensity(float3 x)
 {
     float3 x2 = x * x;
@@ -44,7 +42,6 @@ float3 WallDensity(float3 x)
     return 0.5 - 315.0 / 256.0 * integral;
 }
 
-// How fast WallDensity grows as the particle moves towards the wall
 float3 WallDensityGradient(float3 x, float radius)
 {
     float3 y = 1.0 - x * x;

@@ -48,7 +48,6 @@ RWStructuredBuffer<int> ForceBuffersY;
 RWStructuredBuffer<int> ForceBuffersZ;
 RWStructuredBuffer<float4> Velocities;
 
-// PBF state. Densities are number densities, 1 at rest; Lambdas are the constraint multipliers
 RWStructuredBuffer<float> Densities;
 RWStructuredBuffer<float> Lambdas;
 RWStructuredBuffer<float4> DeltaPositions;
@@ -96,7 +95,6 @@ const float gravity;
 const float mouseAttractiveness;
 const float mouseRadius;
 
-// PBF (Macklin & Müller 2013) in number density form: each particle stands for particleVolume of fluid
 const float particleVolume;
 const float particleMass;
 const float restSpacing;
@@ -181,14 +179,11 @@ void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
     SetForceBuffer(id.x, ZeroImpulse);
 }
 
-// Distances to the walls over the interaction radius, 1 (no effect) past it
 float3 WallDistances(float4 position)
 {
     return saturate((realHalfBoundSize.xyz - abs(position.xyz)) / interactionRadius);
 }
 
-// C = max(density - 1, 0) and lambda = -C / (sum of |grad C|² + relaxation). Clamped so the free surface never pulls.
-// The walls count as fluid at rest beyond them, so particles next to one aren't missing half their neighbours
 [numthreads(64,1,1)]
 void CalculateLambdas (uint3 id : SV_DispatchThreadID)
 {
@@ -198,8 +193,8 @@ void CalculateLambdas (uint3 id : SV_DispatchThreadID)
     uint3 cellPosition = GetCellPosition(position);
 
     float density = 0;
-    float4 gradient = 0;            // Of C with respect to this particle
-    float neighbourGradients = 0;   // Sum of |grad C|² with respect to each neighbour
+    float4 gradient = 0;
+    float neighbourGradients = 0;
 
     // Visit the 3x3x3 block of cells around the particle
     for (uint i = 0; i < 27; i++)
@@ -232,16 +227,17 @@ void CalculateLambdas (uint3 id : SV_DispatchThreadID)
     if (numBodies > 0)
         AddBoundaryDensity(position, cellPosition, density, gradient);
 
+    // The walls count as fluid at rest beyond them
     float3 wallDistances = WallDistances(position);
     density += dot(WallDensity(wallDistances), float3(1, 1, 1));
     gradient.xyz += sign(position.xyz) * WallDensityGradient(wallDistances, interactionRadius);
 
+    // Clamped so the free surface never pulls
     float constraint = max(density - 1.0, 0.0);
     Densities[id.x] = density;
     Lambdas[id.x] = -constraint / (dot(gradient, gradient) + neighbourGradients + relaxation);
 }
 
-// Gathered from both sides of each pair, so no atomics are needed
 [numthreads(64,1,1)]
 void CalculateDeltaPositions (uint3 id : SV_DispatchThreadID)
 {
@@ -251,7 +247,7 @@ void CalculateDeltaPositions (uint3 id : SV_DispatchThreadID)
     float lambda = LambdasRO[id.x];
     uint3 cellPosition = GetCellPosition(position);
 
-    // Artificial pressure s_corr = -k (W(r) / W(0.2 h))^4 keeps particles from clumping
+    // Artificial pressure (s_corr) keeps particles from clumping
     float sCorrKernel = Poly6(0.04 * interactionRadiusSq, interactionRadiusSq, poly6Factor);
     float4 delta = 0;
 

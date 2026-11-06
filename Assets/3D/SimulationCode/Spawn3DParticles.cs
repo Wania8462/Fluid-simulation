@@ -29,7 +29,6 @@ public class Spawn3DParticles : MonoBehaviour
     [SerializeField] private float3 tankSize = new(100, 100, 100);
     [SerializeField] private Color tankGizmoColor = new(1, 1, 1, 0.4f);
 
-    // The PBF solver rests the fluid at this spacing
     public float Spacing => spacing;
 
     public int GetNumberOfParticles() => particleCubeLength * particleCubeLength * particleCubeLength;

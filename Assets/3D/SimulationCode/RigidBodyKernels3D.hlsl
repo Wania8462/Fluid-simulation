@@ -27,7 +27,6 @@ float3 ReadBoundaryForceBuffer(uint index)
                   (float)BoundaryForceBuffersZ[index]) / FloatScale;
 }
 
-// Boundary particles each stand for their volume of fluid (Akinci et al. 2012)
 void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float4 gradient)
 {
     for (uint i = 0; i < 27; i++)
@@ -73,7 +72,6 @@ void AddBoundaryCorrection(float4 position, uint3 cellPosition, float lambda, in
 
             float w = step(1e-12, magSq) * step(magSq, interactionRadiusSq);
             float4 r = (boundaryPosition - position) / max(mag, 1e-9);
-            // lambda is never above 0, so bodies never pull fluid in
             float4 correction = w * lambda * BoundaryVolumesRO[boundary] *
                 SpikyGradient(mag, interactionRadius, spikyGradFactor, r);
 
@@ -185,7 +183,6 @@ void CalculateBoundaryVolumes (uint3 id : SV_DispatchThreadID)
             uint neighbour = BoundarySortedIndices[j];
             float magSq = DistanceSq(position, BoundaryPositions[neighbour]);
 
-            // V = 1 / sum of W over the same body's samples, itself included. Poly6 is 0 out of range
             float w = BoundaryBodyIndices[neighbour] == body;
             delta += w * Poly6(magSq, interactionRadiusSq, poly6Factor);
         }
@@ -275,8 +272,7 @@ void ApplyCouplingForces (uint3 id : SV_DispatchThreadID)
         torque += BodyCouplingSums[slot + 1].xyz;
     }
 
-    // The boundary particles hold the opposite of the fluid's position corrections, so weighting them by
-    // particleMass keeps momentum
+    // Weighted by particleMass so momentum is kept
     force *= particleMass;
     torque *= particleMass;
 
@@ -301,7 +297,7 @@ void AttractBodiesToMouse (uint3 id : SV_DispatchThreadID)
     BodyStates[id.x] = state;
 }
 
-// Bodies stop a particle spacing short of the walls, so fluid gets under a body on the floor and pushes it up
+// Stops a particle spacing short of the walls, so fluid gets under a body on the floor
 float3 WallPushOut(float3 position)
 {
     float3 halfSize = realHalfBoundSize.xyz - restSpacing;

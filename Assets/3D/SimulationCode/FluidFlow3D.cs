@@ -26,7 +26,6 @@ public class FluidFlow3D : MonoBehaviour
 
     private float3 HalfSize => sourceSize / 2;
 
-    // The PBF solver rests the fluid at this spacing
     public float Spacing => spacing;
 
     public float4[] InitializePositions()
