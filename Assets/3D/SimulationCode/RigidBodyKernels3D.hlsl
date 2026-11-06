@@ -27,38 +27,9 @@ float3 ReadBoundaryForceBuffer(uint index)
                   (float)BoundaryForceBuffersZ[index]) / FloatScale;
 }
 
-void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float nearDensity)
+// Boundary particles each stand for their volume of fluid (Akinci et al. 2012)
+void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float4 gradient)
 {
-    for (uint i = 0; i < 27; i++)
-    {
-        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset;
-        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
-        uint cell = GetCellIndex(neighbourPos);
-
-        for (uint j = BoundaryCellStartRO[cell]; j < BoundaryCellStartRO[cell + 1]; j++)
-        {
-            uint boundary = BoundarySortedIndicesRO[j];
-            float magSq = DistanceSq(position, BoundaryPositionsRO[boundary]);
-            float q = sqrt(magSq) / interactionRadius;
-
-            // Branchless mask: 0 when the particles coincide or are out of range
-            float w = step(1e-12, magSq) * step(q, 1.0);
-            // Boundary particles count as fluid weighted by psi = restDensity * volume
-            float psi = restDensity * BoundaryVolumesRO[boundary];
-
-            density += w * psi * QuadraticSpikyKernel(q);
-            nearDensity += w * psi * CubicSpikyKernel(q);
-        }
-    }
-}
-
-void ApplyBoundaryPressure(uint index, float4 position, uint3 cellPosition, float pressure, float nearPressure)
-{
-    // Clamped at 0 so bodies never pull fluid in
-    float boundaryPressure = max(pressure, 0.0);
-    float boundaryNearPressure = max(nearPressure, 0.0);
-
     for (uint i = 0; i < 27; i++)
     {
         int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
@@ -72,16 +43,43 @@ void ApplyBoundaryPressure(uint index, float4 position, uint3 cellPosition, floa
             float4 boundaryPosition = BoundaryPositionsRO[boundary];
             float magSq = DistanceSq(position, boundaryPosition);
             float mag = sqrt(magSq);
-            float q = mag / interactionRadius;
 
-            float w = step(1e-12, magSq) * step(q, 1.0);
+            // Branchless mask: 0 when the particles coincide or are out of range
+            float w = step(1e-12, magSq) * step(magSq, interactionRadiusSq);
+            float volume = BoundaryVolumesRO[boundary];
             float4 r = (boundaryPosition - position) / max(mag, 1e-9);
-            float4 displacement = w * restDensity * BoundaryVolumesRO[boundary] *
-                PressureDisplacement(dt, q, boundaryPressure, boundaryNearPressure, r);
 
-            AtomicAddForceBuffer(index, -displacement);
+            density += w * volume * Poly6(magSq, interactionRadiusSq, poly6Factor);
+            gradient += w * volume * SpikyGradient(mag, interactionRadius, spikyGradFactor, r);
+        }
+    }
+}
+
+void AddBoundaryCorrection(float4 position, uint3 cellPosition, float lambda, inout float4 delta)
+{
+    for (uint i = 0; i < 27; i++)
+    {
+        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
+        uint3 neighbourPos = cellPosition + cellOffset;
+        if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
+        uint cell = GetCellIndex(neighbourPos);
+
+        for (uint j = BoundaryCellStartRO[cell]; j < BoundaryCellStartRO[cell + 1]; j++)
+        {
+            uint boundary = BoundarySortedIndicesRO[j];
+            float4 boundaryPosition = BoundaryPositionsRO[boundary];
+            float magSq = DistanceSq(position, boundaryPosition);
+            float mag = sqrt(magSq);
+
+            float w = step(1e-12, magSq) * step(magSq, interactionRadiusSq);
+            float4 r = (boundaryPosition - position) / max(mag, 1e-9);
+            // lambda is never above 0, so bodies never pull fluid in
+            float4 correction = w * lambda * BoundaryVolumesRO[boundary] *
+                SpikyGradient(mag, interactionRadius, spikyGradFactor, r);
+
+            delta += correction;
             // The reaction is summed into force and torque on the body by SumCouplingForces
-            AtomicAddBoundaryForceBuffer(boundary, displacement);
+            AtomicAddBoundaryForceBuffer(boundary, -correction);
         }
     }
 }
@@ -186,10 +184,10 @@ void CalculateBoundaryVolumes (uint3 id : SV_DispatchThreadID)
         {
             uint neighbour = BoundarySortedIndices[j];
             float magSq = DistanceSq(position, BoundaryPositions[neighbour]);
-            float q = sqrt(magSq) / interactionRadius;
 
-            float w = step(1e-12, magSq) * step(q, 1.0) * (BoundaryBodyIndices[neighbour] == body);
-            delta += w * QuadraticSpikyKernel(q);
+            // V = 1 / sum of W over the same body's samples, itself included. Poly6 is 0 out of range
+            float w = BoundaryBodyIndices[neighbour] == body;
+            delta += w * Poly6(magSq, interactionRadiusSq, poly6Factor);
         }
     }
 
@@ -277,6 +275,11 @@ void ApplyCouplingForces (uint3 id : SV_DispatchThreadID)
         torque += BodyCouplingSums[slot + 1].xyz;
     }
 
+    // The boundary particles hold the opposite of the fluid's position corrections, so weighting them by
+    // particleMass keeps momentum
+    force *= particleMass;
+    torque *= particleMass;
+
     float3x3 invInertiaWorld = InverseInertiaWorld(state.rotation, properties.invInertia.xyz);
     state.position.xyz += properties.invMass * force;
     state.rotation = IntegrateRotation(state.rotation, ClampRotation(mul(invInertiaWorld, torque), MaxCorrectionAngle));
@@ -298,10 +301,12 @@ void AttractBodiesToMouse (uint3 id : SV_DispatchThreadID)
     BodyStates[id.x] = state;
 }
 
+// Bodies stop a particle spacing short of the walls, so fluid gets under a body on the floor and pushes it up
 float3 WallPushOut(float3 position)
 {
-    float3 outside = step(realHalfBoundSize.xyz, abs(position));
-    return (sign(position) * realHalfBoundSize.xyz - position) * outside;
+    float3 halfSize = realHalfBoundSize.xyz - restSpacing;
+    float3 outside = step(halfSize, abs(position));
+    return (sign(position) * halfSize - position) * outside;
 }
 
 void AccumulateContact(inout float4 pushSum, inout float4 frictionSum, inout float4 torqueSum, inout float4 approachSum,

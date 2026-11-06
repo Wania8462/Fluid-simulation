@@ -261,9 +261,10 @@ MonoBehaviour:
     mouseAttractiveness: 0.5
     mouseRadius: 10000
     collisionDamping: 0.083
-    stiffness: 200
-    nearStiffness: 20
-    restDensity: 5
+    solverIterations: 4
+    relaxation: 0.04
+    artificialPressure: 0.1
+    restDensity: 1
     plasticity: 0.05
     highViscosity: 0.2
     lowViscosity: 3
@@ -275,7 +276,7 @@ MonoBehaviour:
       y: -100
     bodyRotationRad: 0
     boundaryFriction: 1
-    boundaryBodyMass: 200
+    boundaryBodyMass: 750
   maxParticlesPerCell: 64
   maxSpringsPerParticle: 64
   particleRadius: 0.5

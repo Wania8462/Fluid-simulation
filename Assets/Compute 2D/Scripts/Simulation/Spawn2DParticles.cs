@@ -13,6 +13,9 @@ public class Spawn2DParticles : MonoBehaviour
     [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
     private float2 boundingBoxSize;
 
+    // The PBF solver rests the fluid at this spacing
+    public float Spacing => spacing;
+
     public int GetNumberOfParticles() => particleSquareLength * particleSquareLength;
 
     public float2[] InitializePositions()

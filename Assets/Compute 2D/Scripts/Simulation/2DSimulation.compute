@@ -1,7 +1,8 @@
 #pragma kernel ExternalForces
 #pragma kernel ClearForceBuffers
-#pragma kernel DoubleDensityRelaxation
-#pragma kernel ApplyForceBuffers
+#pragma kernel CalculateLambdas
+#pragma kernel CalculateDeltaPositions
+#pragma kernel ApplyDeltaPositions
 #pragma kernel ApplyForceBuffersToVelocities
 #pragma kernel ApplyViscosity
 #pragma kernel ResolveBoundaries
@@ -42,8 +43,10 @@ RWBuffer<int> ForceBuffersX;
 RWBuffer<int> ForceBuffersY;
 RWStructuredBuffer<float2> Velocities;
 
+// PBF state. Densities are number densities, 1 at rest; Lambdas are the constraint multipliers
 RWBuffer<float> Densities;
-RWBuffer<float> NearDensities;
+RWBuffer<float> Lambdas;
+RWStructuredBuffer<float2> DeltaPositions;
 
 
 RWBuffer<uint> Grid;
@@ -67,6 +70,7 @@ RWBuffer<uint> BoundaryNeighboursLength;
 // Read-only views of the RW buffers above
 StructuredBuffer<float2> PositionsRO;
 StructuredBuffer<float2> VelocitiesRO;
+Buffer<float> LambdasRO;
 Buffer<uint> NeighboursRO;
 Buffer<uint> NeighboursLengthRO;
 StructuredBuffer<float2> BoundaryPositionsRO;
@@ -90,9 +94,13 @@ const float gravity;
 const float mouseAttractiveness;
 const float mouseRadius;
 
-const float stiffness;
-const float nearStiffness;
-const float restDensity;
+// PBF (Macklin & Müller 2013) in number density form: each particle stands for particleVolume (an area in 2D) of fluid
+const float particleVolume;
+const float particleMass;
+const float relaxation;
+const float artificialPressure;
+const float poly6Factor;
+const float spikyGradFactor;
 
 const float highViscosity;
 const float lowViscosity;
@@ -168,81 +176,125 @@ void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
     SetForceBuffer(id.x, ZeroImpulse);
 }
 
+// Distances to the walls over the interaction radius, 1 (no effect) past it
+float2 WallDistances(float2 position)
+{
+    return saturate((realHalfBoundSize - abs(position)) / interactionRadius);
+}
+
+// C = max(density - 1, 0) and lambda = -C / (sum of |grad C|² + relaxation). Clamped so the free surface never pulls.
+// The walls count as fluid at rest beyond them, so particles next to one aren't missing half their neighbours
 [numthreads(64,1,1)]
-void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
+void CalculateLambdas (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    Densities[id.x] = 0;
-    NearDensities[id.x] = 0;
+    float2 position = PositionsRO[id.x];
+    float density = 0;
+    float2 gradient = 0;            // Of C with respect to this particle
+    float neighbourGradients = 0;   // Sum of |grad C|² with respect to each neighbour
+
+    // The neighbour list includes the particle itself, which counts towards its density
+    for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
+    {
+        float2 neighbourPosition = PositionsRO[NeighboursRO[id.x + i * numParticles]];
+        float magSq = DistanceSq(position, neighbourPosition);
+        if (magSq >= interactionRadiusSq) continue;
+
+        density += particleVolume * Poly6(magSq, interactionRadiusSq, poly6Factor);
+        if (magSq == 0) continue;
+
+        float mag = sqrt(magSq);
+        float2 neighbourGradient = particleVolume *
+            SpikyGradient(mag, interactionRadius, spikyGradFactor, UnitVector(position, neighbourPosition, mag));
+
+        gradient += neighbourGradient;
+        neighbourGradients += dot(neighbourGradient, neighbourGradient);
+    }
+
+    // Boundary particles each stand for their volume of fluid (Akinci et al. 2012)
+    for (uint b = 0; b < BoundaryNeighboursLengthRO[id.x]; b++)
+    {
+        uint bIndex = BoundaryNeighboursRO[id.x + b * numParticles];
+        float2 boundaryPosition = BoundaryPositionsRO[bIndex];
+        float magSq = DistanceSq(position, boundaryPosition);
+        float mag = sqrt(magSq);
+
+        // Branchless mask: 0 when the particles coincide or are out of range
+        float w = step(1e-12, magSq) * step(magSq, interactionRadiusSq);
+        float volume = BoundaryVolumesRO[bIndex];
+        float2 r = (boundaryPosition - position) / max(mag, 1e-9);
+
+        density += w * volume * Poly6(magSq, interactionRadiusSq, poly6Factor);
+        gradient += w * volume * SpikyGradient(mag, interactionRadius, spikyGradFactor, r);
+    }
+
+    float2 wallDistances = WallDistances(position);
+    density += dot(WallDensity(wallDistances), float2(1, 1));
+    gradient += sign(position) * WallDensityGradient(wallDistances, interactionRadius);
+
+    float constraint = max(density - 1.0, 0.0);
+    Densities[id.x] = density;
+    Lambdas[id.x] = -constraint / (dot(gradient, gradient) + neighbourGradients + relaxation);
+}
+
+// Gathered from both sides of each pair, so the fluid needs no atomics
+[numthreads(64,1,1)]
+void CalculateDeltaPositions (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    float2 position = PositionsRO[id.x];
+    float lambda = LambdasRO[id.x];
+
+    // Artificial pressure s_corr = -k (W(r) / W(0.2 h))^4 keeps particles from clumping
+    float sCorrKernel = Poly6(0.04 * interactionRadiusSq, interactionRadiusSq, poly6Factor);
+    float2 delta = 0;
 
     for (uint i = 0; i < NeighboursLengthRO[id.x]; i++)
     {
-        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + i * numParticles]]);
-        float q = mag / interactionRadius;
-        // Branchless mask: 0 when the particles coincide or are out of range
-        float w = step(1e-12, mag) * step(q, 1.0);
+        uint neighbour = NeighboursRO[id.x + i * numParticles];
+        float2 neighbourPosition = PositionsRO[neighbour];
+        float magSq = DistanceSq(position, neighbourPosition);
+        if (magSq == 0 || magSq >= interactionRadiusSq) continue;
 
-        Densities[id.x] += w * QuadraticSpikyKernel(q);
-        NearDensities[id.x] += w * CubicSpikyKernel(q);
+        float mag = sqrt(magSq);
+        float ratio = Poly6(magSq, interactionRadiusSq, poly6Factor) / sCorrKernel;
+        float sCorr = -artificialPressure * ratio * ratio * ratio * ratio;
+
+        delta += particleVolume * (lambda + LambdasRO[neighbour] + sCorr) *
+            SpikyGradient(mag, interactionRadius, spikyGradFactor, UnitVector(position, neighbourPosition, mag));
     }
 
     for (uint b = 0; b < BoundaryNeighboursLengthRO[id.x]; b++)
     {
         uint bIndex = BoundaryNeighboursRO[id.x + b * numParticles];
-        float mag = Distance(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
-        float q = mag / interactionRadius;
-        float w = step(1e-12, mag) * step(q, 1.0);
+        float2 boundaryPosition = BoundaryPositionsRO[bIndex];
+        float magSq = DistanceSq(position, boundaryPosition);
+        float mag = sqrt(magSq);
 
-        // Boundary particles count as fluid weighted by psi = restDensity * volume
-        float psi = restDensity * BoundaryVolumesRO[bIndex];
+        float w = step(1e-12, magSq) * step(magSq, interactionRadiusSq);
+        float2 r = (boundaryPosition - position) / max(mag, 1e-9);
+        // lambda is never above 0, so the body never pulls fluid in
+        float2 correction = w * lambda * BoundaryVolumesRO[bIndex] *
+            SpikyGradient(mag, interactionRadius, spikyGradFactor, r);
 
-        Densities[id.x] += w * psi * QuadraticSpikyKernel(q);
-        NearDensities[id.x] += w * psi * CubicSpikyKernel(q);
+        delta += correction;
+        // The reaction moves the body, weighted by particleMass so momentum is kept
+        AtomicAddBoundaryForceBuffer(bIndex, -particleMass * correction);
     }
 
-    float pressure = stiffness * (Densities[id.x] - restDensity);
-    float nearPressure = nearStiffness * NearDensities[id.x];
+    delta += lambda * sign(position) * WallDensityGradient(WallDistances(position), interactionRadius);
 
-    for (uint j = 0; j < NeighboursLengthRO[id.x]; j++)
-    {
-        float mag = Distance(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]]);
-        float q = mag / interactionRadius;
-        float w = step(1e-12, mag) * step(q, 1.0);
-
-        float2 r = UnitVector(PositionsRO[id.x], PositionsRO[NeighboursRO[id.x + j * numParticles]], mag);
-        float2 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
-
-        AtomicAddForceBuffer(NeighboursRO[id.x + j * numParticles], w * displacement);
-        AtomicAddForceBuffer(id.x, w * -displacement);
-    }
-
-    // Clamped at 0 so the body never pulls fluid in
-    float boundaryPressure = max(pressure, 0.0);
-    float boundaryNearPressure = max(nearPressure, 0.0);
-
-    for (uint k = 0; k < BoundaryNeighboursLengthRO[id.x]; k++)
-    {
-        uint bIndex = BoundaryNeighboursRO[id.x + k * numParticles];
-        float mag = Distance(PositionsRO[id.x], BoundaryPositionsRO[bIndex]);
-        float q = mag / interactionRadius;
-        float w = step(1e-12, mag) * step(q, 1.0);
-
-        float2 r = (BoundaryPositionsRO[bIndex] - PositionsRO[id.x]) / mag;
-        float2 displacement = PressureDisplacement(dt, q, boundaryPressure, boundaryNearPressure, r);
-        float psi = restDensity * BoundaryVolumesRO[bIndex];
-
-        AtomicAddForceBuffer(id.x, -w * psi * displacement);
-        AtomicAddBoundaryForceBuffer(bIndex, w * psi * displacement);
-    }
+    DeltaPositions[id.x] = delta;
 }
 
 [numthreads(64,1,1)]
-void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
+void ApplyDeltaPositions (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    Positions[id.x] += ReadForceBuffer(id.x);
+    Positions[id.x] += DeltaPositions[id.x];
 }
 
 [numthreads(64,1,1)]
@@ -554,14 +606,13 @@ void CalculateBoundaryVolumes (uint3 id : SV_DispatchThreadID)
         {
             uint n = BoundaryGrid[neighbourIndex + j * columns * rows];
             float magSq = DistanceSq(BoundaryPositions[id.x], BoundaryPositions[n]);
-            float q = sqrt(magSq) / interactionRadius;
 
-            float w = step(1e-12, magSq) * step(q, 1.0);
-            delta += w * QuadraticSpikyKernel(q);
+            // V = 1 / sum of W over the samples, itself included. Poly6 is 0 out of range
+            delta += Poly6(magSq, interactionRadiusSq, poly6Factor);
         }
     }
 
-    BoundaryVolumes[id.x] = 1.0 / delta;
+    BoundaryVolumes[id.x] = delta > 0 ? 1.0 / delta : 0.0;
 }
 
 // Body kernels run as a single group: strided loops plus a shared-memory tree reduction

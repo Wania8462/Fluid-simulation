@@ -15,8 +15,14 @@ public struct SimulationSettings3D
     public float collisionDamping;
 
     [Header("Density")]
-    public float stiffness;
-    public float nearStiffness;
+    [Tooltip("PBF iterations per step. More keeps deep fluid less compressed")]
+    public int solverIterations;
+    // The stable range depends on spacing and interactionRadius, retune it if either changes
+    [Tooltip("Softens the density constraint. Below about 0.02 (spacing 3, radius 6) the solver overshoots and the fluid blows apart, higher is springier")]
+    public float relaxation;
+    [Tooltip("Strength k of the s_corr term that keeps particles from clumping, 0.1 in the PBF paper")]
+    public float artificialPressure;
+    [Tooltip("Sim mass per sim unit³. Only sets the particles' mass, the fluid's packing doesn't change")]
     public float restDensity;
 
     [Header("Viscosity")]
@@ -71,8 +77,6 @@ public class SimulationManager : MonoBehaviour
     private int3 boundaryThreadGroups;
     private int numScanSteps;
 
-    private int clock;
-
     private void Start()
     {
         Setup();
@@ -124,25 +128,16 @@ public class SimulationManager : MonoBehaviour
         float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeFramerate;
         compute.SetFloat("dt", dt);
 
-        // Grids are only rebuilt every 4th step
-        if (clock % 4 == 0)
+        if (flow != null)
         {
-            if (flow != null)
-            {
-                // Recycle before BuildGrid and AdvancePredictedPositions so the teleport isn't hashed stale or turned into velocity
-                flow.SetRecycleSeed(compute, Time.frameCount);
-                compute.Dispatch(KernelIDs["RecycleParticles"], threadGroups);
-            }
-
-            BuildGrid();
-            if (numBodies > 0)
-                BuildBoundaryGrid();
-            clock = 0;
+            // Recycle before AdvancePredictedPositions so the teleport isn't turned into velocity
+            flow.SetRecycleSeed(compute, Time.frameCount);
+            compute.Dispatch(KernelIDs["RecycleParticles"], threadGroups);
         }
-        clock++;
 
         compute.Dispatch(KernelIDs["ExternalForces"], threadGroups);
 
+        // Viscosity reads the grid built from last step's predicted positions, which the solve has only nudged since
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGroups);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGroups);
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGroups);
@@ -153,20 +148,34 @@ public class SimulationManager : MonoBehaviour
         {
             DispatchPerBody("BodyAdvancePredictedStates");
             compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGroups);
-            compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGroups);
         }
 
-        for (int i = 0; i < 2; i++)
-        {
-            compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGroups);
-            compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGroups);
-            compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGroups);
-        }
-
+        // PBF needs every neighbour of the predicted positions, so the grids are rebuilt every step
+        BuildGrid();
         if (numBodies > 0)
+            BuildBoundaryGrid();
+
+        // The bodies are moved by the fluid inside every iteration, so they and the fluid settle together
+        for (int i = 0; i < settings.solverIterations; i++)
         {
-            DispatchPerBody("SumCouplingForces");
-            DispatchPerBody("ApplyCouplingForces");
+            compute.Dispatch(KernelIDs["CalculateLambdas"], threadGroups);
+
+            if (numBodies > 0)
+                compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGroups);
+
+            compute.Dispatch(KernelIDs["CalculateDeltaPositions"], threadGroups);
+            compute.Dispatch(KernelIDs["ApplyDeltaPositions"], threadGroups);
+            compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGroups);
+
+            if (flow != null)
+                compute.Dispatch(KernelIDs["ResolveReservoir"], threadGroups);
+
+            if (numBodies > 0)
+            {
+                DispatchPerBody("SumCouplingForces");
+                DispatchPerBody("ApplyCouplingForces");
+                compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGroups);
+            }
         }
 
         if (Input.GetMouseButton(0))
@@ -284,7 +293,8 @@ public class SimulationManager : MonoBehaviour
         // An even pass count makes the ping-pong end in CellStart; the extra pass is a plain copy
         if (numScanSteps % 2 == 1) numScanSteps++;
 
-        clock = 0;
+        // The first step's viscosity reads the grid before that step builds it
+        BuildGrid();
 
         if (numBodies > 0)
         {
@@ -376,9 +386,20 @@ public class SimulationManager : MonoBehaviour
         compute.SetFloat("mouseRadius", settings.mouseRadius);
         compute.SetFloat("collisionDamp", settings.collisionDamping);
 
-        compute.SetFloat("stiffness", settings.stiffness);
-        compute.SetFloat("nearStiffness", settings.nearStiffness);
-        compute.SetFloat("restDensity", settings.restDensity);
+        if (settings.solverIterations < 1)
+            Debug.LogWarning($"Simulation manager: solverIterations is {settings.solverIterations}, nothing will keep the fluid from compressing");
+
+        // The fluid rests at the spawn spacing, which V = spacing³ gives to within about 1% for Poly6 at h = 2 spacings
+        float h = settings.interactionRadius;
+        float spacing = flow != null ? flow.Spacing : spawn.Spacing;
+        float particleVolume = math.pow(spacing, 3);
+        compute.SetFloat("particleVolume", particleVolume);
+        compute.SetFloat("particleMass", settings.restDensity * particleVolume);
+        compute.SetFloat("restSpacing", spacing);
+        compute.SetFloat("relaxation", settings.relaxation);
+        compute.SetFloat("artificialPressure", settings.artificialPressure);
+        compute.SetFloat("poly6Factor", 315 / (64 * math.PI * math.pow(h, 9)));
+        compute.SetFloat("spikyGradFactor", 45 / (math.PI * math.pow(h, 6)));
 
         compute.SetFloat("highViscosity", settings.highViscosity);
         compute.SetFloat("lowViscosity", settings.lowViscosity);
@@ -441,7 +462,8 @@ public class SimulationManager : MonoBehaviour
         Buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float4>(numParticles);
 
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
-        Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["Lambdas"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["DeltaPositions"] = ComputeHelper.CreateStructuredBufferWithData<float4>(numParticles);
 
         Buffers["CellStart"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
         Buffers["ScanTemp"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.NumCells + 1);
@@ -451,6 +473,7 @@ public class SimulationManager : MonoBehaviour
         // Read-only aliases keep the heavy kernels within the 8 read-write resources a compute shader gets
         Buffers["PositionsRO"] = Buffers["Positions"];
         Buffers["VelocitiesRO"] = Buffers["Velocities"];
+        Buffers["LambdasRO"] = Buffers["Lambdas"];
         Buffers["CellStartRO"] = Buffers["CellStart"];
         Buffers["SortedIndicesRO"] = Buffers["SortedIndices"];
 

@@ -29,8 +29,14 @@ public struct SimulationSettings
     public float collisionDamping;
 
     [Header("Density")]
-    public float stiffness;
-    public float nearStiffness;
+    [Tooltip("PBF iterations per step. More keeps deep fluid less compressed")]
+    public int solverIterations;
+    // The stable range depends on spacing and interactionRadius, retune it if either changes
+    [Tooltip("Softens the density constraint. Too low and the solver overshoots and the fluid blows apart, higher is springier")]
+    public float relaxation;
+    [Tooltip("Strength k of the s_corr term that keeps particles from clumping, 0.1 in the PBF paper")]
+    public float artificialPressure;
+    [Tooltip("Sim mass per sim unit². Only sets the particles' mass, the fluid's packing doesn't change")]
     public float restDensity;
 
     [Header("Springs")]
@@ -86,8 +92,6 @@ public class GPUSimulationManager : MonoBehaviour
     private int3 gridThreadGropus;
     private int3 boundaryThreadGropus;
 
-    private int clock;
-
     private readonly int debugLength = 100;
 
     private float _maxForce = 0f;
@@ -134,18 +138,14 @@ public class GPUSimulationManager : MonoBehaviour
     {
         float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeFramerate;
         compute.SetFloat("dt", dt);
-        clock++;
 
-        // Neighbour lists are only rebuilt every 4th step
-        if (clock % 4 == 0)
-        {
-            UpdateNeighbours();
-            clock = 0;
-        }
-
+        // Viscosity reads the neighbours found from last step's predicted positions, which the solve has only nudged since
         ApplyExternalForcesAndViscosity();
         AdvancePredictedPositions();
-        RelaxDensities();
+
+        // PBF needs every neighbour of the predicted positions, so the lists are rebuilt every step
+        UpdateNeighbours();
+        SolveDensityConstraints();
         ApplyMouseInteraction();
 
         if (boundaryBodyEnabled)
@@ -187,16 +187,26 @@ public class GPUSimulationManager : MonoBehaviour
             compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
     }
 
-    private void RelaxDensities()
+    // The body is moved by the fluid inside every iteration, so they settle together
+    private void SolveDensityConstraints()
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < settings.solverIterations; i++)
         {
-            compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-            compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
-            compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
-            compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
+            compute.Dispatch(KernelIDs["CalculateLambdas"], threadGropus);
+
             if (boundaryBodyEnabled)
+                compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
+
+            compute.Dispatch(KernelIDs["CalculateDeltaPositions"], threadGropus);
+            compute.Dispatch(KernelIDs["ApplyDeltaPositions"], threadGropus);
+            compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+
+            if (boundaryBodyEnabled)
+            {
                 compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
+                compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
+                compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
+            }
         }
     }
 
@@ -294,6 +304,9 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGropus);
 
+        // The first step's viscosity reads the neighbours before that step finds them
+        UpdateNeighbours();
+
         Camera.main.orthographicSize = math.max(spawn.GetRealHalfBoundSize(0).y + 2, spawn.GetRealHalfBoundSize(0).x - 237);
         render.Setup(this);
         densityMap.Setup(this, boundingBoxSize);
@@ -319,9 +332,18 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("mouseRadius", settings.mouseRadius);
         compute.SetFloat("collisionDamp", settings.collisionDamping);
 
-        compute.SetFloat("stiffness", settings.stiffness);
-        compute.SetFloat("nearStiffness", settings.nearStiffness);
-        compute.SetFloat("restDensity", settings.restDensity);
+        if (settings.solverIterations < 1)
+            UnityEngine.Debug.LogWarning($"GPU simulation manager: solverIterations is {settings.solverIterations}, nothing will keep the fluid from compressing");
+
+        // The fluid rests at the spawn spacing, which V = spacing² gives to within about 1% for 2D Poly6 at h = 3 spacings
+        float h = settings.interactionRadius;
+        float particleVolume = spawn.Spacing * spawn.Spacing;
+        compute.SetFloat("particleVolume", particleVolume);
+        compute.SetFloat("particleMass", settings.restDensity * particleVolume);
+        compute.SetFloat("relaxation", settings.relaxation);
+        compute.SetFloat("artificialPressure", settings.artificialPressure);
+        compute.SetFloat("poly6Factor", 4 / (math.PI * math.pow(h, 8)));
+        compute.SetFloat("spikyGradFactor", 30 / (math.PI * math.pow(h, 5)));
 
         compute.SetFloat("plasticity", settings.plasticity);
         compute.SetFloat("highViscosity", settings.highViscosity);
@@ -379,7 +401,8 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
 
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
-        Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["Lambdas"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["DeltaPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
 
         Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
         Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
@@ -406,6 +429,7 @@ public class GPUSimulationManager : MonoBehaviour
 
         Buffers["PositionsRO"] = Buffers["Positions"];
         Buffers["VelocitiesRO"] = Buffers["Velocities"];
+        Buffers["LambdasRO"] = Buffers["Lambdas"];
         Buffers["NeighboursRO"] = Buffers["Neighbours"];
         Buffers["NeighboursLengthRO"] = Buffers["NeighboursLength"];
         Buffers["BoundaryPositionsRO"] = Buffers["BoundaryPositions"];
