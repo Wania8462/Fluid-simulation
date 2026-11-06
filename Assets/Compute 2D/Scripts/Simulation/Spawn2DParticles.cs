@@ -13,6 +13,8 @@ public class Spawn2DParticles : MonoBehaviour
     [SerializeField] private float2 boundingBoxSizeOffset = new(160, 80);
     private float2 boundingBoxSize;
 
+    public float Spacing => spacing;
+
     public int GetNumberOfParticles() => particleSquareLength * particleSquareLength;
 
     public float2[] InitializePositions()

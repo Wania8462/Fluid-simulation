@@ -26,6 +26,8 @@ public class FluidFlow3D : MonoBehaviour
 
     private float3 HalfSize => sourceSize / 2;
 
+    public float Spacing => spacing;
+
     public float4[] InitializePositions()
     {
         float4[] positions = new float4[math.max(particleCount, 0)];
