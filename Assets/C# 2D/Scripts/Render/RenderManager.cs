@@ -11,8 +11,6 @@ namespace Rendering
         DensityMap
     }
 
-    // Basically works as an interface rn
-    // todo: add safety checks
     public class RenderManager : MonoBehaviour
     {
         public RenderType renderType;
@@ -45,30 +43,18 @@ namespace Rendering
         }
 
         #region Particles
-        /// <summary>
-        /// Calling this more than once will append particles rather than reinitializing.
-        /// Delete particles first if that is not intended.
-        /// </summary>
         public void InitParticles(int maxNbParticles)
         {
             renderParticles.DeleteAllTypesOfParticles();
             renderParticles.InitParticles(maxNbParticles);
         }
 
-        /// <summary>
-        /// Calling this more than once will append particles rather than reinitializing.
-        /// Delete particles first if that is not intended.
-        /// </summary>
         public void InitCustomParticle(float2 position, float radius, Color color)
         {
             renderParticles.DeleteCustomParticles();
             renderParticles.InitCustomParticle(position, radius, color);
         }
 
-        /// <summary>
-        /// Calling this more than once will append particles rather than reinitializing.
-        /// Delete particles first if that is not intended.
-        /// </summary>
         public void InitBoundaryParticles(int nbParticles)
         {
             renderParticles.DeleteBoundaryParticles();

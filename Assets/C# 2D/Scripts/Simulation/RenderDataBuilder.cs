@@ -44,11 +44,9 @@ namespace SimulationLogic
         private float[] densitiesSquares;
         private float[] densitiesMap;
 
-        // Debug buffers
         private List<int> greenParticles = new();
         private List<int> yellowParticles = new();
 
-        // WARNING: Needs to be called after Simulation's SetScene
         public void Init(Simulation sim)
         {
             simulation = sim;
@@ -206,11 +204,6 @@ namespace SimulationLogic
             else if (particleDebugDisplay == DebugDisplay.Force)
             {
                 Debug.LogError("Render data builder: force isn't supported now");
-                // var trackPosition = simulation._particles[simulation._sparse[trackParticle]].position;
-                // var lineThickness = 0.5f;
-                // var force = (simulation._velocities[trackParticle] - simulation._prevVelocities[trackParticle]) * 5;
-                // var forceEnd = trackPosition + force;
-                // renderManager.DrawLine(trackPosition, forceEnd, lineThickness, Color.white);
             }
         }
 

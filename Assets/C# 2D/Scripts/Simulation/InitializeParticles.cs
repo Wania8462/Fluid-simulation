@@ -17,7 +17,6 @@ namespace SimulationLogic
         public float2 boundingBoxSize;
 
         [Header("Flow settings")]
-        // pretend it has private set
         public int spawnPerFlowRow;
         public float flowSpacing = 2;
         public float spawnInterval;
@@ -177,19 +176,15 @@ namespace SimulationLogic
             {
                 for (var j = 0; j < particlesPerLayer; j++)
                 {
-                    // Top
                     if (j < lenX)
                         pos[j + i * particlesPerLayer] = new float2(topLeft.x + borderDensity * j, topLeft.y - (layerOffset * i));
 
-                    // Bottom
                     else if (j < lenX * 2)
                         pos[j + i * particlesPerLayer] = new float2(topLeft.x + borderDensity * (j - lenX), topLeft.y - boundingBoxSize.y + (layerOffset * i));
 
-                    // Left
                     else if (j < lenX * 2 + lenY)
                         pos[j + i * particlesPerLayer] = new float2(topLeft.x + (layerOffset * i), topLeft.y - borderDensity * (j - lenX * 2));
 
-                    // Right
                     else
                         pos[j + i * particlesPerLayer] = new float2(topLeft.x + boundingBoxSize.x - (layerOffset * i), topLeft.y - borderDensity * (j - (lenX * 2 + lenY)));
                 }

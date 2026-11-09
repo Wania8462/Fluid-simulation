@@ -36,6 +36,7 @@ public static class Watcher
 
     public static int Count => _stats.First().Value.Count;
 
+    // Timer names start with a number, which sets their order. The first one is the total
     public static string LogImportant()
     {
         var sb = new StringBuilder();

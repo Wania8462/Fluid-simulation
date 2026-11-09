@@ -52,7 +52,6 @@ namespace SimulationLogic
     {
         public float volume;
         public float2 restPosition;
-        public float psi;
 
         public BoundaryParticle(float2 position)
         {
@@ -72,10 +71,8 @@ namespace SimulationLogic
         }
     }
 
-    // Change parallel for to Unity jobs for the best performance
     public class Simulation
     {
-        // General settings
         private float interactionRadius;
         private float gravity;
         private float mouseAttractiveness;
@@ -83,12 +80,10 @@ namespace SimulationLogic
         private float collisionDamp;
         public bool flow { get; private set; }
 
-        // Density
         private float stiffness;
         private float nearStiffness;
         private float restDensity;
 
-        // Springs
         private float springInteractionRadius;
         private float springRadius;
         private float springStiffness;
@@ -97,7 +92,6 @@ namespace SimulationLogic
         private float highViscosity;
         private float lowViscosity;
 
-        // Boundary body
         private bool deformableBoundaryBody;
         private BoundaryShape shape;
         private float sampleDensity;
@@ -107,34 +101,30 @@ namespace SimulationLogic
         private float boundaryFriction;
         private float boundaryBodyMass;
 
-        // References
         private InitializeParticles initParticles;
         private Boundaries boundaries;
 
-        // Spatial partitioning grids
         private SpatialPartitioning particleSP;
         private SpatialPartitioning springsSP;
         private SpatialPartitioning boundarySP;
 
-        // Fluid particles buffers
         public int maxParticles { get; private set; }
         public FluidParticle[] _particles { get; private set; }
+        // Maps a particle ID to its index in _particles
         public SparseArray _sparse { get; private set; }
         public int count { get; private set; }
         private RefList<int> _freeIDs;
 
-        // Other buffers
         public RefList<BoundaryParticle> _boundaryParticles { get; private set; }
+        // Rest length per spring, keyed by (lower ID, higher ID)
         private ConcurrentDictionary<(int, int), float> _springs;
         private List<int> bodyNeighbours;
         private ThreadLocal<List<int>> densityNeighbours;
 
-        // Boundary variables
         private float2 boundaryRestCenter;
         private float2 boundaryCenter;
         private float boundaryAngle;
 
-        // Miscellaneous
         public float2 realHalfBoundSize;
         private const float particleRadius = 0.5f;
         private static readonly object lockBody = new();
@@ -212,8 +202,6 @@ namespace SimulationLogic
 
                 foreach (var n in p.neighbours)
                 {
-                    // todo: try distance squared and compute q just once
-                    // maybe need mass
                     float mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
                     if (mag == 0 || mag > interactionRadius) continue;
                     float q = mag / interactionRadius;
@@ -228,7 +216,7 @@ namespace SimulationLogic
                     if (mag == 0 || mag > interactionRadius) continue;
                     float q = mag / interactionRadius;
 
-                    // can be precomputed
+                    // Boundary particles count as fluid weighted by psi = restDensity * volume
                     float psi = restDensity * _boundaryParticles[b].volume;
                     p.density += psi * FluidMath.QuadraticSpikyKernel(q);
                     p.nearDensity += psi * FluidMath.CubicSpikyKernel(q);
@@ -255,6 +243,7 @@ namespace SimulationLogic
                     lock (lockBody) { p.forceBuffer -= displacement / 2; }
                 }
 
+                // Clamped at 0 so the body never pulls fluid in
                 float boundaryPressure = math.max(pressure, 0f);
                 float boundaryNearPressure = math.max(nearPressure, 0f);
 
@@ -288,6 +277,7 @@ namespace SimulationLogic
                 var p = _particles[i];
                 foreach (var n in p.neighbours)
                 {
+                    // Handle each pair once
                     if (p.ID >= n) continue;
                     var mag = FluidMath.Distance(p.position, _particles[_sparse[n]].position);
                     if (mag > interactionRadius || mag == 0) continue;
@@ -418,7 +408,6 @@ namespace SimulationLogic
         {
             if (_boundaryParticles.Count == 0) return;
 
-            // Maintain the shape
             boundaryAngle = FindRotationAngle();
             PlaceBoundaryParticles(boundaryAngle);
 
@@ -428,6 +417,7 @@ namespace SimulationLogic
                 RigidContactResolution(deltatime);
         }
 
+        // Best-fit rotation of the boundary particles relative to their rest shape (2D shape matching)
         private float FindRotationAngle()
         {
             int n = _boundaryParticles.Count;
@@ -466,7 +456,6 @@ namespace SimulationLogic
 
         private void RigidContactResolution(float deltatime)
         {
-            // Pass 1: mean push-out and contact centroid.
             float2 sumDelta = float2.zero;
             float2 sumContactPos = float2.zero;
             int contacts = 0;
@@ -481,16 +470,14 @@ namespace SimulationLogic
                 contacts++;
             }
 
-            if (contacts == 0) return; // no wall contact this frame — nothing to resolve
+            if (contacts == 0) return;
 
-            float2 translation = sumDelta / contacts;       // Δc: average push-out
-            float2 pivot = sumContactPos / contacts;         // P: contact point to rotate about
+            float2 translation = sumDelta / contacts;
+            float2 pivot = sumContactPos / contacts;
 
-            // Pass 2: levelling rotation (least-squares fit about the pivot) and inertia about the pivot.
-            // Since Σ(posᵢ - P) = 0 over the contacts, the fit reduces to Σ r×Δ / Σ|r|².
             float levelTorque = 0f;
             float levelDenom = 0f;
-            float inertiaPivot = 0f; // Σ |posⱼ - P|² over ALL particles, for the gravity torque
+            float inertiaPivot = 0f;
             for (int i = 0; i < _boundaryParticles.Count; i++)
             {
                 float2 r = _boundaryParticles[i].position - pivot;
@@ -503,18 +490,16 @@ namespace SimulationLogic
                 levelDenom += r.x * r.x + r.y * r.y;
             }
 
+            // Rotate about the contact centroid so the body settles flat against the wall,
+            // plus the torque gravity applies about that pivot
             float levelAngle = levelDenom > 1e-6f ? levelTorque / levelDenom : 0f;
 
-            // Gravity torque about the pivot: τ = (com - P) × (0, n·gravity). Applied as a position-level
-            // angle increment (∝ dt²) so the per-particle velocities carry the angular momentum forward,
-            // giving a constant angular acceleration τ / I — the body tips faster as its weight falls.
             float2 arm = boundaryCenter - pivot;
             float gravityTorque = arm.x * (_boundaryParticles.Count * gravity);
             float gravityAngle = inertiaPivot > 1e-6f ? gravityTorque / inertiaPivot * deltatime * deltatime : 0f;
 
             float deltaAngle = levelAngle + gravityAngle;
 
-            // Apply: rotate the body about the pivot by deltaAngle, then translate by the push-out.
             float cos = math.cos(deltaAngle);
             float sin = math.sin(deltaAngle);
             float2 c = boundaryCenter - pivot;
@@ -590,7 +575,6 @@ namespace SimulationLogic
         #region SetUp
         public void SetScene()
         {
-            // Precomputing values
             realHalfBoundSize = initParticles.GetRealHalfBoundSize(particleRadius);
 
             if (realHalfBoundSize.x <= 0 || realHalfBoundSize.y <= 0)
@@ -602,7 +586,6 @@ namespace SimulationLogic
 
             bodyNeighbours = new List<int>();
 
-            // Buffers
             EnsureArrays(maxParticles);
 
             if (!flow)
@@ -864,6 +847,7 @@ namespace SimulationLogic
                         _springs.TryRemove(key, out _);
                 }
 
+                // Swap-remove: move the last particle into the freed slot and fix its sparse entry
                 (_particles[count - 1], _particles[i]) = (_particles[i], _particles[count - 1]);
                 _sparse[id] = -1;
                 _sparse[_particles[i].ID] = i;
@@ -881,7 +865,6 @@ namespace SimulationLogic
         #region Helpers
         private void InitSpatialPartitioning()
         {
-            // todo: evaluate if I need 3 seperate SP
             particleSP.Init(_particles.AsSpan(0, count));
             springsSP.Init(_particles.AsSpan(0, count));
             boundarySP.Init(_boundaryParticles.AsSpan(0, _boundaryParticles.Count));
@@ -889,7 +872,6 @@ namespace SimulationLogic
 
         private void SetNeighbours()
         {
-            // todo: try using regular for and batching
             Parallel.For(0, count, i =>
             {
                 particleSP.GetNeighbours(_particles[i].position, _particles[i].neighbours);
@@ -940,6 +922,7 @@ namespace SimulationLogic
             int n = _boundaryParticles.Count;
             if (n == 0) return;
 
+            // Per-particle inverse mass, so the body's total mass is boundaryBodyMass
             float invMass = boundaryBodyMass > 0 ? n / boundaryBodyMass : 1f;
             for (int i = 0; i < n; i++)
                 _boundaryParticles[i].position += invMass * _boundaryParticles[i].forceBuffer;
@@ -1056,7 +1039,6 @@ namespace SimulationLogic
             Debug.Log(message + ": " + sb.ToString());
         }
 
-        // Draws the boundary box in scene
         public void DrawDebugSquare(Vector3 center, float2 halfSize, Color color)
         {
             var p0 = center + new Vector3(-halfSize.x, -halfSize.y, 0f);
@@ -1070,7 +1052,6 @@ namespace SimulationLogic
             Debug.DrawLine(p3, p0, color);
         }
 
-        // Draws the spatial partitioning grid in scene
         public void DrawDebugGrid(Color color, SpatialPartitioning sp)
         {
             for (var i = 0; i <= sp.columns; i++)

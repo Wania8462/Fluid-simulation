@@ -4,7 +4,6 @@ Shader "Custom/Body3D"
     {
         Tags { "Queue"="Geometry" "RenderType"="Opaque" }
 
-        // Shared by both passes: every body is posed in the vertex shader straight from the body buffers
         CGINCLUDE
         #include "UnityCG.cginc"
         #include "UnityIndirect.cginc"
@@ -14,7 +13,7 @@ Shader "Custom/Body3D"
 
         StructuredBuffer<RigidBodyState> BodyStates;
         StructuredBuffer<RigidBodyProperties> BodyProperties;
-        uint drawShape;         // Shape of this draw's mesh, ShapeCube or ShapeSphere
+        uint drawShape;
 
         struct v2f
         {
@@ -27,25 +26,22 @@ Shader "Custom/Body3D"
             RigidBodyProperties props = BodyProperties[instanceID];
             RigidBodyState state = BodyStates[instanceID];
 
-            // Bodies of the other shape get zero size, so all their vertices meet at one point and nothing is rasterised
             float visible = props.shape == drawShape;
             float isCube = props.shape == ShapeCube;
+            // Bodies of the other shape get zero size, so they collapse to a point and aren't rasterised
             float3 halfExtents = lerp(props.size.xxx, props.size.xyz, isCube) * visible;
 
-            // The meshes are unit sized (cube edge 1, sphere diameter 1), so twice a vertex spans the half extents or radius.
-            // Positions are centres of mass, so the shape is shifted by the body-local centre of mass before rotating
+            // Meshes are unit sized, so doubling a vertex spans the half extents
             float3 local = v.vertex.xyz * 2 * halfExtents - props.centerOfMass.xyz;
             float3 world = state.position.xyz + QuaternionRotate(state.rotation, local);
 
             v2f o;
             o.pos = mul(UNITY_MATRIX_VP, float4(world, 1));
-            // Scaling along the cube's own axes leaves its face normals unchanged, so only the rotation applies
             o.normal = QuaternionRotate(state.rotation, v.normal);
             return o;
         }
         ENDCG
 
-        // No LightMode tag, so the Built-in forward renderer draws this pass with the opaque geometry, into the depth buffer
         Pass
         {
             ZWrite On
@@ -54,11 +50,10 @@ Shader "Custom/Body3D"
             #pragma vertex vert
             #pragma fragment frag
 
-            // Share of the colour faces turned away from the light keep
             static const float ambient = 0.3;
 
             float4 color;
-            float3 lightDirection;  // Direction the light travels in, a global set by RenderManager
+            float3 lightDirection;
 
             float4 frag(v2f i) : SV_Target
             {
@@ -68,12 +63,9 @@ Shader "Custom/Body3D"
             ENDCG
         }
 
-        // Depth only. ScreenSpaceFluidRenderer draws it into the fluid's own depth buffer, so bodies hide the fluid behind
-        // them. ShadowCaster is the Built-in pipeline's depth-only pass type, so the forward renderer doesn't also draw it
-        // alongside the pass above
         Pass
         {
-            Name "DepthOnly"    // BodyRenderer.DepthPassName
+            Name "DepthOnly"
             Tags { "LightMode"="ShadowCaster" }
             ZWrite On
             ColorMask 0

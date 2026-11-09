@@ -85,7 +85,6 @@ namespace SimulationLogic
         [SerializeField] private bool realDeltaTime;
         [SerializeField] private int targetFrameRate;
         [SerializeField] private bool twoSimulations;
-        // Pretend that it only has public get and don't change outside
         [SerializeField] public SimulationSettings[] settings;
         public bool twoSim { get; private set; }
 
@@ -131,7 +130,6 @@ namespace SimulationLogic
 
         private void Start()
         {
-            // Debug.Log(Application.persistentDataPath);
             Application.targetFrameRate = targetFrameRate;
             Debug.Log(@"Controls: Pause/resume: space, Restart: R, Attract particles to mouse: left hold ↓
             Move body to mouse: right click
@@ -163,7 +161,6 @@ namespace SimulationLogic
             if (!pause || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 float maxDen = GetMaxDensity(simulations[0]._particles);
-                // float dt = math.abs(maxDen - previous) > 0.4f ? 1 / 60f : 1 / 40f;
                 float dt = 1 / 60f;
                 previous = maxDen;
 
@@ -192,20 +189,6 @@ namespace SimulationLogic
                 simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
             }
 
-            // else
-            // {
-            //     simulations = new Simulation[2];
-
-            //     if (settings.Length == 1)
-            //     {
-            //         Array.Resize(ref settings, 2);
-            //         settings[SecondSim] = new SimulationSettings(settings[FirstSim]);
-            //     }
-
-            //     simulations[FirstSim] = new Simulation(settings[FirstSim], spawn);
-            //     simulations[SecondSim] = new Simulation(settings[SecondSim], spawn);
-            // }
-
             simulations[FirstSim].SetScene();
             render.Init(simulations[FirstSim]);
         }
@@ -215,7 +198,7 @@ namespace SimulationLogic
             if (twoSim)
             {
                 Debug.LogError("Simulation manager: 2 simulations aren't supported");
-                EditorApplication.isPlaying = false; // Avoids error spamming
+                EditorApplication.isPlaying = false;
             }
 
             if (settings == null || settings.Length == 0)
@@ -225,6 +208,7 @@ namespace SimulationLogic
             }
         }
 
+        // Typing "<fieldName> <value>" sets a SimulationSettings field at runtime
         private void HandleFieldInputs()
         {
             if (Input.GetKeyDown(KeyCode.Return))
@@ -277,14 +261,13 @@ namespace SimulationLogic
         {
             if (Watcher.Count % 100 == 0)
             {
-                // Debug.Log(Watcher.Log());
-                // Watcher.Reset();
                 frameTotal += (int)Watcher.GetTotal();
                 frames++;
                 Debug.Log(frameTotal / frames);
             }
         }
 
+        // Runs each stage for 40 s, screenshots the graph, then restarts with the next stage
         private float HandleGraphs()
         {
             if (graph.GetCurrentTime() > 40)

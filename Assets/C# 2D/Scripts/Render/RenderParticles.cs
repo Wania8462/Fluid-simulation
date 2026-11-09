@@ -30,6 +30,7 @@ namespace Rendering
         private readonly Vector4[] colorsBatch = new Vector4[batchSize];
         private readonly Matrix4x4[] matricesBatch = new Matrix4x4[batchSize];
 
+        // DrawMeshInstanced takes at most 1023 instances per call
         private const int batchSize = 1023;
         private const int parallelForBatchSize = 512;
         private const float particleRadius = 0.5f;
@@ -264,11 +265,11 @@ namespace Rendering
             Destroy(customBuffer.mesh);
         }
 
-        // If needs to be on prod, optimise
         #region Debug
         void Awake()
         {
             identityMatrixList.Add(Matrix4x4.identity);
+            // Overlay queue so debug lines draw on top of the particles
             topMatertial = new(mat) { renderQueue = 4000 };
             lineMpb = new();
             lineMpb.SetColor(colors, new Color(1, 1, 1, 1));
@@ -309,10 +310,10 @@ namespace Rendering
             var topRight = new float2(bottomRight.x, topLeft.y);
             var bottomLeft  = new float2(topLeft.x,     bottomRight.y);
 
-            DrawLine(topLeft,    topRight,    width, color); // top
-            DrawLine(bottomLeft, bottomRight, width, color); // bottom
-            DrawLine(topLeft,    bottomLeft,  width, color); // left
-            DrawLine(topRight,   bottomRight, width, color); // right
+            DrawLine(topLeft,    topRight,    width, color);
+            DrawLine(bottomLeft, bottomRight, width, color);
+            DrawLine(topLeft,    bottomLeft,  width, color);
+            DrawLine(topRight,   bottomRight, width, color);
         }
         #endregion
 

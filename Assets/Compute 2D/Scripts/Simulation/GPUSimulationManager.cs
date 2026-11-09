@@ -29,8 +29,10 @@ public struct SimulationSettings
     public float collisionDamping;
 
     [Header("Density")]
-    public float stiffness;
-    public float nearStiffness;
+    public int solverIterations;
+    [Tooltip("Too low and the solver overshoots and the fluid blows apart")]
+    public float relaxation;
+    public float artificialPressure;
     public float restDensity;
 
     [Header("Springs")]
@@ -52,6 +54,7 @@ public class GPUSimulationManager : MonoBehaviour
 {
     [Header("Simulation settings")]
     [SerializeField] private bool paused;
+    [SerializeField] private bool boundaryBodyEnabled = true;
     [SerializeField] private SimulationSettings settings;
     [SerializeField] private int maxParticlesPerCell;
     [SerializeField] private int maxSpringsPerParticle;
@@ -85,8 +88,6 @@ public class GPUSimulationManager : MonoBehaviour
     private int3 gridThreadGropus;
     private int3 boundaryThreadGropus;
 
-    private int clock;
-
     private readonly int debugLength = 100;
 
     private float _maxForce = 0f;
@@ -117,84 +118,126 @@ public class GPUSimulationManager : MonoBehaviour
         }
 
         if (renderingType == RenderingType.Particles)
-        {
             render.DrawParticles();
-            render.DrawBoundaryParticles();
-        }
 
         else if (renderingType == RenderingType.DensityMap)
             densityMap.Draw();
 
         else
             marchingSquares.Draw();
+
+        if (boundaryBodyEnabled)
+            render.DrawBoundaryParticles();
     }
 
     private void SimulationStep()
     {
         float dt = useRealDeltaTime ? Time.deltaTime : 1 / fakeFramerate;
         compute.SetFloat("dt", dt);
-        clock++;
 
-        if (clock % 4 == 0)
-        {
-            compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
-            compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
-            compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
-            compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+        ApplyExternalForcesAndViscosity();
+        AdvancePredictedPositions();
 
-            compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
+        // PBF needs the neighbours of the predicted positions, so lists are rebuilt every step
+        UpdateNeighbours();
+        SolveDensityConstraints();
+        ApplyMouseInteraction();
+
+        if (boundaryBodyEnabled)
+            UpdateBoundaryBody();
+
+        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+
+        CalculateVelocities();
+    }
+
+    private void UpdateNeighbours()
+    {
+        compute.Dispatch(KernelIDs["ClearGrid"], gridThreadGropus);
+        compute.Dispatch(KernelIDs["ClearNeighbours"], threadGropus);
+        compute.Dispatch(KernelIDs["InitSpatialPartitoning"], threadGropus);
+        compute.Dispatch(KernelIDs["SetNeighbours"], threadGropus);
+
+        compute.Dispatch(KernelIDs["ClearBoundaryGrid"], gridThreadGropus);
+        if (boundaryBodyEnabled)
             compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
-            compute.Dispatch(KernelIDs["SetBoundaryNeighbours"], threadGropus);
-            clock = 0;
-        }
+        compute.Dispatch(KernelIDs["SetBoundaryNeighbours"], threadGropus);
+    }
 
+    private void ApplyExternalForcesAndViscosity()
+    {
         compute.Dispatch(KernelIDs["ExternalForces"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryExternalForces"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryExternalForces"], boundaryThreadGropus);
 
         compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyViscosity"], threadGropus);
         compute.Dispatch(KernelIDs["ApplyForceBuffersToVelocities"], threadGropus);
+    }
 
+    private void AdvancePredictedPositions()
+    {
         compute.Dispatch(KernelIDs["AdvancePredictedPositions"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryAdvancePredictedPositions"], boundaryThreadGropus);
+    }
 
-        for (int i = 0; i < 2; i++)
+    private void SolveDensityConstraints()
+    {
+        for (int i = 0; i < settings.solverIterations; i++)
         {
-            compute.Dispatch(KernelIDs["ClearForceBuffers"], threadGropus);
-            compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
-            compute.Dispatch(KernelIDs["DoubleDensityRelaxation"], threadGropus);
-            compute.Dispatch(KernelIDs["ApplyForceBuffers"], threadGropus);
-            compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
-        }
+            compute.Dispatch(KernelIDs["CalculateLambdas"], threadGropus);
 
+            if (boundaryBodyEnabled)
+                compute.Dispatch(KernelIDs["ClearBoundaryForceBuffers"], boundaryThreadGropus);
+
+            compute.Dispatch(KernelIDs["CalculateDeltaPositions"], threadGropus);
+            compute.Dispatch(KernelIDs["ApplyDeltaPositions"], threadGropus);
+            compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+
+            if (boundaryBodyEnabled)
+            {
+                compute.Dispatch(KernelIDs["ApplyBoundaryForceBuffers"], boundaryThreadGropus);
+                compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
+                compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
+            }
+        }
+    }
+
+    private void ApplyMouseInteraction()
+    {
         if (Input.GetMouseButton(0))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouse"], threadGropus);
         }
 
-        if (Input.GetMouseButton(1))
+        if (boundaryBodyEnabled && Input.GetMouseButton(1))
         {
             compute.SetVector("mousePosition", GetMousePos());
             compute.Dispatch(KernelIDs["AttractToMouseBoundary"], boundaryThreadGropus);
         }
+    }
 
-        // Rigid boundary body: maintain the shape, then resolve wall contacts
+    private void UpdateBoundaryBody()
+    {
         compute.Dispatch(KernelIDs["FindRotationAngle"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["RigidContactResolution"], 1);
         compute.Dispatch(KernelIDs["PlaceBoundaryParticles"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["CancelBoundaryBorderVelocity"], 1);
 
-        // Project fluid particles out of the body, then clamp to the borders last
         string bodyCollisionKernel = settings.shape == BoundaryShape.Square
             ? "ResolveSquareBodyCollision"
             : "ResolveCircleBodyCollision";
         compute.Dispatch(KernelIDs[bodyCollisionKernel], threadGropus);
-        compute.Dispatch(KernelIDs["ResolveBoundaries"], threadGropus);
+    }
 
+    private void CalculateVelocities()
+    {
         compute.Dispatch(KernelIDs["CalculateVelocity"], threadGropus);
-        compute.Dispatch(KernelIDs["BoundaryCalculateVelocity"], boundaryThreadGropus);
+        if (boundaryBodyEnabled)
+            compute.Dispatch(KernelIDs["BoundaryCalculateVelocity"], boundaryThreadGropus);
     }
 
     private void OnValidate()
@@ -255,6 +298,9 @@ public class GPUSimulationManager : MonoBehaviour
         compute.Dispatch(KernelIDs["InitBoundarySpatialPartitoning"], boundaryThreadGropus);
         compute.Dispatch(KernelIDs["CalculateBoundaryVolumes"], boundaryThreadGropus);
 
+        // The first step's viscosity reads the neighbours before that step finds them
+        UpdateNeighbours();
+
         Camera.main.orthographicSize = math.max(spawn.GetRealHalfBoundSize(0).y + 2, spawn.GetRealHalfBoundSize(0).x - 237);
         render.Setup(this);
         densityMap.Setup(this, boundingBoxSize);
@@ -280,9 +326,18 @@ public class GPUSimulationManager : MonoBehaviour
         compute.SetFloat("mouseRadius", settings.mouseRadius);
         compute.SetFloat("collisionDamp", settings.collisionDamping);
 
-        compute.SetFloat("stiffness", settings.stiffness);
-        compute.SetFloat("nearStiffness", settings.nearStiffness);
-        compute.SetFloat("restDensity", settings.restDensity);
+        if (settings.solverIterations < 1)
+            UnityEngine.Debug.LogWarning($"GPU simulation manager: solverIterations is {settings.solverIterations}, nothing will keep the fluid from compressing");
+
+        // The fluid rests at the spawn spacing
+        float h = settings.interactionRadius;
+        float particleVolume = spawn.Spacing * spawn.Spacing;
+        compute.SetFloat("particleVolume", particleVolume);
+        compute.SetFloat("particleMass", settings.restDensity * particleVolume);
+        compute.SetFloat("relaxation", settings.relaxation);
+        compute.SetFloat("artificialPressure", settings.artificialPressure);
+        compute.SetFloat("poly6Factor", 4 / (math.PI * math.pow(h, 8)));
+        compute.SetFloat("spikyGradFactor", 30 / (math.PI * math.pow(h, 5)));
 
         compute.SetFloat("plasticity", settings.plasticity);
         compute.SetFloat("highViscosity", settings.highViscosity);
@@ -295,6 +350,7 @@ public class GPUSimulationManager : MonoBehaviour
             UnityEngine.Debug.LogWarning($"GPU simulation manager: boundaryBodyMass is {settings.boundaryBodyMass}, falling back to the neutral response (mass = boundary particle count)");
 
         compute.SetFloat("boundaryFriction", settings.boundaryFriction);
+        // Per-particle inverse mass, so the body's total mass is boundaryBodyMass
         compute.SetFloat("invBodyMass", settings.boundaryBodyMass > 0 ? numBoundaryParticles / settings.boundaryBodyMass : 1f);
         compute.SetFloat("bodyRadius", settings.bodyRadius);
     }
@@ -339,7 +395,8 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["Velocities"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
 
         Buffers["Densities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
-        Buffers["NearDensities"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["Lambdas"] = ComputeHelper.CreateStructuredBufferWithData<float>(numParticles);
+        Buffers["DeltaPositions"] = ComputeHelper.CreateStructuredBufferWithData<float2>(numParticles);
 
         Buffers["Grid"] = ComputeHelper.CreateStructuredBufferWithData<uint>(SP.columns * SP.rows * maxParticlesPerCell);
         Buffers["Neighbours"] = ComputeHelper.CreateStructuredBufferWithData<uint>(numParticles * maxParticlesPerCell * 3);
@@ -364,10 +421,9 @@ public class GPUSimulationManager : MonoBehaviour
         Buffers["DebugFloat"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
         Buffers["DebugInt"] = ComputeHelper.CreateStructuredBufferWithData<float>(debugLength);
 
-        // Read-only aliases: the same buffers bound under the SRV names that
-        // DoubleDensityRelaxation and ApplyViscosity read through (D3D11.0 UAV limit)
         Buffers["PositionsRO"] = Buffers["Positions"];
         Buffers["VelocitiesRO"] = Buffers["Velocities"];
+        Buffers["LambdasRO"] = Buffers["Lambdas"];
         Buffers["NeighboursRO"] = Buffers["Neighbours"];
         Buffers["NeighboursLengthRO"] = Buffers["NeighboursLength"];
         Buffers["BoundaryPositionsRO"] = Buffers["BoundaryPositions"];
@@ -379,7 +435,6 @@ public class GPUSimulationManager : MonoBehaviour
 
     private void ReleaseBuffers()
     {
-        // Distinct: the RO aliases share buffer instances with their RW originals
         foreach (var buffer in Buffers.Values.Distinct())
             ComputeHelper.Release(buffer);
     }
@@ -409,7 +464,6 @@ public class GPUSimulationManager : MonoBehaviour
     );
 
     #region Debug
-    // Retrieve some dummy data at the end of the function or it will only wait for the calls
     private void LogFrameData()
     {
         if (Watcher.Count % 1000 == 0)

@@ -4,15 +4,6 @@ float Distance(float2 p1, float2 p2);
 float Pow3(float x);
 float Pow9(float x);
 
-float2 PressureDisplacement(float deltaTime, float relativeDistance, float pseudoPressure, float nearPseudoPressure, float2 unitVector)
-{
-    float invRelativeDist = 1.0 - relativeDistance;
-    return deltaTime * deltaTime *
-        (pseudoPressure * invRelativeDist +
-        nearPseudoPressure * invRelativeDist * invRelativeDist) *
-        unitVector;
-}
-
 float2 ViscosityImpulse(float deltaTime, float highViscosity, float lowViscosity, float relativeDistance, float inwardVelocity, float2 unitVector)
 {
     return deltaTime *
@@ -62,9 +53,30 @@ float QuadraticSpikyKernel(float relativeDistance)
     return (1.0 - relativeDistance) * (1.0 - relativeDistance);
 }
 
-float CubicSpikyKernel(float relativeDistance)
+// Position based fluids (Macklin & Müller 2013)
+float Poly6(float distanceSq, float radiusSq, float factor)
 {
-    return Pow3(1.0 - relativeDistance);
+    return factor * Pow3(max(radiusSq - distanceSq, 0.0));
+}
+
+float2 SpikyGradient(float distance, float radius, float factor, float2 towardsNeighbour)
+{
+    float overlap = radius - distance;
+    return factor * overlap * overlap * towardsNeighbour;
+}
+
+// Poly6 integrated over the half plane past the wall, x is the distance to the wall over the radius
+float2 WallDensity(float2 x)
+{
+    float2 t = asin(x);
+    return (35.0 * (PI / 2.0 - t) - 28.0 * sin(2.0 * t) - 7.0 * sin(4.0 * t) -
+        4.0 / 3.0 * sin(6.0 * t) - 1.0 / 8.0 * sin(8.0 * t)) / (35.0 * PI);
+}
+
+float2 WallDensityGradient(float2 x, float radius)
+{
+    float2 y = 1.0 - x * x;
+    return 128.0 / (35.0 * PI * radius) * y * y * y * sqrt(y);
 }
 
 float Distance(float2 p1, float2 p2)

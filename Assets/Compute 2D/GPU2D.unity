@@ -234,13 +234,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aa9b846a139c604290cf2ba0aa966ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Spawn2DParticles
-  particleSquareLength: 300
+  particleSquareLength: 150
   spacing: 2
-  useJitter: 0
+  useJitter: 1
   jitterStrength: 0.2
   boundingBoxSizeOffset:
-    x: 400
-    y: 150
+    x: 200
+    y: 75
 --- !u!114 &1001776193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -254,19 +254,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GPUSimulationManager
   paused: 0
+  boundaryBodyEnabled: 1
   settings:
     interactionRadius: 6
     gravity: -20
     mouseAttractiveness: 0.5
     mouseRadius: 10000
     collisionDamping: 0.083
-    stiffness: 200
-    nearStiffness: 20
-    restDensity: 5
-    springInteractionRadius: 2
-    springRadius: 1
-    springStiffness: 0.1
-    springDeformationLimit: 0
+    solverIterations: 4
+    relaxation: 0.04
+    artificialPressure: 0.1
+    restDensity: 1
     plasticity: 0.05
     highViscosity: 0.2
     lowViscosity: 3
@@ -278,7 +276,7 @@ MonoBehaviour:
       y: -100
     bodyRotationRad: 0
     boundaryFriction: 1
-    boundaryBodyMass: 200
+    boundaryBodyMass: 750
   maxParticlesPerCell: 64
   maxSpringsPerParticle: 64
   particleRadius: 0.5

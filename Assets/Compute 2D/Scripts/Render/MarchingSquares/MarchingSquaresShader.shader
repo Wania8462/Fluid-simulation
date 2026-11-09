@@ -33,11 +33,10 @@ Shader "Custom/MarchingSquaresShader"
                 float4 pos : SV_POSITION;
             };
 
-            // Interpolate the position of an edge midpoint vertex toward the
-            // density threshold crossing. Corner vertices are returned unchanged.
+            // Slides the case mesh's edge midpoints to where the density crosses the threshold.
+            // d holds the corner densities (TL, TR, BL, BR)
             float2 InterpolateVertex(float2 v, float4 d)
             {
-                // d.x=TL, d.y=TR, d.z=BL, d.w=BR
                 bool isTopMid    = abs(v.x) < 0.01 && v.y >  0.4;
                 bool isRightMid  = v.x >  0.4 && abs(v.y) < 0.01;
                 bool isBottomMid = abs(v.x) < 0.01 && v.y < -0.4;

@@ -29,6 +29,7 @@ public class SPValues3D
         rows = (int)(height / length);
         layers = (int)(depth / length);
 
+        // Round up so the grid covers the whole box
         if (width % length != 0) columns++;
         if (height % length != 0) rows++;
         if (depth % length != 0) layers++;

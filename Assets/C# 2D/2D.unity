@@ -846,8 +846,8 @@ MonoBehaviour:
     lowViscosity: 0.2
     deformableBoundaryBody: 0
     shape: 0
-    sampleDensity: 0.5
-    bodyRadius: 10
+    sampleDensity: 1
+    bodyRadius: 15
     bodyPosition:
       x: 80
       y: -60

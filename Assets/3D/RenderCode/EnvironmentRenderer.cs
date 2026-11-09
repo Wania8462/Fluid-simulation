@@ -10,7 +10,6 @@ public class EnvironmentRenderer : MonoBehaviour
 
     public void Setup(SimulationManager sim)
     {
-        // Always-included built-in shader, so no material asset is needed
         material = material != null ? material : new Material(Shader.Find("Hidden/Internal-Colored"));
         rp = new RenderParams(material);
 

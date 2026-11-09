@@ -1,7 +1,8 @@
 #pragma kernel ExternalForces
 #pragma kernel ClearForceBuffers
-#pragma kernel DoubleDensityRelaxation
-#pragma kernel ApplyForceBuffers
+#pragma kernel CalculateLambdas
+#pragma kernel CalculateDeltaPositions
+#pragma kernel ApplyDeltaPositions
 #pragma kernel ApplyForceBuffersToVelocities
 #pragma kernel ApplyViscosity
 #pragma kernel ResolveBoundaries
@@ -29,11 +30,14 @@
 #pragma kernel ApplyContacts
 #pragma kernel BodyCalculateVelocity
 #pragma kernel ResolveBodyCollisions
+#pragma kernel RecycleParticles
+#pragma kernel ResolveReservoir
 
 #include "FluidMath3D.hlsl"
 #include "RigidBodyMath3D.hlsl"
 
 static const float4 ZeroImpulse = float4(0, 0, 0, 0);
+// Forces are stored as fixed-point ints so threads can sum them with InterlockedAdd
 static const int FloatScale = 1000000;
 
 
@@ -45,16 +49,14 @@ RWStructuredBuffer<int> ForceBuffersZ;
 RWStructuredBuffer<float4> Velocities;
 
 RWStructuredBuffer<float> Densities;
-RWStructuredBuffer<float> NearDensities;
+RWStructuredBuffer<float> Lambdas;
+RWStructuredBuffer<float4> DeltaPositions;
 
-// Compact grid: particle indices grouped by cell in one contiguous buffer.
-// Cell c occupies SortedIndices[CellStart[c] .. CellStart[c + 1]).
 RWStructuredBuffer<uint> CellStart;
 RWStructuredBuffer<uint> ScanTemp;
 RWStructuredBuffer<uint> CellCursor;
 RWStructuredBuffer<uint> SortedIndices;
 
-// Boundary particles: surface samples of every rigid body, stored body after body
 RWStructuredBuffer<float4> BoundaryPositions;
 RWStructuredBuffer<float4> BoundaryVelocities;
 RWStructuredBuffer<float4> BoundaryRestPositions;
@@ -64,23 +66,18 @@ RWStructuredBuffer<int> BoundaryForceBuffersY;
 RWStructuredBuffer<int> BoundaryForceBuffersZ;
 RWStructuredBuffer<uint> BoundaryBodyIndices;
 
-// Compact grid of the boundary particles, laid out like CellStart and SortedIndices
 RWStructuredBuffer<uint> BoundaryCellStart;
 RWStructuredBuffer<uint> BoundarySortedIndices;
 
-// One entry per rigid body
 RWStructuredBuffer<RigidBodyProperties> BodyProperties;
 RWStructuredBuffer<RigidBodyState> BodyStates;
 
-// Scratch slots for the per-body reductions, BodyReductionThreads slots per body
 RWStructuredBuffer<float4> BodyCouplingSums;
 RWStructuredBuffer<float4> BodyContactSums;
 
-// Read-only views bound to the same GPU buffers as the declarations above. Kernels that only read a
-// buffer go through these, because a compute shader gets 8 read-write slots but 128 read-only ones.
-// A kernel must use either the read-write or the read-only name of a buffer, never both
 StructuredBuffer<float4> PositionsRO;
 StructuredBuffer<float4> VelocitiesRO;
+StructuredBuffer<float> LambdasRO;
 StructuredBuffer<uint> CellStartRO;
 StructuredBuffer<uint> SortedIndicesRO;
 StructuredBuffer<float4> BoundaryPositionsRO;
@@ -98,9 +95,13 @@ const float gravity;
 const float mouseAttractiveness;
 const float mouseRadius;
 
-const float stiffness;
-const float nearStiffness;
-const float restDensity;
+const float particleVolume;
+const float particleMass;
+const float restSpacing;
+const float relaxation;
+const float artificialPressure;
+const float poly6Factor;
+const float spikyGradFactor;
 
 const float highViscosity;
 const float lowViscosity;
@@ -118,8 +119,6 @@ const uint columns;
 const uint rows;
 const uint layers;
 
-// Hillis-Steele scan step: stride doubles each pass, flip alternates the
-// ping-pong direction. Both are uniform, so the branch on flip never diverges.
 const uint scanStride;
 const uint scanFlip;
 
@@ -127,6 +126,13 @@ const uint numBoundaryParticles;
 const uint numBodies;
 const float boundaryFriction;
 const float bodyFriction;
+
+const float4 reservoirCenter;
+const float4 reservoirHalfSize;
+const float nozzleRadius;
+const float drainHeight;
+const float respawnSlabHeight;
+const uint recycleSeed;
 
 void SetForceBuffer(uint index, float4 value)
 {
@@ -150,13 +156,11 @@ float4 ReadForceBuffer(uint index)
     0);
 }
 
-// Defined in the spatial partitioning section below
 uint3 GetCellPosition(float4 position);
 uint GetCellIndex(uint3 cellPosition);
 
-// Fluid-body coupling, defined in RigidBodyKernels3D.hlsl
-void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float nearDensity);
-void ApplyBoundaryPressure(uint index, float4 position, uint3 cellPosition, float pressure, float nearPressure);
+void AddBoundaryDensity(float4 position, uint3 cellPosition, inout float density, inout float4 gradient);
+void AddBoundaryCorrection(float4 position, uint3 cellPosition, float lambda, inout float4 delta);
 void ApplyBoundaryFriction(uint index, float4 position, float4 velocity, uint3 cellPosition);
 
 [numthreads(64,1,1)]
@@ -175,8 +179,13 @@ void ClearForceBuffers (uint3 id : SV_DispatchThreadID)
     SetForceBuffer(id.x, ZeroImpulse);
 }
 
+float3 WallDistances(float4 position)
+{
+    return saturate((realHalfBoundSize.xyz - abs(position.xyz)) / interactionRadius);
+}
+
 [numthreads(64,1,1)]
-void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
+void CalculateLambdas (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
@@ -184,70 +193,101 @@ void DoubleDensityRelaxation (uint3 id : SV_DispatchThreadID)
     uint3 cellPosition = GetCellPosition(position);
 
     float density = 0;
-    float nearDensity = 0;
+    float4 gradient = 0;
+    float neighbourGradients = 0;
 
+    // Visit the 3x3x3 block of cells around the particle
     for (uint i = 0; i < 27; i++)
     {
         int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        uint3 neighbourPos = cellPosition + cellOffset;
+        // Offsets below zero wrap to large uints, so this also rejects them
         if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
         uint cell = GetCellIndex(neighbourPos);
 
         for (uint j = CellStartRO[cell]; j < CellStartRO[cell + 1]; j++)
         {
-            float mag = DistanceSq(position, PositionsRO[SortedIndicesRO[j]]);
-            if (mag == 0 || mag > interactionRadiusSq) continue;
-            mag = sqrt(mag);
+            float4 neighbourPosition = PositionsRO[SortedIndicesRO[j]];
+            float magSq = DistanceSq(position, neighbourPosition);
+            if (magSq >= interactionRadiusSq) continue;
 
-            float q = mag / interactionRadius;
-            density += QuadraticSpikyKernel(q);
-            nearDensity += CubicSpikyKernel(q);
+            // The particle itself counts towards its density
+            density += particleVolume * Poly6(magSq, interactionRadiusSq, poly6Factor);
+            if (magSq == 0) continue;
+
+            float mag = sqrt(magSq);
+            float4 neighbourGradient = particleVolume *
+                SpikyGradient(mag, interactionRadius, spikyGradFactor, UnitVector(position, neighbourPosition, mag));
+
+            gradient += neighbourGradient;
+            neighbourGradients += dot(neighbourGradient, neighbourGradient);
         }
     }
 
-    // numBodies is the same for every thread, so this branch costs no divergence
     if (numBodies > 0)
-        AddBoundaryDensity(position, cellPosition, density, nearDensity);
+        AddBoundaryDensity(position, cellPosition, density, gradient);
 
+    // The walls count as fluid at rest beyond them
+    float3 wallDistances = WallDistances(position);
+    density += dot(WallDensity(wallDistances), float3(1, 1, 1));
+    gradient.xyz += sign(position.xyz) * WallDensityGradient(wallDistances, interactionRadius);
+
+    // Clamped so the free surface never pulls
+    float constraint = max(density - 1.0, 0.0);
     Densities[id.x] = density;
-    NearDensities[id.x] = nearDensity;
+    Lambdas[id.x] = -constraint / (dot(gradient, gradient) + neighbourGradients + relaxation);
+}
 
-    float pressure = stiffness * (density - restDensity);
-    float nearPressure = nearStiffness * nearDensity;
+[numthreads(64,1,1)]
+void CalculateDeltaPositions (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
 
-    for (uint k = 0; k < 27; k++)
+    float4 position = PositionsRO[id.x];
+    float lambda = LambdasRO[id.x];
+    uint3 cellPosition = GetCellPosition(position);
+
+    // Artificial pressure (s_corr) keeps particles from clumping
+    float sCorrKernel = Poly6(0.04 * interactionRadiusSq, interactionRadiusSq, poly6Factor);
+    float4 delta = 0;
+
+    for (uint i = 0; i < 27; i++)
     {
-        int3 cellOffset = int3(k % 3, (k / 3) % 3, k / 9) - 1;
+        int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
         uint3 neighbourPos = cellPosition + cellOffset;
         if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
         uint cell = GetCellIndex(neighbourPos);
 
-        for (uint l = CellStartRO[cell]; l < CellStartRO[cell + 1]; l++)
+        for (uint j = CellStartRO[cell]; j < CellStartRO[cell + 1]; j++)
         {
-            uint neighbour = SortedIndicesRO[l];
-            float mag = DistanceSq(position, PositionsRO[neighbour]);
-            if (mag == 0 || mag > interactionRadiusSq) continue;
-            mag = sqrt(mag);
+            uint neighbour = SortedIndicesRO[j];
+            float4 neighbourPosition = PositionsRO[neighbour];
+            float magSq = DistanceSq(position, neighbourPosition);
+            if (magSq == 0 || magSq >= interactionRadiusSq) continue;
 
-            float q = mag / interactionRadius;
-            float4 r = UnitVector(position, PositionsRO[neighbour], mag);
-            float4 displacement = PressureDisplacement(dt, q, pressure, nearPressure, r) * 0.5f;
+            float mag = sqrt(magSq);
+            float ratio = Poly6(magSq, interactionRadiusSq, poly6Factor) / sCorrKernel;
+            float sCorr = -artificialPressure * ratio * ratio * ratio * ratio;
 
-            AtomicAddForceBuffer(neighbour, displacement);
-            AtomicAddForceBuffer(id.x, -displacement);
+            delta += particleVolume * (lambda + LambdasRO[neighbour] + sCorr) *
+                SpikyGradient(mag, interactionRadius, spikyGradFactor, UnitVector(position, neighbourPosition, mag));
         }
     }
 
     if (numBodies > 0)
-        ApplyBoundaryPressure(id.x, position, cellPosition, pressure, nearPressure);
+        AddBoundaryCorrection(position, cellPosition, lambda, delta);
+
+    delta.xyz += lambda * sign(position.xyz) * WallDensityGradient(WallDistances(position), interactionRadius);
+
+    DeltaPositions[id.x] = delta;
 }
 
 [numthreads(64,1,1)]
-void ApplyForceBuffers (uint3 id : SV_DispatchThreadID)
+void ApplyDeltaPositions (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
 
-    Positions[id.x] += ReadForceBuffer(id.x);
+    Positions[id.x] += DeltaPositions[id.x];
 }
 
 [numthreads(64,1,1)]
@@ -270,7 +310,7 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
     for (uint i = 0; i < 27; i++)
     {
         int3 cellOffset = int3(i % 3, (i / 3) % 3, i / 9) - 1;
-        uint3 neighbourPos = cellPosition + cellOffset; // negatives wrap and fail the bounds check
+        uint3 neighbourPos = cellPosition + cellOffset;
         if (neighbourPos.x >= columns || neighbourPos.y >= rows || neighbourPos.z >= layers) continue;
         uint cell = GetCellIndex(neighbourPos);
 
@@ -291,7 +331,6 @@ void ApplyViscosity (uint3 id : SV_DispatchThreadID)
         }
     }
 
-    // numBodies is the same for every thread, so this branch costs no divergence
     if (numBodies > 0)
         ApplyBoundaryFriction(id.x, position, velocity, cellPosition);
 }
@@ -352,8 +391,6 @@ void CalculateVelocity (uint3 id : SV_DispatchThreadID)
     Velocities[id.x] = (Positions[id.x] - PrevPositions[id.x]) / dt;
 }
 
-// ---------- Spatial partitioning (3D: cubic cells, 27 adjacent cells) ----------
-
 uint3 GetCellPosition(float4 position)
 {
     float3 scaled = (position.xyz - offset.xyz) / cellLength;
@@ -367,12 +404,6 @@ uint GetCellIndex(uint3 cellPosition)
     return cellPosition.x + cellPosition.y * columns + cellPosition.z * columns * rows;
 }
 
-// The grid is built by counting sort: count per cell, prefix sum the counts into
-// start offsets, then scatter particle indices into their cell's slice. There is
-// no per-cell capacity, so no particle is ever dropped.
-
-// CellStart holds the counts first, shifted up one slot so the inclusive scan
-// below turns them straight into exclusive start offsets.
 [numthreads(64,1,1)]
 void ClearGrid (uint3 id : SV_DispatchThreadID)
 {
@@ -387,18 +418,19 @@ void CountParticles (uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles) return;
 
     uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
+    // Counts are shifted one slot so the prefix sum gives each cell's start index
     InterlockedAdd(CellStart[cellIndex + 1], 1);
 }
 
 [numthreads(64,1,1)]
+// One pass of a Hillis-Steele prefix sum, ping-ponging between CellStart and ScanTemp
 void ScanStep (uint3 id : SV_DispatchThreadID)
 {
     if (id.x > numCells) return;
 
     uint previous = max((int)id.x - (int)scanStride, 0);
-    uint mask = id.x >= scanStride; // 0 for the first stride entries, which carry nothing
+    uint mask = id.x >= scanStride;
 
-    // scanFlip is uniform across the dispatch, so this costs no divergence
     if (scanFlip == 0)
         ScanTemp[id.x] = CellStart[id.x] + CellStart[previous] * mask;
     else
@@ -420,12 +452,12 @@ void Scatter (uint3 id : SV_DispatchThreadID)
 
     uint cellIndex = GetCellIndex(GetCellPosition(Positions[id.x]));
     uint destination;
+    // Counting sort: claim the next free slot in this particle's cell
     InterlockedAdd(CellCursor[cellIndex], 1, destination);
 
     SortedIndices[destination] = id.x;
 }
 
-// ---------- Rigid bodies ----------
-// The kernels live in their own file to keep this one readable. Their pragmas and declarations have to stay
-// in this file, the only one ComputeHelper reflection reads
 #include "RigidBodyKernels3D.hlsl"
+
+#include "FlowKernels3D.hlsl"
